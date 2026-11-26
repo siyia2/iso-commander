@@ -119,13 +119,19 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 	          "Display only filenames instead of full paths",
 	          "",
 	          ConfigValues::onOff),
-	enumEntry("write2usb_checksum", "off",
-	          "Verify data integrity after writing to USB (CRC-64)",
-	          "",
-	          ConfigValues::onOff),
 	numericEntry("pagination", "25",
 	             "Items per page in list view (0 to disable)",
 	             "", 0, 1000),
+
+	// --- Write2USB Settings ---
+	enumEntry("verify_checksum", "off",
+	          "Verify data integrity after writing to USB (CRC-64)",
+	          "Write2USB Settings",
+	          ConfigValues::onOff),
+	enumEntry("buffered_writes", "off",
+	          "Use buffered USB writes for Windows ISOs",
+	          "",
+	          ConfigValues::onOff),
 
 	// --- History Settings ---
 	numericEntry("folder_path_history_lines", "30",
@@ -346,7 +352,17 @@ bool readUserConfigUpdates(const std::string& filePath) {
  */
 bool write2usbChecksumEnabled() {
 
-	const auto it = ConfigCaches::g_configCache.find("write2usb_checksum");
+	const auto it = ConfigCaches::g_configCache.find("verify_checksum");
+	return it != ConfigCaches::g_configCache.end() && it->second == "on";
+
+}
+
+/**
+ * @brief Returns whether Windows USB writes should use the kernel page cache.
+ */
+bool write2usbBufferedEnabled() {
+
+	const auto it = ConfigCaches::g_configCache.find("buffered_writes");
 	return it != ConfigCaches::g_configCache.end() && it->second == "on";
 
 }

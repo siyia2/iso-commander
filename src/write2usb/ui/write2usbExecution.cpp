@@ -37,7 +37,8 @@ ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
       failed(other.failed.load()),
       bytesWritten(other.bytesWritten.load()),
       progress(other.progress.load()),
-      speed(other.speed.load()) {}
+      speed(other.speed.load()),
+      verificationSpeed(other.verificationSpeed.load()) {}
 
 // Move Assignment
 ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
@@ -56,6 +57,7 @@ ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
 		bytesWritten.store(other.bytesWritten.load());
 		progress.store(other.progress.load());
 		speed.store(other.speed.load());
+		verificationSpeed.store(other.verificationSpeed.load());
 	}
 	return *this;
 

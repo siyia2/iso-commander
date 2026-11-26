@@ -335,7 +335,7 @@ void ConfirmResizeWatcher::stop() {
  * has 5 cells and 10 steps of 10% (empty ░, half ▄, full ▇), floored from
  * the percentage, so it is full only at 100%. The status column shows the
  * live percentage (writing or verification), DONE or PASS (speed shown
- * as " (avg)"), FAIL or CXL
+ * as the write-only " (avg)"), FAIL or CXL
  * (cancelled).
  *
  * @par Filename truncation
@@ -809,7 +809,12 @@ private:
 
 	}
 
-	std::string buildRowString(std::size_t i, const std::string& shortFile, const std::string& speedStr,
+	struct RowSpeed {
+		std::string text;
+		bool completed;
+	};
+
+	std::string buildRowString(std::size_t i, const std::string& shortFile, const RowSpeed& speed,
 	                           std::size_t maxFilenameWidth, std::size_t maxSpeedWidth, std::size_t usableCols) {
 
 		const auto& prog = progressData_[i];
@@ -844,7 +849,8 @@ private:
 		    << bar << wt_.speedCol << empty
 		    << color << "] ";
 
-		bool isCompleted = prog.completed.load();
+		const bool isCompleted = speed.completed;
+		const auto& speedStr = speed.text;
 
 		if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
 		else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
@@ -879,16 +885,17 @@ private:
 		std::size_t maxFilenameWidth = 0;
 		std::size_t maxSpeedWidth    = 0;
 
-		std::vector<std::string> speedStrs;
-		speedStrs.reserve(progressData_.size());
-		for (const auto& prog : progressData_) {
-			speedStrs.push_back(formatSpeed(prog.speed));
-			maxSpeedWidth = std::max(maxSpeedWidth, utf8Width(speedStrs.back()));
-		}
-
+		std::vector<RowSpeed> speeds;
+		speeds.reserve(progressData_.size());
 		bool anyCompleted = false;
-		for (const auto& prog : progressData_)
-		    if (prog.completed.load()) { anyCompleted = true; break; }
+		for (const auto& prog : progressData_) {
+			const bool completed = prog.completed.load();
+			const double speed = !completed && prog.verifying.load()
+			    ? prog.verificationSpeed.load() : prog.speed.load();
+			speeds.push_back({formatSpeed(speed), completed});
+			maxSpeedWidth = std::max(maxSpeedWidth, utf8Width(speeds.back().text));
+			anyCompleted |= completed;
+		}
 		const std::size_t avgExtra = anyCompleted ? 6 : 0;
 
 		const std::size_t fixedWidth = 3 + maxDeviceLen_ + (maxNameWidth_ + 3) + 2 + BAR_WIDTH
@@ -913,7 +920,7 @@ private:
 		lastRowWidths_.reserve(progressData_.size());
 
 		for (std::size_t i = 0; i < progressData_.size(); ++i) {
-			const std::string line = buildRowString(i, shortFiles[i], speedStrs[i],
+			const std::string line = buildRowString(i, shortFiles[i], speeds[i],
 			                                        maxFilenameWidth, maxSpeedWidth, usableCols);
 			lastRowWidths_.push_back(std::min(visibleWidth(line), usableCols));
 			frame += line;

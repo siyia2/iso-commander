@@ -61,7 +61,7 @@ namespace isocmd_tests {
 			row.progress=100; row.speed=20.0; row.bytesWritten=200;
 			row.writeCompleted=true;
 			if (row.verifyRequested) {
-				row.verifying = true; row.progress=0;
+				row.verificationSpeed=100.0; row.verifying = true; row.progress=0;
 				std::this_thread::sleep_for(device=="/dev/zero" ? 400ms : 10ms);
 				row.progress=100; row.bytesVerified=200;
 			}
@@ -114,7 +114,7 @@ namespace isocmd_tests {
 			auto cancelled=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
 			CHECK(cancelled.empty());
 			std::cout<<"TEST-MAPPING-CANCELLED\n"<<std::flush;
-			ConfigCaches::g_configCache["write2usb_checksum"] = "on";
+			ConfigCaches::g_configCache["verify_checksum"] = "on";
 			auto mappings=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
 			CHECK(write2usbChecksumEnabled());
 			CHECK(mappings.size()==3);
@@ -128,7 +128,7 @@ namespace isocmd_tests {
 				setupSignalHandlerCancellations(); GlobalState::g_operationCancelled=false;
 				const bool expectedSuccess = result==0 || result==3;
 				bool allSucceeded = !expectedSuccess; // Start with the opposite expected result.
-				if (result==3) ConfigCaches::g_configCache["write2usb_checksum"] = "off";
+				if (result==3) ConfigCaches::g_configCache["verify_checksum"] = "off";
 				expectVerification = result!=3;
 				auto screen=WriteExecution::performWithWriter(mappings,fakeWriter,&allSucceeded,write2usbChecksumEnabled());
 				CHECK(allSucceeded == expectedSuccess);
@@ -157,7 +157,7 @@ namespace isocmd_tests {
 			rows->emplace_back("second-fixture.iso","/dev/zero","1 MB","fixture2");
 			rows->emplace_back("third-fixture.iso","/dev/full","1 MB","fixture3");
 			(*rows)[0].progress=10; (*rows)[0].speed=0.05;
-			(*rows)[1].progress=50; (*rows)[1].speed=12.3;
+			(*rows)[1].progress=50; (*rows)[1].speed=20.0; (*rows)[1].verificationSpeed=12.3;
 			for (auto& row : *rows) row.verifyRequested=true;
 			(*rows)[1].writeCompleted=true; (*rows)[1].verifying=true;
 			(*rows)[2].progress=99; (*rows)[2].speed=40;
@@ -169,13 +169,13 @@ namespace isocmd_tests {
 			waitProgressInput();
 			// Exercise single-digit and 100% progress before the final result.
 			(*rows)[0].progress=5;
-			(*rows)[1].speed=179.8; (*rows)[1].progress=100;
+			(*rows)[1].verificationSpeed=179.8; (*rows)[1].progress=100;
 			waitProgressInput();
 			(*rows)[0].progress=100; (*rows)[0].writeCompleted=true;
-			(*rows)[0].verifying=true; (*rows)[0].completed=true;
+			(*rows)[0].verificationSpeed=100.0; (*rows)[0].verifying=true; (*rows)[0].completed=true;
 			(*rows)[1].failed=true;
 			// Third device finished writing, but its readback was cancelled.
-			(*rows)[2].writeCompleted=true; (*rows)[2].verifying=true;
+			(*rows)[2].verificationSpeed=40; (*rows)[2].writeCompleted=true; (*rows)[2].verifying=true;
 			sync->completedTasks=1; sync->finishedTasks=2;
 			GlobalState::g_operationCancelled=true;
 			finishWriteScreen(*screen,std::chrono::steady_clock::now()-batchStart);

@@ -43,7 +43,8 @@ struct ProgressInfo {
 	std::atomic<bool> failed{false};
 	std::atomic<std::uint64_t> bytesWritten{0};
 	std::atomic<int> progress{0};
-	std::atomic<double> speed{0.0};
+	std::atomic<double> speed{0.0}; // Live write speed, then the final write-only average.
+	std::atomic<double> verificationSpeed{0.0};
 
 	// Constructor
 	ProgressInfo(std::string filename, std::string device, std::string totalSize,

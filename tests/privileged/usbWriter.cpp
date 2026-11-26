@@ -14,7 +14,7 @@ import isocmd.core.cancellation;
 using namespace isocmd_tests;
 namespace isocmd_tests {
 	int mountTest();
-	int windowsWriterTest(const std::string& loop, const std::string& layout);
+	int windowsWriterTest(const std::string& loop, const std::string& layout, const std::string& mode);
 }
 
 namespace {
@@ -322,7 +322,7 @@ int main(int argc,char** argv) {
 	// The namespace runner can verify aliases without performing any writes.
 	if (geteuid()!=0) return 2;
 	if (argc==2 && std::string_view(argv[1])=="--mount-test") return mountTest();
-	if (argc==4 && std::string_view(argv[1])=="--windows-test") return windowsWriterTest(argv[2], argv[3]);
+	if (argc==5 && std::string_view(argv[1])=="--windows-test") return windowsWriterTest(argv[2], argv[3], argv[4]);
 	const bool verifyOnly=argc==4 && std::string_view(argv[1])=="--verify-loop";
 	if (argc!=2 && !verifyOnly) return 2;
 	try {

@@ -521,12 +521,14 @@ namespace isocmd_tests {
 			writeFile(config, "pagination = 2\nauto_update = off\nfilenames_only = off\n");
 			runMenuWorkflow(binary, [&](TerminalSession& term) {
 
-				expectStep(term, "4\n", selectionPrompt, "Settings Editor");
+				const auto frame = step(term, "4\n", selectionPrompt);
+				CHECK(has(frame, "Settings Editor"));
+				CHECK(has(frame, "--- Write2USB Settings ---"));
 				const auto original = readFile(config);
 				expectStep(term, "?", returnPrompt, "Selecting Edits");
 				step(term, "\n", selectionPrompt);
 				// Select two settings; navigate without applying anything.
-				expectStep(term, "5 7\n", valuePrompt, "Setting: filenames_only");
+				expectStep(term, "5 6\n", valuePrompt, "Setting: filenames_only");
 				expectStep(term, "\x1b[6~", valuePrompt, "Setting: pagination");
 				expectStep(term, "\x1b[5~", valuePrompt, "Setting: filenames_only");
 				expectStep(term, "g2\n", valuePrompt, "Setting: pagination");
@@ -553,13 +555,22 @@ namespace isocmd_tests {
 				step(term, "r", "Reset all settings to default? (y/n): ");
 				step(term, "n\n", selectionPrompt);
 				CHECK(has(readFile(config), "pagination = 3\n"));
-				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
-				expectStep(term, "6\n", valuePrompt, "Setting: write2usb_checksum");
+				CHECK(has(readFile(config), "verify_checksum = off\n"));
+				expectStep(term, "7\n", valuePrompt, "Setting: verify_checksum");
 				expectStep(term, "yes\n", "to try again...", "Invalid value:");
-				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
+				CHECK(has(readFile(config), "verify_checksum = off\n"));
 				step(term, "\n", valuePrompt);
 				expectStep(term, "on\n", continuePrompt, "Updated and saved to:");
-				CHECK(has(readFile(config), "write2usb_checksum = on\n"));
+				CHECK(has(readFile(config), "verify_checksum = on\n"));
+				step(term, "\n", selectionPrompt);
+				CHECK(has(readFile(config), "buffered_writes = off\n"));
+				expectStep(term, "8\n", valuePrompt, "Setting: buffered_writes");
+				expectStep(term, "on\n", continuePrompt, "Updated and saved to:");
+				CHECK(has(readFile(config), "buffered_writes = on\n"));
+				step(term, "\n", selectionPrompt);
+				expectStep(term, "14\n", valuePrompt, "Setting: write2usb_list");
+				expectStep(term, "full\n", continuePrompt, "Updated and saved to:");
+				CHECK(has(readFile(config), "write2usb_list = full\n"));
 				step(term, "\n", selectionPrompt);
 				step(term, "\x1b", mainPrompt);
 
@@ -568,16 +579,22 @@ namespace isocmd_tests {
 			runMenuWorkflow(binary, [&](TerminalSession& term) {
 
 				step(term, "4\n", selectionPrompt);
-				expectStep(term, "7\n", valuePrompt, "Current: 3");
+				expectStep(term, "6\n", valuePrompt, "Current: 3");
 				step(term, "\x1b", selectionPrompt);
-				expectStep(term, "6\n", valuePrompt, "Current: on");
+				expectStep(term, "7\n", valuePrompt, "Current: on");
+				step(term, "\x1b", selectionPrompt);
+				expectStep(term, "8\n", valuePrompt, "Current: on");
+				step(term, "\x1b", selectionPrompt);
+				expectStep(term, "14\n", valuePrompt, "Current: full");
 				step(term, "\x1b", selectionPrompt);
 				step(term, "r", "Reset all settings to default? (y/n): ");
 				expectStep(term, "y\n", continuePrompt, "Defaults applied");
 				CHECK(has(readFile(config), "pagination = 25\n"));
-				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
+				CHECK(has(readFile(config), "buffered_writes = off\n"));
+				CHECK(has(readFile(config), "verify_checksum = off\n"));
+				CHECK(has(readFile(config), "write2usb_list = compact\n"));
 				step(term, "\n", selectionPrompt);
-				expectStep(term, "7\n", valuePrompt, "Current: 25");
+				expectStep(term, "6\n", valuePrompt, "Current: 25");
 				step(term, "\x1b", selectionPrompt);
 				step(term, "\x1b", mainPrompt);
 
@@ -752,6 +769,13 @@ namespace isocmd_tests {
 
 	}
 
+	static void checkWriteSpeed(const std::string& frame, int i) {
+
+		if (i==0) CHECK(has(frame,"PASS") && has(frame,"20.0 MB/s (avg)") && !has(frame,"100.0 MB/s (avg)"));
+		if (i==3) CHECK(has(frame,"DONE") && !has(frame,"PASS") && has(frame,"20.0 MB/s (avg)"));
+
+	}
+
 	static void checkWriteResult(const std::string& frame, int i) {
 
 		const bool successful=i==0 || i==3;
@@ -761,8 +785,7 @@ namespace isocmd_tests {
 		else CHECK(has(frame,i==0?"Verified: 3/3":i==1?"Verified: 2/3":"Verified: 0/3"));
 		checkWriteElapsed(frame, i);
 		CHECK(has(frame,"iso2.iso") && has(frame,"iso10.iso"));
-		if (i==0) CHECK(has(frame,"PASS"));
-		if (i==3) CHECK(has(frame,"DONE") && !has(frame,"PASS"));
+		checkWriteSpeed(frame, i);
 		CHECK(has(frame,"/dev/full") && has(frame,"/dev/zero") && has(frame,"/dev/null"));
 
 	}
@@ -872,6 +895,7 @@ namespace isocmd_tests {
 				checkSpeedSpacing(frame);
 				CHECK(has(frame,"Successful: 3/3 | Verified: 1/3") && has(frame,"PASS") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
 				CHECK(has(frame,"▇▇▇▇▇"));
+				CHECK(has(frame,"51.2 KB/s (avg)") && !has(frame,"100.0 MB/s (avg)"));
 				start=term.output.size(); term.resize(20,100);
 				frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Successful: 3/3 | Verified: 1/3"));
 				term.send("\n"); term.waitFor("TEST-PROGRESS-PASS",start); term.waitForExit();

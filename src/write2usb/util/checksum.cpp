@@ -12,11 +12,11 @@ import isocmd.write2usb.util.telemetry;
 
 namespace usb_verify {
 	ReadbackProgress::ReadbackProgress(ProgressInfo& slot, std::uint64_t total)
-	    : slot_(slot), total_(total), start_(write_telemetry::Clock::now()),
-	      estimator_(start_, write_telemetry::windowsStallTimeoutSeconds) {
+	    : slot_(slot), total_(total),
+	      estimator_(write_telemetry::Clock::now(), write_telemetry::windowsStallTimeoutSeconds) {
 
 		slot_.progress.store(0);
-		slot_.speed.store(0);
+		slot_.verificationSpeed.store(0);
 		slot_.bytesVerified.store(0);
 		slot_.verifying.store(true);
 
@@ -28,15 +28,13 @@ namespace usb_verify {
 		slot_.bytesVerified.store(done_);
 		if (total_) slot_.progress.store(write_telemetry::transferPercent(done_, total_));
 		if (auto speed = estimator_.sample(done_, write_telemetry::Clock::now()))
-		    slot_.speed.store(*speed);
+		    slot_.verificationSpeed.store(*speed);
 
 	}
 
 	bool ReadbackProgress::finish() {
 
 		if (done_ != total_ || GlobalState::g_operationCancelled.load()) return false;
-		const double seconds = std::chrono::duration<double>(write_telemetry::Clock::now() - start_).count();
-		slot_.speed.store(seconds > 0 ? done_ / (1024.0 * 1024.0) / seconds : 0);
 		slot_.progress.store(100);
 		slot_.completed.store(true);
 		return true;

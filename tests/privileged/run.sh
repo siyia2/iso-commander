@@ -99,7 +99,7 @@ make_iso() {
     fi
 }
 windows_rc=0
-windows_case() {
+make_windows_fixture() {
     layout=$1
     tree="$sandbox/windows-$layout-tree"
     mkdir -p "$tree/efi/boot" "$tree/boot" "$tree/sources" "$tree/extras/empty-dir"
@@ -120,8 +120,12 @@ windows_case() {
         printf 'NTFS tail' | dd of="$tree/sources/install.wim" bs=1 seek=5242942 conv=notrunc status=none
     fi
     make_iso "$sandbox/windows-$layout.iso" "$tree"
+}
+windows_case() {
+    layout=$1
+    mode=$2
     # The Windows writer allocates a 1 GiB ESP for full installation media.
-    # Use a fresh sparse 1280 MiB image for each layout; never use a host disk.
+    # Use a fresh sparse 1280 MiB image for each layout and write mode; never use a host disk.
     truncate -s 1280M "$sandbox/windows-backing.img"
     windows_loop=$(losetup --find --show --partscan -- "$sandbox/windows-backing.img")
     case "$windows_loop" in /dev/loop[0-9]*) ;; *) exit 2;; esac
@@ -136,8 +140,8 @@ windows_case() {
     # kernel-generated partition names.
     timeout -k 5s 240s unshare --mount --propagation private sh -eu -c '
         mount -t tmpfs -o mode=0700,dev,nosuid,noexec tmpfs "$ISOCMD_TEST_SANDBOX/windows-dev"
-        exec "$1" --windows-test "$2" "$3"
-    ' sh "$binary" "$windows_loop" "$layout" || result=$?
+        exec "$1" --windows-test "$2" "$3" "$4"
+    ' sh "$binary" "$windows_loop" "$layout" "$mode" || result=$?
     # Do not reuse the fixture after a timeout or signal. EXIT cleanup owns it.
     [ "$result" -le 1 ] || exit "$result"
     [ "$(losetup -n -O BACK-FILE -- "$windows_loop")" = "$sandbox/windows-backing.img" ] || exit 2
@@ -151,9 +155,13 @@ windows_case() {
 if [ -z "$iso_tool" ] || ! command -v parted >/dev/null || ! command -v mkfs.fat >/dev/null; then
     echo 'SKIP: Windows FAT-only and FAT32 + NTFS verification (install xorriso or genisoimage, parted and dosfstools)'
 else
-    windows_case fat-only
+    make_windows_fixture fat-only
+    windows_case fat-only direct
+    windows_case fat-only buffered
     if command -v mkfs.ntfs >/dev/null; then
-        windows_case full
+        make_windows_fixture full
+        windows_case full direct
+        windows_case full buffered
     else
         echo 'SKIP: Windows FAT32 + NTFS verification (install mkfs.ntfs from ntfs-3g)'
     fi

@@ -12,6 +12,11 @@ namespace isocmd_tests::io_faults {
 			if (!plan) return {};
 			auto& rule = (*plan)[op];
 			if (!rule.target || !rule.target->matches(fd)) return {};
+			if (op == Call::Pwrite) {
+				const int saved = errno;
+				rule.statusFlags.store(fcntl(fd, F_GETFL), std::memory_order_relaxed);
+				errno = saved;
+			}
 			const auto i = rule.calls.fetch_add(1, std::memory_order_relaxed);
 			return i < rule.steps.size() ? rule.steps[i] : Step{};
 
@@ -27,6 +32,7 @@ namespace isocmd_tests::io_faults {
 		template<class Invoke>
 		ssize_t transferStep(const Step& step, size_t count, Invoke invoke) {
 
+			if (step.before) step.before();
 			if (step.kind == Kind::Error) { errno = step.error; return -1; }
 			if (step.kind == Kind::Zero) return 0;
 			if (step.kind == Kind::Short || step.kind == Kind::CancelAfterShort)
@@ -122,7 +128,22 @@ ssize_t __wrap_write(int fd, const void* buf, size_t n) {
 
 ssize_t __wrap_pwrite(int fd, const void* buf, size_t n, off_t off) {
 
-	return transfer(Call::Pwrite, fd, n, [&](size_t count) { return __real_pwrite(fd, buf, count, off); });
+	const auto step = next(Call::Pwrite, fd);
+	if (step.kind == Kind::UnalignedShort) {
+		const auto sector = step.bytes;
+		const int flags = fcntl(fd, F_GETFL);
+		if (flags < 0 || !(flags & O_DIRECT) || sector < 2 || n < sector ||
+		    n % sector || reinterpret_cast<std::uintptr_t>(buf) % sector ||
+		    off < 0 || static_cast<std::uintmax_t>(off) % sector) {
+			errno = EINVAL;
+			return -1;
+		}
+		const auto written = __real_pwrite(fd, buf, sector, off);
+		if (written != static_cast<ssize_t>(sector)) return written;
+		recordEffect(Call::Pwrite);
+		return written - 1;
+	}
+	return transferStep(step, n, [&](size_t count) { return __real_pwrite(fd, buf, count, off); });
 
 }
 

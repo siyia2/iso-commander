@@ -17,6 +17,7 @@
 
 import std;
 import isocmd.core.cancellation;
+import isocmd.settings.settings;
 import isocmd.write2usb.util.alignedBuffer;
 import isocmd.write2usb.util.telemetry;
 import isocmd.write2usb.util.checksum;
@@ -665,8 +666,9 @@ namespace {
 		/**
 		 * @brief syncfs() the filesystem mounted at @p mountPath.
 		 *
-		 * Writeback during the copy is paced best-effort, so this is where a
-		 * deferred I/O error (e.g. the stick failing or being pulled) surfaces.
+		 * Both NTFS and FAT32 may use direct or buffered payload writes.
+		 * A deferred I/O error (e.g. the stick failing or being pulled) can
+		 * surface here.
 		 *
 		 * @return true if the filesystem was opened and flushed successfully.
 		 */
@@ -928,9 +930,8 @@ namespace {
 
 		}
 
-		void reportSuccess(ProgressInfo& slot, double avgSpeed) {
+		void reportSuccess(ProgressInfo& slot) {
 
-			slot.speed.store(avgSpeed);
 			slot.progress.store(100);
 			slot.completed.store(true);
 
@@ -1023,13 +1024,14 @@ static bool copyAndVerifyWindowsIso(
 	// Ensures the thread is stopped and joined on every return path.
 	ThreadGuard threadGuard(progressMonitorThread, monitoringActive);
 
-	constexpr std::size_t bufferSize = copy::kBufferSize;
+	constexpr std::size_t bufferSize = std::max(copy::kBufferSize, copy::kFatBufferSize);
 
 	AlignedBuffer ioBuf(bufferSize, copy::kBufferAlign);
 	if (!ioBuf)
 	    return report.failUnlessCancelled();
 
 	std::vector<std::uint64_t> ntfsChecksums, espChecksums;
+	const bool buffered = write2usbBufferedEnabled();
 
 	auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
 
@@ -1039,8 +1041,8 @@ static bool copyAndVerifyWindowsIso(
 
 		return copy::processEntries(
 		    entries, isoType, ntfsMnt,
-		    bufferSize, ioBuf.data,
-		    totalBytesWrittenAccumulator, checksums);
+		    &entries == &ntfsEntries ? copy::kBufferSize : copy::kFatBufferSize, ioBuf.data,
+		    totalBytesWrittenAccumulator, checksums, buffered);
 
 	};
 
@@ -1056,6 +1058,13 @@ static bool copyAndVerifyWindowsIso(
 
 	if (steps::isCancelled())
 	    return false;
+
+	const auto totalElapsed =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(
+	        std::chrono::high_resolution_clock::now() - startTime);
+
+	const double seconds = totalElapsed.count() / 1000.0;
+	slot.speed.store(steps::averageSpeedMBps(totalBytes, seconds));
 
 	if (slot.verifyRequested) {
 		usb_verify::ReadbackProgress readback(slot, totalBytes);
@@ -1078,14 +1087,7 @@ static bool copyAndVerifyWindowsIso(
 		return true;
 	}
 
-	const auto totalElapsed =
-	    std::chrono::duration_cast<std::chrono::milliseconds>(
-	        std::chrono::high_resolution_clock::now() - startTime);
-
-	const double seconds = totalElapsed.count() / 1000.0;
-
-	steps::reportSuccess(
-	    slot, steps::averageSpeedMBps(totalBytes, seconds));
+	steps::reportSuccess(slot);
 
 	return true;
 
@@ -1093,7 +1095,8 @@ static bool copyAndVerifyWindowsIso(
 
 /**
  * @brief Wipe and repartition a block device, write a Windows-family ISO
- *        using paced writeback, and optionally verify the written data.
+ *        using direct or buffered NTFS and FAT32 data writes,
+ *        and optionally verify the written data.
  *
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device. Will be wiped.

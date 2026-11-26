@@ -3,6 +3,7 @@
 
 import isocmd.core.cancellation;
 import isocmd.write2usb.windows.windowsWriterEngine;
+import isocmd.write2usb.util.checksum;
 
 namespace isocmd_tests {
 	namespace {
@@ -25,7 +26,7 @@ namespace isocmd_tests {
 
 			}
 
-			void run(Plan& plan, bool success, std::uint64_t expectedBytes, bool ntfs = false, std::size_t remaining = 0) {
+			void run(Plan& plan, bool success, std::uint64_t expectedBytes, bool ntfs = false, std::size_t remaining = 0, bool buffered = false) {
 
 				struct Reset { ~Reset() {
 
@@ -36,13 +37,19 @@ namespace isocmd_tests {
 				GlobalState::g_operationCancelled = false;
 				std::atomic<std::uint64_t> total{0};
 				bool result;
+				std::vector<std::uint64_t> checksums;
 				{
 					Scope scope(plan);
 					result = processEntries({{src, dst, data.size(), false}},
 					    ntfs ? IsoType::WindowsInstall : IsoType::FatOnly,
-					    ntfs ? tmp.path.string() : "", buffer.size(), buffer.data(), total);
+					    ntfs ? tmp.path.string() : "", buffer.size(), buffer.data(), total, &checksums, buffered);
 				}
 				CHECK(result == success);
+				if (success) {
+					usb_verify::Checksum64 expected;
+					expected.update(data.data(), data.size());
+					CHECK(checksums == std::vector<std::uint64_t>{expected.value});
+				}
 				for (const auto& rule : plan.rules) CHECK(rule.consumed());
 				CHECK(total == expectedBytes);
 				CHECK(readFile(src) == data);
@@ -58,6 +65,69 @@ namespace isocmd_tests {
 		}
 	} // namespace
 
+	// Rendezvous inside the second read and first write. A serial copy cannot
+	// satisfy both callbacks without hitting the deadline.
+	namespace {
+		std::atomic<bool> readStarted{false}, writeStarted{false}, overlapTimedOut{false};
+
+		void waitForOverlap(const std::atomic<bool>& flag) {
+
+			const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+			while (!flag.load()) {
+				if (std::chrono::steady_clock::now() >= deadline) {
+					overlapTimedOut = true;
+					return;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
+
+		}
+
+		void observeRead() {
+
+			readStarted = true;
+			waitForOverlap(writeStarted);
+
+		}
+
+		void observeWrite() {
+
+			writeStarted = true;
+			waitForOverlap(readStarted);
+
+		}
+	}
+
+	void windowsDoubleBuffering() {
+
+		for (const bool buffered : {false, true}) {
+			for (const bool ntfs : {false, true}) {
+				CopyFixture f;
+				ReadFd source(f.src), target(f.dst);
+				const Identity input(source.fd), output(target.fd);
+				readStarted = false;
+				writeStarted = false;
+				overlapTimedOut = false;
+				Plan p;
+				p[Call::Read].set(input, {{}, observeBefore(observeRead), {}});
+				p[Call::Pwrite].set(output, {observeBefore(observeWrite), {}, {}});
+				f.run(p, true, f.data.size(), ntfs, 0, buffered);
+				CHECK(readStarted && writeStarted && !overlapTimedOut);
+				CHECK(p[Call::Read].calls.load() == 3);
+				CHECK(p[Call::Pwrite].calls.load() == 3);
+
+				// A failed write must join its prefetched read before cleanup, and
+				// a new copy must be able to run immediately afterwards.
+				Plan failure;
+				failure[Call::Pwrite].set(output, {error(EIO)});
+				f.run(failure, false, 0, ntfs, 0, buffered);
+				Plan clean;
+				f.run(clean, true, f.data.size(), ntfs, 0, buffered);
+			}
+		}
+
+	}
+
 	void windowsIoRecovery() {
 
 		CopyFixture f;
@@ -70,13 +140,14 @@ namespace isocmd_tests {
 		}
 		{
 			Plan p;
-			p[Call::Pwrite].set(output, {error(EINTR), shortTransfer(713), shortTransfer(37)});
+			p[Call::Pwrite].set(output, {error(EINTR), unalignedDirectShort(4096), {}});
 			f.run(p, true, f.data.size());
 		}
 		{
 			Plan p;
-			p[Call::SyncRange].set(output, {error(EINTR), {}});
-			f.run(p, true, f.data.size());
+			p[Call::Pwrite].set(output, {error(EINTR), unalignedDirectShort(4096), {}});
+			f.run(p, true, f.data.size(), true);
+			CHECK(p[Call::Pwrite].effects.load() == 1);
 		}
 		{
 			// Preallocation is an optimization, not a requirement for copying.
@@ -101,14 +172,14 @@ namespace isocmd_tests {
 		for (const auto fault : {error(EIO), error(ENOSPC), zero()}) {
 			for (const bool ntfs : {false, true}) {
 				Plan p;
-				p[Call::Pwrite].set(output, {{}, shortTransfer(713), fault});
-				f.run(p, false, 4096 + 713, ntfs);
+				p[Call::Pwrite].set(output, {{}, unalignedDirectShort(4096), fault});
+				f.run(p, false, 4096 + 4095, ntfs);
 			}
 		}
 		{
 			Plan p;
-			p[Call::Pwrite].set(output, {{}, cancelAfterShort(713, cancel)});
-			f.run(p, false, 4096 + 713);
+			p[Call::Pwrite].set(output, {{}, cancelAfterShort(4096, cancel)});
+			f.run(p, false, 4096 + 4096);
 		}
 		// A subsequent operation must succeed with no fault and no stale cancel state.
 		Plan clean;
@@ -134,10 +205,10 @@ namespace isocmd_tests {
 			ReadFd target(f.dst);
 			const Identity output(target.fd);
 			Plan p;
-			p[Call::Pwrite].set(output, {{}, shortTransfer(713), error(EIO)});
-			p[Call::Truncate].set(output, {error(EINTR), {}});
-			f.run(p, false, 4096 + 713);
-			CHECK(p[Call::Truncate].calls.load() == 2);
+			p[Call::Pwrite].set(output, {{}, unalignedDirectShort(4096), error(EIO)});
+			p[Call::Truncate].set(output, {{}, {}, error(EINTR), {}});
+			f.run(p, false, 4096 + 4095);
+			CHECK(p[Call::Truncate].calls.load() == 4);
 
 		});
 		scenario("hard ftruncate failure retains failed status and recoverable prefix", [] {
@@ -146,12 +217,12 @@ namespace isocmd_tests {
 			ReadFd target(f.dst);
 			const Identity output(target.fd);
 			Plan p;
-			p[Call::Pwrite].set(output, {{}, shortTransfer(713), error(EIO)});
-			p[Call::Truncate].set(output, {error(EIO)});
+			p[Call::Pwrite].set(output, {{}, unalignedDirectShort(4096), error(EIO)});
+			p[Call::Truncate].set(output, {{}, {}, error(EIO)});
 			// No cleanup is possible while the truncate syscall fails. The writer
 			// must still report failure, never completion. A fresh copy replaces it.
-			f.run(p, false, 4096 + 713, false, 4096 + 713);
-			CHECK(p[Call::Truncate].calls.load() == 1);
+			f.run(p, false, 4096 + 4095, false, 8192);
+			CHECK(p[Call::Truncate].calls.load() == 3);
 			Plan clean;
 			f.run(clean, true, f.data.size());
 
@@ -165,9 +236,9 @@ namespace isocmd_tests {
 				ReadFd source(f.src), target(f.dst);
 				const Identity input(source.fd), output(target.fd);
 				Plan p;
-				p[Call::Pwrite].set(output, {shortTransfer(713), error(EIO)});
+				p[Call::Pwrite].set(output, {unalignedDirectShort(4096), error(EIO)});
 				p[Call::Close].set(onSource ? input : output, {error(code)});
-				f.run(p, false, 713);
+				f.run(p, false, 4095);
 				CHECK(p[Call::Close].calls.load() == 1);
 				CHECK(p[Call::Close].effects.load() == 1);
 				Plan clean;
@@ -179,28 +250,235 @@ namespace isocmd_tests {
 
 	}
 
-	void windowsFinalWriteback() {
+	void windowsFilesystemWriteModes() {
 
 		CopyFixture f;
-		// One copy chunk = one writeback submission, independent of pacing threshold.
-		f.buffer.resize(f.data.size());
+		
+		ReadFd target(f.dst);
+		const Identity output(target.fd);
+		for (const bool ntfs : {false, true}) {
+			const auto chunkSize = ntfs ? windowsWriter_engine::copy::kBufferSize : windowsWriter_engine::copy::kFatBufferSize;
+			f.buffer.resize(chunkSize);
+			f.data.resize(chunkSize + 1, 'x');
+			writeFile(f.src, f.data);
+			Plan p;
+			p[Call::Pwrite].set(output, {{}, {}});
+			p[Call::Truncate].target = output;
+			p[Call::SyncRange].target = output;
+			p[Call::Fallocate].target = output;
+			f.run(p, true, f.data.size(), ntfs);
+			CHECK(p[Call::Pwrite].calls.load() == 2);
+			const int flags = p[Call::Pwrite].statusFlags.load();
+			CHECK(flags >= 0);
+			CHECK((flags & O_DIRECT) == O_DIRECT);
+			CHECK(!(flags & O_DSYNC));
+			CHECK((flags & O_SYNC) != O_SYNC);
+			if (ntfs) {
+				CHECK(p[Call::SyncRange].calls.load() == 0);
+				CHECK(p[Call::Fallocate].calls.load() == 1);
+				CHECK(p[Call::Truncate].calls.load() == 1);
+			} else {
+				CHECK(p[Call::SyncRange].calls.load() == 1);
+				CHECK(p[Call::Fallocate].calls.load() == 0);
+				CHECK(p[Call::Truncate].calls.load() == 3);
+			}
+		}
+
+	}
+
+	static void checkBufferedWriteback(bool ntfs) {
+
+		CopyFixture f;
+		constexpr auto range = windowsWriter_engine::copy::kBufferedSyncSize;
+		// Smaller source buffers must still accumulate exactly one 4 MiB range.
+		f.buffer.resize(range / 2);
+		f.data.resize(2 * range + 1, 'x');
+		writeFile(f.src, f.data);
 		ReadFd target(f.dst);
 		const Identity output(target.fd);
 		{
-			// The single final asynchronous range retries interruptions.
 			Plan p;
-			p[Call::SyncRange].set(output, {error(EINTR), error(EINTR), {}});
-			f.run(p, true, f.data.size());
-			CHECK(p[Call::SyncRange].calls.load() == 3);
+			p[Call::SyncRange].target = output;
+			f.run(p, true, f.data.size(), ntfs, 0, true);
+			// Three submissions, two waits; syncfs owns the final drain.
+			CHECK(p[Call::SyncRange].calls.load() == 5);
 		}
 		{
-			// Writeback pacing is best-effort: the full Windows writer's later
-			// syncfs (not this copy engine) is responsible for durable completion.
 			Plan p;
-			p[Call::SyncRange].set(output, {error(EINTR), error(EIO)});
-			f.run(p, true, f.data.size());
-			CHECK(p[Call::SyncRange].calls.load() == 2);
+			p[Call::SyncRange].set(output, {error(EINTR), {}});
+			f.run(p, true, f.data.size(), ntfs, 0, true);
+			CHECK(p[Call::SyncRange].calls.load() == 6);
+		}
+		{
+			Plan p;
+			p[Call::SyncRange].set(output, {error(EIO)});
+			f.run(p, false, range, ntfs, 0, true);
+		}
+		{
+			Plan p;
+			p[Call::SyncRange].set(output, {{}, {}, error(EIO)});
+			f.run(p, false, 2 * range, ntfs, 0, true);
+		}
+		{
+			Plan p;
+			p[Call::Pwrite].set(output, {{}, {}, cancelAfterShort(137, cancel)});
+			p[Call::SyncRange].target = output;
+			f.run(p, false, range + 137, ntfs, 0, true);
+			CHECK(p[Call::SyncRange].calls.load() == 1);
 		}
 
+	}
+
+	static void checkBufferedCrossFileWriteback() {
+
+		CopyFixture f;
+		const auto second = f.tmp.path / "second";
+		ReadFd target(f.dst);
+		Plan p;
+		p[Call::SyncRange].target = Identity(target.fd);
+		std::atomic<std::uint64_t> total{0};
+		GlobalState::g_operationCancelled = false;
+		{
+			Scope scope(p);
+			CHECK(processEntries({{f.src, f.dst, f.data.size(), false},
+			    {f.src, second, f.data.size(), false}}, IsoType::FatOnly, "",
+			    f.buffer.size(), f.buffer.data(), total, nullptr, true));
+		}
+		// The first small file is submitted and waited on by the second file.
+		CHECK(p[Call::SyncRange].calls.load() == 2);
+		CHECK(total == 2 * f.data.size());
+		CHECK(readFile(f.dst) == f.data && readFile(second) == f.data);
+
+	}
+
+	void windowsBufferedWrites() {
+
+		for (const bool ntfs : {false, true}) {
+			CopyFixture f;
+			ReadFd target(f.dst);
+			const Identity output(target.fd);
+			Plan p;
+			// Buffered short writes resume from the exact byte, without replay.
+			p[Call::Pwrite].set(output, {error(EINTR), shortTransfer(137), {}, {}, {}});
+			p[Call::Truncate].target = output;
+			p[Call::SyncRange].target = output;
+			p[Call::Fallocate].target = output;
+			f.run(p, true, f.data.size(), ntfs, 0, true);
+			CHECK(p[Call::Pwrite].calls.load() == 5);
+			const int flags = p[Call::Pwrite].statusFlags.load();
+			CHECK(flags >= 0 && !(flags & O_DIRECT) && !(flags & O_DSYNC));
+			CHECK(p[Call::Truncate].calls.load() == 0);
+			CHECK(p[Call::SyncRange].calls.load() == 1); // Final partial range.
+			CHECK(p[Call::Fallocate].calls.load() == 0);
+
+			Plan failure;
+			failure[Call::Pwrite].set(output, {{}, shortTransfer(137), error(ENOSPC)});
+			failure[Call::SyncRange].target = output;
+			f.run(failure, false, 4096 + 137, ntfs, 0, true);
+			CHECK(failure[Call::SyncRange].calls.load() == 0);
+
+			Plan cancelled;
+			cancelled[Call::Pwrite].set(output, {{}, cancelAfterShort(137, cancel)});
+			cancelled[Call::SyncRange].target = output;
+			f.run(cancelled, false, 4096 + 137, ntfs, 0, true);
+			CHECK(cancelled[Call::SyncRange].calls.load() == 0);
+
+			Plan retry;
+			f.run(retry, true, f.data.size(), ntfs, 0, true);
+			f.data.clear();
+			writeFile(f.src, f.data);
+			Plan empty;
+			empty[Call::Pwrite].target = output;
+			f.run(empty, true, 0, ntfs, 0, true);
+			CHECK(empty[Call::Pwrite].calls.load() == 0);
+			checkBufferedWriteback(ntfs);
+		}
+		checkBufferedCrossFileWriteback();
+
+	}
+
+	void windowsDirectRecovery() {
+
+		for (const bool ntfs : {false, true}) {
+			CopyFixture f;
+			f.buffer.resize(8192);
+			ReadFd target(f.dst);
+			const Identity output(target.fd);
+			{
+				Plan p;
+				// Aligned short write: continue from the exact remaining offset.
+				p[Call::Pwrite].set(output, {shortTransfer(4096), {}, {}});
+				f.run(p, true, f.data.size(), ntfs);
+				CHECK(p[Call::Pwrite].calls.load() == 3);
+			}
+			{
+				Plan p;
+				// The entire first chunk is replayed after an unaligned report.
+				p[Call::Pwrite].set(output, {unalignedDirectShort(4096), {}, {}});
+				f.run(p, true, f.data.size(), ntfs);
+				CHECK(p[Call::Pwrite].effects.load() == 1);
+			}
+			{
+				Plan p;
+				const auto shortWrite = unalignedDirectShort(4096);
+				p[Call::Pwrite].set(output, {shortWrite, shortWrite, shortWrite,
+				    shortWrite, shortWrite, shortWrite, shortWrite, shortWrite, shortWrite});
+				f.run(p, false, 4095, ntfs);
+				CHECK(p[Call::Pwrite].effects.load() == 9);
+			}
+			{
+				Plan p;
+				p[Call::Pwrite].set(output, {cancelAfterShort(4096, cancel)});
+				f.run(p, false, 4096, ntfs);
+			}
+			{
+				Plan p;
+				if (ntfs) p[Call::Truncate].set(output, {error(EINTR), {}});
+				else p[Call::Truncate].set(output, {{}, {}, error(EINTR), {}});
+				f.run(p, true, f.data.size(), ntfs);
+				CHECK(p[Call::Truncate].calls.load() == (ntfs ? 2 : 4));
+			}
+			{
+				Plan p;
+				if (ntfs) p[Call::Truncate].set(output, {error(EIO), {}});
+				else p[Call::Truncate].set(output, {{}, {}, error(EIO), {}});
+				f.run(p, false, f.data.size(), ntfs);
+				CHECK(p[Call::Truncate].calls.load() == (ntfs ? 2 : 4));
+			}
+			{
+				// Padded bytes are never counted; even a replay of a tiny file
+				// must preserve exact contents and CRC-64.
+				f.data.resize(1);
+				writeFile(f.src, f.data);
+				Plan p;
+				p[Call::Pwrite].set(output, {unalignedDirectShort(4096), {}});
+				f.run(p, true, 1, ntfs);
+				CHECK(p[Call::Pwrite].effects.load() == 1);
+			}
+
+			if (!ntfs) {
+				Plan growthFailure;
+				growthFailure[Call::Truncate].set(output, {error(ENOSPC), {}});
+				growthFailure[Call::Pwrite].target = output;
+				f.run(growthFailure, false, 0);
+				CHECK(growthFailure[Call::Pwrite].calls.load() == 0);
+
+				Plan tailFailure;
+				tailFailure[Call::SyncRange].set(output, {error(EIO)});
+				f.run(tailFailure, false, f.data.size());
+
+				Plan tailRetry;
+				tailRetry[Call::SyncRange].set(output, {error(EINTR), {}});
+				f.run(tailRetry, true, f.data.size());
+			}
+
+			f.data.clear();
+			writeFile(f.src, f.data);
+			Plan empty;
+			empty[Call::Pwrite].target = output;
+			f.run(empty, true, 0, ntfs);
+			CHECK(empty[Call::Pwrite].calls.load() == 0);
+
+		}
 	}
 } // namespace isocmd_tests

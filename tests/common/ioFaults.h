@@ -19,6 +19,7 @@ namespace isocmd_tests::io_faults {
 		int error = 0;
 		std::size_t bytes = 0;
 		void (*cancel)() = nullptr;
+		void (*before)() = nullptr;
 	};
 
 	inline Step error(int code) {
@@ -61,6 +62,14 @@ namespace isocmd_tests::io_faults {
 
 	}
 
+	inline Step observeBefore(void (*observe)()) {
+
+		Step step;
+		step.before = observe;
+		return step;
+
+	}
+
 	struct Identity {
 		struct stat value{};
 
@@ -79,6 +88,8 @@ namespace isocmd_tests::io_faults {
 		std::optional<Identity> target;
 		std::vector<Step> steps;
 		std::atomic<std::size_t> calls{0};
+		// Actual descriptor flags seen by the positional-write wrapper.
+		std::atomic<int> statusFlags{-1};
 		// Count simulated results that require an actual successful syscall first.
 		std::atomic<std::size_t> effects{0};
 
@@ -87,6 +98,7 @@ namespace isocmd_tests::io_faults {
 			target = identity;
 			steps = sequence;
 			calls = 0;
+			statusFlags = -1;
 			effects = 0;
 
 		}

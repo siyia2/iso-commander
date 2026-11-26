@@ -13,6 +13,7 @@
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
 import isocmd.core.cancellation;
+import isocmd.settings.settings;
 
 namespace isocmd_tests {
 	namespace {
@@ -229,11 +230,12 @@ namespace isocmd_tests {
 
 	}
 
-	int windowsWriterTest(const std::string& loop, const std::string& layout) {
+	int windowsWriterTest(const std::string& loop, const std::string& layout, const std::string& mode) {
 
 		try {
 			CHECK(layout == "full" || layout == "fat-only");
 			const bool full = layout == "full";
+			CHECK(mode == "direct" || mode == "buffered");
 			const char* env = std::getenv("ISOCMD_TEST_SANDBOX"); CHECK(env);
 			const char* parentNs = std::getenv("ISOCMD_WINDOWS_PARENT_NS"); CHECK(parentNs);
 			const auto sandbox = fs::canonical(env);
@@ -255,14 +257,17 @@ namespace isocmd_tests {
 			    if (entry.is_regular_file()) total += entry.file_size();
 			CHECK(total > 4 * 1024 * 1024);
 			const auto before = readFile("/proc/self/mountinfo");
+			// Each invocation runs in its own process with isolated configuration.
+			ConfigCaches::g_configCache["buffered_writes"] = mode == "buffered" ? "on" : "off";
+			CHECK(write2usbBufferedEnabled() == (mode == "buffered"));
 			checkWindowsWrite(iso, device, total, before);
 			checkWindowsLayout(sys, device, fatPart, full);
 			checkWindowsVolumes(sandbox, source, sys, fatPart, ntfsPart, full, before);
 			std::cout << "PASS: Windows " << (full ? "FAT32 + NTFS" : "FAT-only")
-			          << " verified write, partition layout, readback bytes and cleanup\n";
+			          << " (" << mode << ") verified write, partition layout, readback bytes and cleanup\n";
 			return 0;
 		} catch (const std::exception& e) {
-			std::cerr << "FAIL: Windows " << layout << " verification: " << e.what() << '\n';
+			std::cerr << "FAIL: Windows " << layout << " (" << mode << ") verification: " << e.what() << '\n';
 			return 1;
 		}
 

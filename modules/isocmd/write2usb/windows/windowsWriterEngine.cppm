@@ -36,16 +36,23 @@ namespace write2usb_detail {
 
 namespace windowsWriter_engine::copy {
 
-	inline constexpr std::size_t kBufferSize      = 4 * 1024 * 1024;
-	inline constexpr std::size_t kBufferAlign     = 4096;
-	inline constexpr int    kPaceEveryChunks = 1;
+	inline constexpr std::size_t kBufferSize       = 4 * 1024 * 1024;
+	inline constexpr std::size_t kFatBufferSize    = 4 * 1024 * 1024;
+	inline constexpr std::size_t kBufferedSyncSize = 4 * 1024 * 1024;
+	inline constexpr std::size_t kBufferAlign      = 4096;
 
 	/**
 	 * @brief Iterates one entry list, creating directories and copying files.
 	 *
-	 * NTFS-bound files are pre-allocated; FAT32-bound files are not.
+	 * NTFS-bound files use aligned O_DIRECT with best-effort preallocation;
+	 * FAT32-bound files use aligned O_DIRECT with bounded chunk initialization.
+	 * Optional buffered writes bypass direct I/O alignment and preallocation,
+	 * and use rolling 4 MiB sync_file_range writeback pacing.
+	 * Multi-chunk files overlap source reads and checksumming with ordered writes
+	 * using two aligned buffers; single-chunk files remain synchronous.
 	 *
 	 * @param checksums Optional output of CRC-64 values, one per file in entry order.
+	 * @param buffered Use ordinary buffered writes instead of O_DIRECT.
 	 * @return false on the first copy failure or cancellation; true otherwise.
 	 */
 	bool processEntries(const std::vector<write2usb_detail::IsoCopyEntry>& entries,
@@ -54,7 +61,8 @@ namespace windowsWriter_engine::copy {
 	                    std::size_t bufferSize,
 	                    char* buf,
 	                    std::atomic<std::uint64_t>& totalAccumulator,
-	                    std::vector<std::uint64_t>* checksums = nullptr);
+	                    std::vector<std::uint64_t>* checksums = nullptr,
+	                    bool buffered = false);
 
 } // namespace windowsWriter_engine::copy
 

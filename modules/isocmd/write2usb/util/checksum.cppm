@@ -35,7 +35,7 @@ namespace usb_verify {
 		}
 	};
 
-	// Reuse the existing row and speed estimator, but keep write bytes separate.
+	// Reuse the existing row and speed estimator, but keep write bytes and speed separate.
 	class ReadbackProgress {
 	public:
 		ReadbackProgress(ProgressInfo& slot, std::uint64_t total);
@@ -45,7 +45,6 @@ namespace usb_verify {
 		ProgressInfo& slot_;
 		std::uint64_t total_;
 		std::uint64_t done_ = 0;
-		write_telemetry::Clock::time_point start_;
 		write_telemetry::SpeedEstimator estimator_;
 	};
 

@@ -72,13 +72,16 @@ namespace isocmd_tests {
 		writeFile(path, "123456789");
 		ProgressInfo row("test", "fixture", "9 B", "source");
 		row.bytesWritten = 9;
+		row.speed = 25.0;
+		row.verificationSpeed = 100.0;
 		char buffer[4];
 		ReadbackProgress readback(row, 9);
 		CHECK(row.verifying && row.progress == 0 && !row.completed);
+		CHECK(row.speed == 25.0 && row.verificationSpeed == 0.0);
 		CHECK(verifyFile(path, 9, crc.value, buffer, sizeof buffer, readback));
 		CHECK(row.bytesVerified == 9 && row.bytesWritten == 9 && row.progress == 99 && !row.completed);
 		CHECK(readback.finish());
-		CHECK(row.completed && row.progress == 100);
+		CHECK(row.completed && row.progress == 100 && row.speed == 25.0);
 
 		ProgressInfo bad("test", "fixture", "9 B", "source");
 		ReadbackProgress badProgress(bad, 9);
@@ -114,6 +117,7 @@ namespace isocmd_tests {
 			CHECK(p.writeCompleted.load() == (i % 5 == 0));
 			CHECK(p.verifyRequested == (i % 2 == 0) && p.verifying.load() == (i % 3 == 0) && p.bytesVerified.load() == i * 128u);
 			CHECK(p.bytesWritten.load() == i * 4096u && p.progress.load() == i % 101 && p.speed.load() == i * 0.5);
+			CHECK(p.verificationSpeed.load() == i * 0.25);
 		}
 
 	}
@@ -124,7 +128,7 @@ namespace isocmd_tests {
 		target = std::move(progress.back());
 		CHECK(target.filename == "4095" && target.bytesWritten.load() == 4095u * 4096u);
 		CHECK(!target.verifyRequested && target.verifying && target.bytesVerified == 4095u * 128u);
-		CHECK(target.writeCompleted);
+		CHECK(target.writeCompleted && target.verificationSpeed == 4095 * 0.25);
 		auto& alias = target; target = std::move(alias);
 		CHECK(target.filename == "4095" && target.progress.load() == 4095 % 101);
 
@@ -139,7 +143,7 @@ namespace isocmd_tests {
 			p.completed = i % 2 == 0; p.failed = i % 3 == 0;
 			p.writeCompleted = i % 5 == 0;
 			p.verifyRequested = i % 2 == 0; p.verifying = i % 3 == 0; p.bytesVerified = i * 128u;
-			p.bytesWritten = i * 4096u; p.progress = i % 101; p.speed = i * 0.5;
+			p.bytesWritten = i * 4096u; p.progress = i % 101; p.speed = i * 0.5; p.verificationSpeed = i * 0.25;
 		}
 		checkProgressRows(progress);
 		checkProgressMove(progress);

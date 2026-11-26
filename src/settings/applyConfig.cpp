@@ -146,7 +146,7 @@ void applyConfigEffects(const std::map<std::string, std::string>& cache,
 	static const std::unordered_set<std::string> nonThreadKeys = {
 		"mount_list", "umount_list", "cp_mv_rm_list", "write2usb_list",
 		"convert2iso_lists", "filenames_only", "skin", "theme", "base",
-		"pagination", "write2usb_checksum"
+		"pagination", "verify_checksum", "buffered_writes"
 	};
 	if (onlyKey.empty() || !nonThreadKeys.count(onlyKey)) {
 		applyThreadCapsAndHistoryLimits(cache);

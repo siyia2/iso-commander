@@ -3,11 +3,13 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 import std;
 import isocmd.core.cancellation;
 import isocmd.write2usb.windows.windowsWriterEngine;
 import isocmd.write2usb.util.checksum;
+import isocmd.write2usb.util.alignedBuffer;
 
 namespace fs = std::filesystem;
 
@@ -18,189 +20,28 @@ namespace windowsWriter_engine::copy {
 
 	namespace {
 
-		/**
-		 * @brief Per-file range accumulated before it is handed to the shared
-		 *        filesystem writeback pacer.
-		 */
-		struct FileWritebackState {
-			std::uint64_t pendOff    = 0;   ///< Start of the not-yet-submitted range.
-			std::uint64_t pendLen    = 0;   ///< Length of the not-yet-submitted range.
-			int      pendChunks = 0;   ///< Chunks accumulated in that range.
-		};
-
-		/** A submitted file range retained for a later writeback wait. */
-		struct WritebackRange {
-			int      fd = -1;
-			std::uint64_t off = 0;
-			std::uint64_t len = 0;
-		};
+		constexpr unsigned kMaxDirectWriteRestarts = 8;
+		constexpr std::uint64_t kFatMaxFileSize = 0xffffffffULL;
 
 		/**
-		 * @brief Closes the duplicated descriptors retained by a range batch.
+		 * @brief Use the reported DIO alignment where available, with a
+		 *        conservative 4 KiB minimum for drivers without STATX_DIOALIGN.
+		 *        Some drivers do not report alignment for resident files.
 		 */
-		void closeRanges(std::vector<WritebackRange>& ranges) {
+		std::size_t directAlignment(int fd) {
 
-			for (auto& range : ranges) {
-				if (range.fd >= 0)
-				    close(range.fd);
+			std::size_t alignment = kBufferAlign;
+#ifdef STATX_DIOALIGN
+			struct statx info{};
+			if (statx(fd, "", AT_EMPTY_PATH | AT_STATX_DONT_SYNC,
+			          STATX_DIOALIGN, &info) == 0 &&
+			    (info.stx_mask & STATX_DIOALIGN)) {
+				alignment = std::max({alignment,
+				    static_cast<std::size_t>(info.stx_dio_mem_align),
+				    static_cast<std::size_t>(info.stx_dio_offset_align)});
 			}
-			ranges.clear();
-
-		}
-
-		/**
-		 * @brief sync_file_range() on a file range, retrying interrupted calls.
-		 *
-		 * Checks for cancellation before the call and when interrupted by a signal.
-		 *
-		 * @param flags SYNC_FILE_RANGE_* flags passed through to the kernel.
-		 * @return Zero on success, or -1 on failure or cancellation.
-		 */
-		int syncFileRange(int fd, std::uint64_t off, std::uint64_t len, unsigned int flags) {
-
-			if (GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
-				errno = ECANCELED;
-				return -1;
-			}
-
-			int result;
-
-			do {
-				result = sync_file_range(
-				    fd,
-				    static_cast<off_t>(off),
-				    static_cast<off_t>(len),
-				    flags
-				);
-
-				if (result < 0 && errno == EINTR &&
-				    GlobalState::g_operationCancelled.load(std::memory_order_relaxed)) {
-					errno = ECANCELED;
-					return -1;
-				}
-
-			} while (result < 0 && errno == EINTR);
-
-			return result;
-
-		}
-
-		/**
-		 * @brief Shared writeback pacing state for one filesystem copy pass.
-		 *
-		 * Each completed file range is submitted asynchronously immediately.
-		 * Chunk accounting is shared across files, so small files contribute to
-		 * the same pacing interval instead of resetting the threshold per file.
-		 * Once the current batch reaches kPaceEveryChunks, the previously
-		 * submitted batch is waited on and the current batch becomes previous.
-		 *
-		 * Duplicated descriptors keep the relevant file descriptions available
-		 * for the later range wait even after copyFileWithProgress() closes its
-		 * original descriptor. The destructor only closes descriptors; it does
-		 * not wait, preserving cancellation responsiveness.
-		 */
-		struct FilesystemWritebackState {
-			std::vector<WritebackRange> current;
-			std::vector<WritebackRange> previous;
-			int currentChunks = 0;
-
-			~FilesystemWritebackState() {
-
-				closeRanges(current);
-				closeRanges(previous);
-
-			}
-
-			void submitRange(int fd, std::uint64_t off, std::uint64_t len, int chunks) {
-
-				if (len == 0 || chunks <= 0)
-				    return;
-
-				const int heldFd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
-				if (heldFd < 0)
-				    return;
-
-				// Start this range's writeback immediately. This is especially
-				// important for a file that finishes below the chunk threshold.
-				if (syncFileRange(heldFd, off, len, SYNC_FILE_RANGE_WRITE) != 0) {
-					close(heldFd);
-					return;
-				}
-
-				current.push_back({heldFd, off, len});
-				currentChunks += chunks;
-
-				if (currentChunks < kPaceEveryChunks)
-				    return;
-
-				// The just-submitted batch can drain while the previous batch
-				// is waited on, retaining the original double-buffered pacing.
-				for (const auto& range : previous) {
-					static_cast<void>(syncFileRange(
-					    range.fd, range.off, range.len,
-					    SYNC_FILE_RANGE_WAIT_BEFORE |
-					    SYNC_FILE_RANGE_WRITE |
-					    SYNC_FILE_RANGE_WAIT_AFTER
-					));
-				}
-
-				closeRanges(previous);
-				previous.swap(current);
-				current.clear();
-				currentChunks = 0;
-
-			}
-		};
-
-		/**
-		 * @brief Accumulates contiguous chunks for the current file, then hands
-		 *        a completed pacing range to the shared filesystem state.
-		 */
-		void paceWriteback(int fd_out, std::uint64_t off, std::uint64_t len,
-		                   FileWritebackState& fileState,
-		                   FilesystemWritebackState& filesystemState) {
-
-			if (fileState.pendChunks == 0) {
-				fileState.pendOff = off;
-				fileState.pendLen = 0;
-			}
-
-			fileState.pendLen += len;
-
-			if (++fileState.pendChunks < kPaceEveryChunks)
-			    return;
-
-			filesystemState.submitRange(
-			    fd_out, fileState.pendOff, fileState.pendLen,
-			    fileState.pendChunks
-			);
-
-			fileState.pendChunks = 0;
-			fileState.pendLen = 0;
-
-		}
-
-		/**
-		 * @brief Submits the final partial range when a file completes.
-		 *
-		 * The range is started asynchronously even when the file contains fewer
-		 * than kPaceEveryChunks chunks. Incomplete/cancelled files deliberately
-		 * do not submit their tail because the caller truncates them.
-		 */
-		void finishFileWriteback(int fd_out,
-		                         FileWritebackState& fileState,
-		                         FilesystemWritebackState& filesystemState) {
-
-			if (fileState.pendChunks == 0)
-			    return;
-
-			filesystemState.submitRange(
-			    fd_out, fileState.pendOff, fileState.pendLen,
-			    fileState.pendChunks
-			);
-
-			fileState.pendChunks = 0;
-			fileState.pendLen = 0;
+#endif
+			return alignment;
 
 		}
 
@@ -239,223 +80,501 @@ namespace windowsWriter_engine::copy {
 		}
 
 		/**
-		 * @brief Write one chunk, retrying short writes and EINTR.
-		 *
-		 * Successfully written bytes are accounted for even if a subsequent
-		 * write fails. Once the whole chunk has landed, its range is accumulated
-		 * for the shared filesystem writeback pacer.
-		 *
-		 * @param fileWriteback      Per-file contiguous range accumulator.
-		 * @param filesystemWriteback Shared filesystem pacing state.
-		 * @return true if the entire chunk was written successfully.
+		 * @brief Writes a logical chunk using positional I/O. In direct mode, the final
+		 *        fragment is normally zero-padded by the caller.
+		 *        After an unaligned direct short write, replay the same chunk
+		 *        from its aligned start. Count logical bytes only once.
 		 */
-		bool writeOneChunk(int fd_out, const char* buf, std::size_t len,
-		                   std::uint64_t& fileOffset,
+		bool writeOneChunk(int fd, const char* buf, std::size_t logicalLen,
+		                   std::size_t writeLen, std::uint64_t chunkOff,
+		                   std::size_t alignment,
 		                   std::uint64_t& bytesCopiedTotal,
-		                   std::atomic<std::uint64_t>& totalAccumulator,
-		                   FileWritebackState& fileWriteback,
-		                   FilesystemWritebackState& filesystemWriteback) {
+		                   std::atomic<std::uint64_t>& totalAccumulator) {
 
-			const std::uint64_t chunkOff = fileOffset;
 			std::size_t done = 0;
+			std::size_t highWater = 0;
+			unsigned restarts = 0;
 
-			while (done < len) {
+			while (done < writeLen) {
 				if (GlobalState::g_operationCancelled.load())
 				    return false;
 
-				const ssize_t written = pwrite(
-				    fd_out,
-				    buf + done,
-				    len - done,
-				    static_cast<off_t>(fileOffset)
-				);
+				const ssize_t written = pwrite(fd, buf + done, writeLen - done,
+				    static_cast<off_t>(chunkOff + done));
 
 				if (written < 0) {
-					if (errno == EINTR)
-					    continue;
-
+					if (errno == EINTR) continue;
 					return false;
 				}
 
-				if (written == 0) {
+				if (written == 0 || static_cast<std::size_t>(written) > writeLen - done) {
 					errno = EIO;
 					return false;
 				}
 
-				const std::uint64_t writtenBytes =
-				    static_cast<std::uint64_t>(written);
-
 				done += static_cast<std::size_t>(written);
-				fileOffset += writtenBytes;
+				const std::size_t logicalDone = std::min(done, logicalLen);
+				if (logicalDone > highWater) {
+					const auto delta = logicalDone - highWater;
+					bytesCopiedTotal += delta;
+					totalAccumulator.fetch_add(delta);
+					highWater = logicalDone;
+				}
 
-				totalAccumulator.fetch_add(writtenBytes);
-				bytesCopiedTotal += writtenBytes;
+				if (alignment > 1 && done < writeLen && done % alignment != 0) {
+					if (restarts == kMaxDirectWriteRestarts) {
+						errno = EIO;
+						return false;
+					}
+					++restarts;
+					done = 0;
+				}
 			}
 
-			paceWriteback(
-			    fd_out, chunkOff, len,
-			    fileWriteback, filesystemWriteback
-			);
 			return true;
 
 		}
 
-		/**
-		 * @brief Copies exactly the expected file size in bounded chunks.
-		 *
-		 * Never reads beyond the expected ISO file size and fails if the
-		 * source reaches EOF before all expected bytes have been copied.
-		 *
-		 * Writeback is paced per chunk by writeOneChunk(). A successful file
-		 * submits its final partial range asynchronously before it is closed;
-		 * incomplete files do not submit their remaining range.
-		 *
-		 * @return true only if exactly the expected file size was copied
-		 *         without failure or cancellation.
-		 */
-		bool copyFileChunks(int fd_in, int fd_out,
-		                    std::uint64_t fileSize,
-		                    std::size_t bufferSize,
-		                    char* buf,
-		                    std::atomic<std::uint64_t>& totalAccumulator,
-		                    std::uint64_t& bytesCopiedTotal,
-		                    FilesystemWritebackState& filesystemWriteback,
-		                    usb_verify::Checksum64* checksum) {
+		/** Retry interrupted truncation both for exact tails and failed copies. */
+		bool truncateFile(int fd, std::uint64_t size) {
 
-			std::uint64_t fileOffset = 0;
-			FileWritebackState fileWriteback;
+			int result;
+			do {
+				result = ftruncate(fd, static_cast<off_t>(size));
+			} while (result < 0 && errno == EINTR);
+			return result == 0;
 
-			if (bufferSize == 0) {
-				errno = EINVAL;
+		}
+
+		/** Select a chunk that can be aligned without crossing the FAT32 size limit. */
+		std::size_t logicalChunkSize(std::uint64_t offset, std::uint64_t fileSize,
+		                             std::size_t capacity, std::size_t alignment, bool toNtfs) {
+
+			const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(fileSize - offset, capacity));
+			const auto limit = kFatMaxFileSize & ~static_cast<std::uint64_t>(alignment - 1);
+			if (!toNtfs && offset + count > limit && count >= alignment)
+			    return count - count % alignment;
+			return count;
+
+		}
+
+		/** Remove final padding and drain any dirty FAT32 tail page. */
+		bool finishDirectFile(int fd, std::uint64_t fileSize, std::size_t alignment, bool toNtfs) {
+
+			const auto tail = fileSize % alignment;
+			if (!tail) return true;
+			if (!truncateFile(fd, fileSize)) return false;
+			if (toNtfs) return true;
+			if (GlobalState::g_operationCancelled.load()) return false;
+
+			int result;
+			do {
+				result = sync_file_range(fd, static_cast<off_t>(fileSize - tail),
+				    static_cast<off_t>(tail),
+				    SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER);
+			} while (result < 0 && errno == EINTR && !GlobalState::g_operationCancelled.load());
+			return result == 0;
+
+		}
+
+		/** A rolling 4 MiB writeback window shared across buffered files. */
+		class BufferedWriteback {
+		public:
+			BufferedWriteback() = default;
+			BufferedWriteback(const BufferedWriteback&) = delete;
+			BufferedWriteback& operator=(const BufferedWriteback&) = delete;
+
+			~BufferedWriteback() {
+
+				if (fd_ >= 0) close(fd_);
+
+			}
+
+			/** Submit full ranges and the final nonempty tail of a completed file. */
+			bool pace(int fd, std::uint64_t end, std::uint64_t fileSize,
+			          std::uint64_t& offset) {
+
+				while (end - offset >= kBufferedSyncSize || (end == fileSize && end > offset)) {
+					const auto len = std::min<std::uint64_t>(end - offset, kBufferedSyncSize);
+					if (!submit(fd, offset, len)) return false;
+					offset += len;
+				}
+				return true;
+
+			}
+
+		private:
+			static constexpr unsigned waitFlags = SYNC_FILE_RANGE_WAIT_BEFORE |
+			    SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER;
+
+			static bool syncRange(int fd, std::uint64_t off, std::uint64_t len, unsigned flags) {
+
+				for (;;) {
+					if (GlobalState::g_operationCancelled.load()) {
+						errno = ECANCELED;
+						return false;
+					}
+					if (sync_file_range(fd, static_cast<off_t>(off),
+					    static_cast<off_t>(len), flags) == 0) return true;
+					if (errno != EINTR) return false;
+				}
+
+			}
+
+			/** Start the new range before waiting for the preceding range.
+			 *  Keep one descriptor alive across file boundaries. Never drain on
+			 *  destruction: cancellation must not introduce another explicit wait.
+			 */
+			bool submit(int fd, std::uint64_t off, std::uint64_t len) {
+
+				const int held = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+				if (held < 0) return false;
+
+				if (!syncRange(held, off, len, SYNC_FILE_RANGE_WRITE) ||
+				    (fd_ >= 0 && !syncRange(fd_, off_, len_, waitFlags))) {
+					const int saved = errno;
+					close(held);
+					errno = saved;
+					return false;
+				}
+
+				if (fd_ >= 0) close(fd_);
+				fd_ = held;
+				off_ = off;
+				len_ = len;
+				return true;
+
+			}
+
+			int fd_ = -1;
+			std::uint64_t off_ = 0, len_ = 0;
+		};
+
+		struct CopyContext {
+			int fd_in;
+			int fd_out;
+			std::uint64_t fileSize;
+			bool toNtfs;
+			std::size_t bufferSize;
+			std::size_t alignment; // 1 for buffered I/O; otherwise the direct I/O alignment.
+			std::atomic<std::uint64_t>& totalAccumulator;
+			usb_verify::Checksum64* checksum;
+			BufferedWriteback* writeback; // Null for direct I/O.
+		};
+
+		struct CopyBuffers {
+			char* primary;
+			char* spare = nullptr;
+		};
+
+		struct CopyChunk {
+			char* buf;
+			std::uint64_t offset = 0;
+			std::size_t logicalLen = 0;
+			std::size_t writeLen = 0;
+			bool exactTail = false;
+		};
+
+		/** Read and hash logical bytes in source order; pad only for direct I/O. */
+		bool prepareChunk(const CopyContext& ctx, CopyChunk& chunk) {
+
+			chunk.logicalLen = logicalChunkSize(chunk.offset, ctx.fileSize, ctx.bufferSize, ctx.alignment, ctx.toNtfs);
+			// At the FAT32 limit, padding would exceed the maximum file size.
+			chunk.exactTail = !ctx.toNtfs && chunk.offset + chunk.logicalLen >
+			    (kFatMaxFileSize & ~static_cast<std::uint64_t>(ctx.alignment - 1));
+
+			const ssize_t n = fillChunk(ctx.fd_in, chunk.buf, chunk.logicalLen);
+			if (n < 0) return false;
+			if (static_cast<std::size_t>(n) != chunk.logicalLen) {
+				errno = EIO;
 				return false;
 			}
 
-			bool success = true;
-
-			while (fileOffset < fileSize &&
-			       !GlobalState::g_operationCancelled.load()) {
-
-				// Never read beyond the expected ISO file size.
-				const std::size_t chunkSize = static_cast<std::size_t>(
-				    std::min<std::uint64_t>(
-				        fileSize - fileOffset,
-				        static_cast<std::uint64_t>(bufferSize)
-				    )
-				);
-
-				const ssize_t n = fillChunk(
-				    fd_in, buf, chunkSize
-				);
-
-				if (n < 0) {
-					success = false;
-					break;
-				}
-
-				// fillChunk() only returns early when EOF is reached.
-				if (static_cast<std::size_t>(n) != chunkSize) {
-					errno = EIO;
-					success = false;
-					break;
-				}
-
-				if (checksum) checksum->update(buf, chunkSize);
-
-				if (!writeOneChunk(
-				        fd_out, buf, chunkSize,
-				        fileOffset, bytesCopiedTotal,
-				        totalAccumulator, fileWriteback,
-				        filesystemWriteback)) {
-					success = false;
-					break;
-				}
-			}
-
-			// On failure or cancellation the caller truncates the file. Do not
-			// submit this file's remaining range: it belongs to the incomplete file.
-			if (!success || GlobalState::g_operationCancelled.load())
-			    return false;
-
-			// Require an exact match, not merely a minimum.
-			if (bytesCopiedTotal != fileSize)
-			    return false;
-
-			// Submit the final partial range asynchronously before this file's
-			// descriptor is closed. Small files therefore enter shared pacing.
-			finishFileWriteback(fd_out, fileWriteback, filesystemWriteback);
+			if (ctx.checksum) ctx.checksum->update(chunk.buf, chunk.logicalLen);
+			const auto remainder = chunk.logicalLen % ctx.alignment;
+			chunk.writeLen = remainder && !chunk.exactTail
+			    ? chunk.logicalLen + ctx.alignment - remainder : chunk.logicalLen;
+			if (chunk.writeLen != chunk.logicalLen)
+			    std::memset(chunk.buf + chunk.logicalLen, 0, chunk.writeLen - chunk.logicalLen);
 			return true;
 
 		}
 
-		/**
-		 * @brief Opens, optionally pre-allocates and copies one file.
-		 *
-		 * Pre-allocation is done for NTFS only. On failure or cancellation,
-		 * partially written FAT32 files are truncated to zero bytes.
+		/** One reader thread per multi-chunk file, with at most one outstanding read.
+		 *  The semaphore handoffs transfer ownership of the spare buffer. On any
+		 *  exit, drain the outstanding read and join before closing either descriptor.
 		 */
-		bool copyFileWithProgress(const fs::path& src, const fs::path& dst,
-		                          std::uint64_t fileSize, bool preallocate,
-		                          std::size_t bufferSize, char* buf,
-		                          std::atomic<std::uint64_t>& totalAccumulator,
-		                          FilesystemWritebackState& filesystemWriteback,
-		                          std::uint64_t* expectedChecksum) {
+		class ChunkReader {
+		public:
+			explicit ChunkReader(const CopyContext& ctx) : ctx_(ctx), worker_([this] {
+				for (;;) {
+					request_.acquire();
+					if (!chunk_) return;
+					success_ = prepareChunk(ctx_, *chunk_);
+					error_ = errno;
+					ready_.release();
+				}
+			}) {}
 
-			const int fd_in = open(
-			    src.c_str(), O_RDONLY | O_CLOEXEC
-			);
+			~ChunkReader() {
 
-			if (fd_in < 0)
+				const int saved = errno;
+				if (pending_) ready_.acquire();
+				chunk_ = nullptr;
+				request_.release();
+				worker_.join();
+				errno = saved;
+
+			}
+
+			void submit(CopyChunk& chunk) {
+
+				chunk_ = &chunk;
+				pending_ = true;
+				request_.release();
+
+			}
+
+			bool wait() {
+
+				ready_.acquire();
+				pending_ = false;
+				if (!success_) errno = error_;
+				return success_;
+
+			}
+
+		private:
+			const CopyContext& ctx_;
+			std::binary_semaphore request_{0}, ready_{0};
+			CopyChunk* chunk_ = nullptr;
+			bool pending_ = false;
+			bool success_ = false;
+			int error_ = 0;
+			std::thread worker_;
+		};
+
+		/** Grow only the current FAT32 chunk, never the prefetched one. */
+		bool writePreparedChunk(const CopyContext& ctx, const CopyChunk& chunk,
+		                        std::uint64_t& bytesCopiedTotal) {
+
+			if (GlobalState::g_operationCancelled.load()) return false;
+			if (ctx.alignment > 1 && !ctx.toNtfs && !chunk.exactTail &&
+			    !truncateFile(ctx.fd_out, chunk.offset + chunk.writeLen))
 			    return false;
 
-			posix_fadvise(
-			    fd_in, 0, 0, POSIX_FADV_SEQUENTIAL
-			);
+			return writeOneChunk(ctx.fd_out, chunk.buf, chunk.logicalLen, chunk.writeLen,
+			    chunk.offset, ctx.alignment, bytesCopiedTotal, ctx.totalAccumulator);
 
-			const int fd_out = open(
-			    dst.c_str(),
-			    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
-			    0644
-			);
+		}
+
+		/** Overlap one source chunk with one destination write; keep writes ordered. */
+		bool copyPreparedChunks(const CopyContext& ctx, CopyChunk& current, CopyChunk& next,
+		                        ChunkReader* reader, std::uint64_t& bytesCopiedTotal) {
+
+			std::uint64_t rangeOffset = 0;
+			for (;;) {
+				if (GlobalState::g_operationCancelled.load()) return false;
+				const auto nextOffset = current.offset + current.logicalLen;
+				const bool hasNext = nextOffset < ctx.fileSize;
+				if (hasNext) {
+					next.offset = nextOffset;
+					reader->submit(next);
+				}
+
+				if (!writePreparedChunk(ctx, current, bytesCopiedTotal)) return false;
+				if (ctx.writeback && !ctx.writeback->pace(ctx.fd_out, nextOffset, ctx.fileSize, rangeOffset))
+				    return false;
+				if (!hasNext) return true;
+				if (!reader->wait()) return false;
+				std::swap(current, next);
+			}
+
+		}
+
+		/** Prepare the first chunk and start a worker only for multi-chunk files. */
+		bool copyFileChunks(const CopyContext& ctx, const CopyBuffers& buffers) {
+
+			if (GlobalState::g_operationCancelled.load()) return false;
+			if (ctx.fileSize == 0) return true;
+
+			std::uint64_t bytesCopiedTotal = 0;
+			CopyChunk current{buffers.primary}, next{buffers.spare};
+			if (!prepareChunk(ctx, current)) return false;
+
+			std::optional<ChunkReader> reader;
+			if (buffers.spare) {
+				try {
+					reader.emplace(ctx);
+				} catch (const std::system_error& e) {
+					errno = e.code().value();
+					return false;
+				}
+			}
+
+			if (!copyPreparedChunks(ctx, current, next, reader ? &*reader : nullptr, bytesCopiedTotal))
+			    return false;
+
+			reader.reset();
+			if (GlobalState::g_operationCancelled.load() || bytesCopiedTotal != ctx.fileSize)
+			    return false;
+
+			return ctx.alignment == 1 ||
+			       finishDirectFile(ctx.fd_out, ctx.fileSize, ctx.alignment, ctx.toNtfs);
+
+		}
+
+		/** Validate the buffer geometry and the padded destination size. */
+		bool validCopyGeometry(const CopyContext& ctx, const char* buf, std::uint64_t padding) {
+
+			const auto maxOffset = static_cast<std::uint64_t>(std::numeric_limits<off_t>::max());
+			if (ctx.bufferSize == 0 || !std::has_single_bit(ctx.alignment) ||
+			    ctx.bufferSize % ctx.alignment != 0 || ctx.fileSize > maxOffset - padding || !buf) {
+				errno = EINVAL;
+				return false;
+			}
+			return true;
+
+		}
+
+		/** Allocate a replacement only when the supplied buffer is unaligned. */
+		bool preparePrimaryBuffer(const CopyContext& ctx, CopyBuffers& buffers,
+		                          std::optional<AlignedBuffer>& scratch) {
+
+			if (reinterpret_cast<std::uintptr_t>(buffers.primary) % ctx.alignment != 0) {
+				scratch.emplace(ctx.bufferSize, ctx.alignment);
+				buffers.primary = scratch->data;
+			}
+			if (!buffers.primary) {
+				errno = ENOMEM;
+				return false;
+			}
+			return true;
+
+		}
+
+		/** Lazily allocate the second buffer and reuse it for subsequent large files. */
+		bool prepareSpareBuffer(const CopyContext& ctx, CopyBuffers& buffers,
+		                        std::optional<AlignedBuffer>& spareStorage) {
+
+			if (ctx.fileSize <= logicalChunkSize(0, ctx.fileSize, ctx.bufferSize, ctx.alignment, ctx.toNtfs))
+			    return true;
+
+			if (!spareStorage || !spareStorage->data || spareStorage->size < ctx.bufferSize ||
+			    reinterpret_cast<std::uintptr_t>(spareStorage->data) % ctx.alignment != 0)
+			    spareStorage.emplace(ctx.bufferSize, std::max(ctx.alignment, kBufferAlign));
+			buffers.spare = spareStorage->data;
+			if (!buffers.spare) {
+				errno = ENOMEM;
+				return false;
+			}
+			return true;
+
+		}
+
+		/** Prepare the buffers and direct-mode NTFS preallocation before copying. */
+		bool copyOpenedFile(const CopyContext& ctx, char* buf,
+		                    std::optional<AlignedBuffer>& spareStorage) {
+
+			if (!ctx.toNtfs && ctx.fileSize > kFatMaxFileSize) {
+				errno = EFBIG;
+				return false;
+			}
+			const auto padding = (ctx.alignment - ctx.fileSize % ctx.alignment) % ctx.alignment;
+			if (!validCopyGeometry(ctx, buf, padding)) return false;
+
+			CopyBuffers buffers{buf};
+			std::optional<AlignedBuffer> scratch;
+			if (!preparePrimaryBuffer(ctx, buffers, scratch)) return false;
+			if (GlobalState::g_operationCancelled.load()) return false;
+			if (!prepareSpareBuffer(ctx, buffers, spareStorage)) return false;
+			if (GlobalState::g_operationCancelled.load()) return false;
+
+			if (ctx.alignment > 1 && ctx.toNtfs && ctx.fileSize > 0)
+			    posix_fallocate(ctx.fd_out, 0, static_cast<off_t>(ctx.fileSize + padding));
+
+			return copyFileChunks(ctx, buffers);
+
+		}
+
+		/**
+		 * @brief Direct mode uses O_DIRECT on both filesystems, with NTFS preallocation
+		 *        and incremental FAT32 growth. Buffered mode writes exact logical bytes
+		 *        with rolling 4 MiB writeback pacing.
+		 *        The caller's final syncfs flushes data and metadata in both modes.
+		 */
+		bool copyFileWithProgress(const IsoCopyEntry& entry, bool toNtfs, BufferedWriteback* writeback,
+		                          std::size_t bufferSize, char* buf,
+		                          std::optional<AlignedBuffer>& spareStorage,
+		                          std::atomic<std::uint64_t>& totalAccumulator,
+		                          std::uint64_t* expectedChecksum) {
+
+			const int fd_in = open(entry.src.c_str(), O_RDONLY | O_CLOEXEC);
+			if (fd_in < 0) return false;
+
+			posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
+
+			const int fd_out = open(entry.dst.c_str(),
+			    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | (writeback ? 0 : O_DIRECT), 0644);
 
 			if (fd_out < 0) {
 				close(fd_in);
 				return false;
 			}
 
-			if (preallocate && fileSize > 0)
-			    posix_fallocate(
-			        fd_out, 0, static_cast<off_t>(fileSize)
-			    );
-
-			std::uint64_t bytesCopiedTotal = 0;
-
 			usb_verify::Checksum64 checksum;
-			const bool success = copyFileChunks(
-			    fd_in, fd_out, fileSize, bufferSize, buf,
-			    totalAccumulator, bytesCopiedTotal,
-			    filesystemWriteback, expectedChecksum ? &checksum : nullptr
-			);
+			const CopyContext ctx{fd_in, fd_out, entry.size, toNtfs, bufferSize,
+			    writeback ? 1 : directAlignment(fd_out), totalAccumulator,
+			    expectedChecksum ? &checksum : nullptr, writeback};
+			bool success = copyOpenedFile(ctx, buf, spareStorage);
 
 			if (!success || GlobalState::g_operationCancelled.load()) {
-				// Drops dirty pages without writing them and frees any preallocation.
-				// Retry an interruption, but stop on a permanent cleanup error.
-				// The copy is already failed; never report completion in either case.
-				int r;
-				do {
-					r = ftruncate(fd_out, 0);
-				} while (r == -1 && errno == EINTR);
+				// Discard incomplete file data and release preallocation.
+				// A cleanup error must not turn a failed copy into success.
+				static_cast<void>(truncateFile(fd_out, 0));
+				success = false;
 			}
 
-			posix_fadvise(
-			    fd_in, 0, 0, POSIX_FADV_DONTNEED
-			);
-
+			posix_fadvise(fd_in, 0, 0, POSIX_FADV_DONTNEED);
 			close(fd_in);
-			close(fd_out);
+			if (close(fd_out) != 0) success = false;
 
 			if (success && expectedChecksum) *expectedChecksum = checksum.value;
-			return success &&
-			       !GlobalState::g_operationCancelled.load();
+			return success && !GlobalState::g_operationCancelled.load();
+
+		}
+
+		/** Collect, deduplicate and create all required directories before copying. */
+		bool prepareDirectories(const std::vector<IsoCopyEntry>& entries) {
+
+			// Collect every directory that needs to exist.
+			std::vector<fs::path> directories;
+			directories.reserve(entries.size());
+
+			for (const auto& e : entries) {
+				fs::path dir = e.isDir ? e.dst : e.dst.parent_path();
+
+				if (!dir.empty())
+				    directories.push_back(std::move(dir));
+			}
+
+			// Eliminate duplicate directory paths.
+			std::sort(directories.begin(), directories.end());
+
+			directories.erase(
+			    std::unique(directories.begin(), directories.end()),
+			    directories.end()
+			);
+
+			// Create each required directory only once.
+			for (const auto& dir : directories) {
+				if (GlobalState::g_operationCancelled.load())
+				    return false;
+
+				fs::create_directories(dir);
+			}
+
+			return true;
 
 		}
 
@@ -476,44 +595,20 @@ namespace windowsWriter_engine::copy {
 	                    std::size_t bufferSize,
 	                    char* buf,
 	                    std::atomic<std::uint64_t>& totalAccumulator,
-	                    std::vector<std::uint64_t>* checksums) {
+	                    std::vector<std::uint64_t>* checksums,
+	                    bool buffered) {
 
 		if (checksums) {
 			checksums->clear();
 			checksums->reserve(entries.size());
 		}
-		// Collect every directory that needs to exist.
-		std::vector<fs::path> directories;
-		directories.reserve(entries.size());
 
-		for (const auto& e : entries) {
-			fs::path dir = e.isDir ? e.dst : e.dst.parent_path();
-
-			if (!dir.empty())
-			    directories.push_back(std::move(dir));
-		}
-
-		// Eliminate duplicate directory paths.
-		std::sort(directories.begin(), directories.end());
-
-		directories.erase(
-		    std::unique(directories.begin(), directories.end()),
-		    directories.end()
-		);
-
-		// Create each required directory only once.
-		for (const auto& dir : directories) {
-			if (GlobalState::g_operationCancelled.load())
-			    return false;
-
-			fs::create_directories(dir);
-		}
-
-		// One shared pacing state spans every file written to this filesystem
-		// during this copy pass. Small files no longer reset the chunk threshold.
-		FilesystemWritebackState filesystemWriteback;
+		if (!prepareDirectories(entries)) return false;
 
 		// All parent directories now exist. Copy files only.
+		const auto ntfsPrefix = ntfsMnt + "/";
+		std::optional<AlignedBuffer> spareStorage;
+		BufferedWriteback writeback;
 		for (const auto& e : entries) {
 			if (GlobalState::g_operationCancelled.load())
 			    return false;
@@ -522,14 +617,14 @@ namespace windowsWriter_engine::copy {
 			    continue;
 
 			const bool toNtfs =
-			    (isoType == IsoType::WindowsInstall) &&
-			    e.dst.native().compare(0, ntfsMnt.size(), ntfsMnt) == 0;
+			    (isoType == IsoType::WindowsInstall) && !ntfsMnt.empty() &&
+			    e.dst.native().starts_with(ntfsPrefix);
 
 			std::uint64_t checksum = 0;
 			if (!copyFileWithProgress(
-			        e.src, e.dst, e.size, toNtfs,
-			        bufferSize, buf, totalAccumulator,
-			        filesystemWriteback, checksums ? &checksum : nullptr)) {
+			        e, toNtfs, buffered ? &writeback : nullptr,
+			        bufferSize, buf, spareStorage, totalAccumulator,
+			        checksums ? &checksum : nullptr)) {
 				return false;
 			}
 			if (checksums) checksums->push_back(checksum);
