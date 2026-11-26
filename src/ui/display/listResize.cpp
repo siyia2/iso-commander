@@ -146,7 +146,7 @@ namespace {
 			out += cell.text;
 		}
 		if (marked) out += "\033[27m";
-		if (window.right) out += '>';
+		if (window.right) out += "»";
 
 	}
 
@@ -216,7 +216,7 @@ namespace {
 	                            const InputLayout& layout, const InputWindow& window) {
 
 		std::string out = "\r" + label;
-		if (window.left) out += '<';
+		if (window.left) out += "«";
 		appendWindow(out, layout, window);
 		out += "\033[K\r";
 		const auto cursor = labelWidth + static_cast<std::size_t>(window.left) +

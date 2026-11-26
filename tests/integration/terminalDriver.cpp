@@ -249,7 +249,7 @@ namespace isocmd_tests {
 		// but must not advance vertically or print an entire multi-screen paste.
 		void checkSingleRowInput(std::string_view output) {
 
-			CHECK(has(plain(output), "LONG> <")); // Overflow must not replace the label.
+			CHECK(has(plain(output), "LONG> «")); // Overflow must not replace the label.
 			CHECK(!has(output, "\n"));
 			CHECK(!has(output, "\033[A") && !has(output, "\033[B"));
 			CHECK(!has(plain(output), std::string(2400, 'b')));
@@ -278,7 +278,7 @@ namespace isocmd_tests {
 			const auto right = term.waitFor("\033[K", beginning);
 			CHECK(has(plain(std::string_view(term.output).substr(widened, right - widened)),
 			          "LONG> START-OF-INPUT"));
-			CHECK(has(plain(std::string_view(term.output).substr(beginning, right - beginning)), ">"));
+			CHECK(has(plain(std::string_view(term.output).substr(beginning, right - beginning)), "»"));
 			term.send("X\x05\n");
 			term.waitFor("TEST-LONG-INPUT-PASS", beginning);
 
@@ -292,7 +292,7 @@ namespace isocmd_tests {
 			term.send("\033[200~" + std::string(160, 'a') + " " + std::string(84, 'b') + "\033[201~");
 			const auto tail = term.waitFor(std::string(84, 'b'), prompt);
 			const auto frame = plain(std::string_view(term.output).substr(prompt, tail - prompt));
-			CHECK(has(frame, "Display verbose output? (y/n): <" + std::string(84, 'b')));
+			CHECK(has(frame, "Display verbose output? (y/n): «" + std::string(84, 'b')));
 			term.send("\x01X\x05\n");
 			term.waitFor("TEST-OVERFLOW-SPACE-PASS", tail);
 
@@ -428,20 +428,20 @@ namespace isocmd_tests {
 			term.send("\x15\033[200~" + query + "\033[201~");
 			auto end=term.waitFor("FILTER-TAIL!",begin);
 			auto frame=listFrame(term,begin,end);
-			CHECK(has(frame,"No filter results") && has(frame,"Filter: <"));
+			CHECK(has(frame,"No filter results") && has(frame,"Filter: «"));
 			begin=term.output.size(); term.send("\x01");
 			end=term.waitFor("FILTER-START!",begin);
 			end=term.waitFor("\033[K",end);
 			frame=plain(std::string_view(term.output).substr(begin,end-begin));
-			CHECK(has(frame,"Filter: FILTER-START!") && has(frame,">"));
+			CHECK(has(frame,"Filter: FILTER-START!") && has(frame,"»"));
 			begin=term.output.size(); term.send("\x05");
 			end=term.waitFor("FILTER-TAIL!",begin);
 			begin=term.output.size(); term.resize(18,55);
 			end=term.waitFor("FILTER-TAIL!",begin);
-			CHECK(has(listFrame(term,begin,end),"Filter: <"));
+			CHECK(has(listFrame(term,begin,end),"Filter: «"));
 			begin=term.output.size(); term.resize(18,95);
 			end=term.waitFor("FILTER-TAIL!",begin);
-			CHECK(has(listFrame(term,begin,end),"Filter: <"));
+			CHECK(has(listFrame(term,begin,end),"Filter: «"));
 			frame=workflowPreview(term,"\x15zzzz-no-fixture","zzzz-no-fixture");
 			CHECK(has(frame,"No filter results"));
 
