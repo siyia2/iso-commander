@@ -67,9 +67,8 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Windows 10/11 PE | GPT + FAT32       | ✗    | ✓    |
 | Linux/BSD        | Raw Sector Copy   | ✓ *  | ✓ *  |
 
-> \* Boot support depends on what the source ISO supports
-
-> Optional CRC-64 readback verification is supported.
+> \* Boot support depends on what the source ISO supports\
+> Optional CRC-64 readback verification is supported
 
 ## 🏆 Credits
 
