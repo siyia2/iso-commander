@@ -69,7 +69,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 > \* Boot support depends on what the source ISO supports
 
-> Optional CRC-64 readback verification is also supported.
+> Optional CRC-64 readback verification is supported.
 
 ## 🏆 Credits
 
