@@ -120,7 +120,7 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 	          "",
 	          ConfigValues::onOff),
 	enumEntry("write2usb_checksum", "off",
-	          "Verify data after writing to USB",
+	          "Verify data integrity after writing to USB (CRC-64)",
 	          "",
 	          ConfigValues::onOff),
 	numericEntry("pagination", "25",
