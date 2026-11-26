@@ -526,7 +526,7 @@ namespace isocmd_tests {
 				expectStep(term, "?", returnPrompt, "Selecting Edits");
 				step(term, "\n", selectionPrompt);
 				// Select two settings; navigate without applying anything.
-				expectStep(term, "5 6\n", valuePrompt, "Setting: filenames_only");
+				expectStep(term, "5 7\n", valuePrompt, "Setting: filenames_only");
 				expectStep(term, "\x1b[6~", valuePrompt, "Setting: pagination");
 				expectStep(term, "\x1b[5~", valuePrompt, "Setting: filenames_only");
 				expectStep(term, "g2\n", valuePrompt, "Setting: pagination");
@@ -554,7 +554,7 @@ namespace isocmd_tests {
 				step(term, "n\n", selectionPrompt);
 				CHECK(has(readFile(config), "pagination = 3\n"));
 				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
-				expectStep(term, "7\n", valuePrompt, "Setting: write2usb_checksum");
+				expectStep(term, "6\n", valuePrompt, "Setting: write2usb_checksum");
 				expectStep(term, "yes\n", "to try again...", "Invalid value:");
 				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
 				step(term, "\n", valuePrompt);
@@ -568,16 +568,16 @@ namespace isocmd_tests {
 			runMenuWorkflow(binary, [&](TerminalSession& term) {
 
 				step(term, "4\n", selectionPrompt);
-				expectStep(term, "6\n", valuePrompt, "Current: 3");
+				expectStep(term, "7\n", valuePrompt, "Current: 3");
 				step(term, "\x1b", selectionPrompt);
-				expectStep(term, "7\n", valuePrompt, "Current: on");
+				expectStep(term, "6\n", valuePrompt, "Current: on");
 				step(term, "\x1b", selectionPrompt);
 				step(term, "r", "Reset all settings to default? (y/n): ");
 				expectStep(term, "y\n", continuePrompt, "Defaults applied");
 				CHECK(has(readFile(config), "pagination = 25\n"));
 				CHECK(has(readFile(config), "write2usb_checksum = off\n"));
 				step(term, "\n", selectionPrompt);
-				expectStep(term, "6\n", valuePrompt, "Current: 25");
+				expectStep(term, "7\n", valuePrompt, "Current: 25");
 				step(term, "\x1b", selectionPrompt);
 				step(term, "\x1b", mainPrompt);
 

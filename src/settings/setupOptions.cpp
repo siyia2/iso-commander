@@ -119,13 +119,13 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 	          "Display only filenames instead of full paths",
 	          "",
 	          ConfigValues::onOff),
-	numericEntry("pagination", "25",
-	             "Items per page in list view (0 to disable)",
-	             "", 0, 1000),
 	enumEntry("write2usb_checksum", "off",
 	          "Verify data after writing to USB",
 	          "",
 	          ConfigValues::onOff),
+	numericEntry("pagination", "25",
+	             "Items per page in list view (0 to disable)",
+	             "", 0, 1000),
 
 	// --- History Settings ---
 	numericEntry("folder_path_history_lines", "30",
