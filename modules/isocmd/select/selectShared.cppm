@@ -147,7 +147,8 @@ namespace select_shared {
 	//                                         here, at column 0
 	//
 	// The prompt string itself is a SINGLE line (no leading "\n"), so readline's
-	// own cursor bookkeeping is never off by a row. The blank separator row is
+	// own cursor bookkeeping is never off by a row. Long input scrolls horizontally
+	// instead of wrapping, preserving this invariant. The blank separator row is
 	// printed by the caller ("\n" after the list is drawn).
 	//
 	// After the user submits, the cursor is one row below the prompt row (L+3).

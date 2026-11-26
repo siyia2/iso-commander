@@ -111,8 +111,7 @@ public:
 	using Painter = std::function<std::vector<std::size_t>(std::size_t cols)>;
 
 	ConfirmResizeWatcher(Painter paint, std::size_t drawnCols,
-	                     std::vector<std::size_t> drawnWidths,
-	                     const std::string& promptText);
+	                     std::vector<std::size_t> drawnWidths);
 
 	~ConfirmResizeWatcher();
 

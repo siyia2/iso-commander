@@ -20,6 +20,7 @@ import isocmd.ui.bar.progressBarSizeWatcher;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
+import isocmd.ui.display.readlineResize;
 
 namespace {
 
@@ -889,8 +890,8 @@ namespace {
 			std::string res;
 
 			if (startSize.cols < kMinSafeCols) {
-				std::cout << promptFor(static_cast<int>(startSize.cols)) << std::flush;
-				std::getline(std::cin, res);
+				const auto input = readlineWithResize(promptFor(static_cast<int>(startSize.cols)));
+				if (input) res = input.get();
 			} else {
 				res = readAnswerWithResizeHook(startSize);
 			}
@@ -914,9 +915,7 @@ namespace {
 			rl_event_hook = progressResizeHookTrampoline;
 			rl_catch_sigwinch = 0;
 
-			std::unique_ptr<char, decltype(&std::free)> input(
-			    readline(prompt.c_str()),
-			    &std::free);
+			auto input = readlineWithResize(prompt);
 
 			rl_catch_sigwinch = savedWinch;
 			rl_event_hook = savedHook;

@@ -62,12 +62,21 @@ private:
 	std::unique_ptr<Impl> impl_;
 };
 
+/// Draw only the prompt/input row, without invoking a live-preview hook.
+/// Falls back to native Readline when no fixed prompt is active.
+void redisplayPrompt();
+
 /// Owning pointer for a line returned by @c readline() (freed with @c std::free).
 using RlLine = std::unique_ptr<char, decltype(&std::free)>;
 
 /**
  * @brief Wraps @c readline() with terminal resize handling and optional
  *        Tab-completion control.
+ *
+ * The prompt remains visible while the editable input scrolls horizontally,
+ * preserving the surrounding UI and the complete input buffer. Existing
+ * custom redisplay hooks (such as the live Filter preview) can retain control
+ * of list repainting and delegate the input row to @c redisplayPrompt().
  *
  * @param prompt               Prompt passed to @c readline().
  * @param repaint              Callback invoked on terminal resize; pass

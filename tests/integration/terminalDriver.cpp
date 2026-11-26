@@ -244,6 +244,46 @@ namespace isocmd_tests {
 			}
 
 		}
+
+		// Input redisplay may use carriage returns and horizontal cursor moves,
+		// but must not advance vertically or print an entire multi-screen paste.
+		void checkSingleRowInput(std::string_view output) {
+
+			CHECK(has(plain(output), "LONG> <")); // Overflow must not replace the label.
+			CHECK(!has(output, "\n"));
+			CHECK(!has(output, "\033[A") && !has(output, "\033[B"));
+			CHECK(!has(plain(output), std::string(2400, 'b')));
+
+		}
+
+		void checkLongInput(TerminalSession& term, std::size_t start) {
+
+			const auto prompt = term.waitFor("LONG> ", start);
+			term.send("START-OF-INPUT" + std::string(160, 'a') + "TYPED-END!");
+			const auto typed = term.waitFor("!", prompt);
+			checkSingleRowInput(std::string_view(term.output).substr(prompt, typed - prompt));
+			term.send("\033[200~" + std::string(2400, 'b') + "PASTE-END@\nmultiline\nPASTE-FINAL#\033[201~");
+			const auto pasted = term.waitFor("#", typed);
+			checkSingleRowInput(std::string_view(term.output).substr(typed, pasted - typed));
+			// Resize with the cursor at the far end of the line, then edit its
+			// hidden beginning and submit the entire, untruncated buffer.
+			term.resize(18, 40);
+			const auto repaint = term.waitFor("LONG-REPAINT", pasted);
+			const auto restored = term.waitFor("#", repaint);
+			term.resize(32, 120);
+			const auto wider = term.waitFor("LONG-REPAINT", restored);
+			const auto widened = term.waitFor("#", wider);
+			term.send("\x01");
+			const auto beginning = term.waitFor("START-OF-INPUT", widened);
+			const auto right = term.waitFor("\033[K", beginning);
+			CHECK(has(plain(std::string_view(term.output).substr(widened, right - widened)),
+			          "LONG> START-OF-INPUT"));
+			CHECK(has(plain(std::string_view(term.output).substr(beginning, right - beginning)), ">"));
+			term.send("X\x05\n");
+			term.waitFor("TEST-LONG-INPUT-PASS", beginning);
+
+		}
+
 	} // namespace
 
 	int terminalTest(const char* binary) {
@@ -262,13 +302,14 @@ namespace isocmd_tests {
 				}
 				// Move the editing cursor before another character is inserted.
 				terminal.send("\x02X\x06" "def\n");
-				terminal.waitFor("TEST-TERMINAL-PASS");
+				const auto passed = terminal.waitFor("TEST-TERMINAL-PASS");
+				checkLongInput(terminal, passed);
 				terminal.waitForExit();
 			} catch (...) {
 				printOutput(terminal.output);
 				throw;
 			}
-			std::cout << "PASS: PTY resize, input preservation and Readline restoration\n";
+			std::cout << "PASS: PTY resize, long single-row input, input preservation and Readline restoration\n";
 			return 0;
 		} catch (const std::exception& e) {
 			std::cerr << "FAIL: PTY resize: " << e.what() << '\n';
@@ -364,6 +405,33 @@ namespace isocmd_tests {
 
 		}
 
+		void checkLongFilterInput(TerminalSession& term) {
+
+			// A long no-match query must scroll only the input, not the Filter label.
+			const std::string query = "FILTER-START!" + std::string(2400, 'z') + "FILTER-TAIL!";
+			auto begin=term.output.size();
+			term.send("\x15\033[200~" + query + "\033[201~");
+			auto end=term.waitFor("FILTER-TAIL!",begin);
+			auto frame=listFrame(term,begin,end);
+			CHECK(has(frame,"No filter results") && has(frame,"Filter: <"));
+			begin=term.output.size(); term.send("\x01");
+			end=term.waitFor("FILTER-START!",begin);
+			end=term.waitFor("\033[K",end);
+			frame=plain(std::string_view(term.output).substr(begin,end-begin));
+			CHECK(has(frame,"Filter: FILTER-START!") && has(frame,">"));
+			begin=term.output.size(); term.send("\x05");
+			end=term.waitFor("FILTER-TAIL!",begin);
+			begin=term.output.size(); term.resize(18,55);
+			end=term.waitFor("FILTER-TAIL!",begin);
+			CHECK(has(listFrame(term,begin,end),"Filter: <"));
+			begin=term.output.size(); term.resize(18,95);
+			end=term.waitFor("FILTER-TAIL!",begin);
+			CHECK(has(listFrame(term,begin,end),"Filter: <"));
+			frame=workflowPreview(term,"\x15zzzz-no-fixture","zzzz-no-fixture");
+			CHECK(has(frame,"No filter results"));
+
+		}
+
 		void checkWorkflowFilterPreview(TerminalSession& term) {
 
 			// Stage a selection before preview; cancellation must retain it.
@@ -384,6 +452,7 @@ namespace isocmd_tests {
 			CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
 			frame=workflowPreview(term, "\x15zzzz-no-fixture","zzzz-no-fixture");
 			CHECK(has(frame,"No filter results"));
+			checkLongFilterInput(term);
 			// No-match Enter must leave us in the filter prompt.
 			workflowStep(term, "\n","Filter: ");
 			CHECK(has(workflowStep(term, "\x1b",selectPrompt),"Pending Indices"));

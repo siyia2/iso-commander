@@ -15,6 +15,7 @@ import isocmd.core.cancellation;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
+import isocmd.ui.display.readlineResize;
 import isocmd.write2usb.ui.textWidth;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
@@ -92,7 +93,6 @@ namespace confirm_resize_detail {
 		std::size_t lastCols = 0;
 		std::function<std::vector<std::size_t>(std::size_t)> paint;
 		std::vector<std::size_t> lineWidths;
-		std::size_t promptWidth = 0;
 		int wakeRd = -1;
 	};
 
@@ -142,18 +142,15 @@ namespace confirm_resize_detail {
 		for (std::size_t w : s.lineWidths)
 		    warningRows += std::max<std::size_t>(1, (w + cols - 1) / cols);
 
-		const std::size_t cursorCols = s.promptWidth + rl_point;
-		const std::size_t cursorLine = cursorCols / cols;
-		const std::size_t up = warningRows + cursorLine;
-
-		if (up >= rows) return;
+		// The editable prompt scrolls horizontally; its cursor never adds rows.
+		if (warningRows >= rows) return;
 
 		SyncOutput sync;
 		s.lineWidths = s.paint(cols);
 		std::cout.flush();
 
 		rl_on_new_line();
-		rl_redisplay();
+		redisplayPrompt();
 
 	}
 
@@ -189,8 +186,7 @@ namespace confirm_resize_detail {
 } // namespace confirm_resize_detail
 
 struct ConfirmResizeWatcher::Impl {
-	Impl(Painter paint, std::size_t drawnCols, std::vector<std::size_t> drawnWidths,
-	     const std::string& promptText)
+	Impl(Painter paint, std::size_t drawnCols, std::vector<std::size_t> drawnWidths)
 	    : state_(confirm_resize_detail::g_confirmResize) {
 
 		using namespace confirm_resize_detail;
@@ -198,7 +194,6 @@ struct ConfirmResizeWatcher::Impl {
 
 		state_.paint       = std::move(paint);
 		state_.lineWidths  = std::move(drawnWidths);
-		state_.promptWidth = utf8Width(promptText);
 		state_.lastCols    = drawnCols;
 
 		int fds[2];
@@ -268,10 +263,9 @@ struct ConfirmResizeWatcher::Impl {
 };
 
 ConfirmResizeWatcher::ConfirmResizeWatcher(
-        Painter paint, std::size_t drawnCols, std::vector<std::size_t> drawnWidths,
-        const std::string& promptText)
+        Painter paint, std::size_t drawnCols, std::vector<std::size_t> drawnWidths)
     : impl_(std::make_unique<Impl>(std::move(paint), drawnCols,
-                                   std::move(drawnWidths), promptText)) {}
+                                   std::move(drawnWidths))) {}
 
 ConfirmResizeWatcher::~ConfirmResizeWatcher() = default;
 
@@ -364,7 +358,7 @@ void ConfirmResizeWatcher::stop() {
  * Successful: n/m | Verified: v/m | Time Elapsed: x.xs (with verification)
  * @endcode
  * The prompt itself is not printed by this class: after repaint() the
- * program's resize hook calls rl_redisplay(), which redraws the prompt and
+ * program's resize hook calls redisplayPrompt(), which redraws the prompt and
  * the user's typed input.
  *
  * @par Lifetime

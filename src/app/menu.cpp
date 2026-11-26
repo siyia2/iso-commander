@@ -358,7 +358,7 @@ void drawMainMenu() {
  *   deferred, not dropped.
  * - **MainMenu:** Re-renders the main menu screen via @c drawMainMenu()
  *   (clear screen/scrollback, banner, menu), then prints a blank line and
- *   flushes before calling @c rl_on_new_line() and @c rl_redisplay().
+ *   flushes before calling @c rl_on_new_line() and @c redisplayPrompt().
  * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under
  *   @c GlobalMutexes::readLineMutex (the pointer handoff is not otherwise
  *   thread-safe), then re-renders the ISO list via @c loadAndDisplayIso using
@@ -367,7 +367,7 @@ void drawMainMenu() {
  * - **None:** No-op.
  * - In the MainMenu branch, and in the IsoList branch only when the copied
  *   state is non-null, the hook finishes by calling @c rl_on_new_line() and
- *   @c rl_redisplay() to repaint the user's prompt/input line beneath the new
+ *   @c redisplayPrompt() to repaint the user's prompt/input line beneath the new
  *   output without discarding what they've typed.
  * - **Staleness:** After consuming a request, the hook verifies on the main
  *   thread that the target screen is still active (@c GlobalState::isAtMain
@@ -395,7 +395,7 @@ int checkPendingRefresh() {
 		drawMainMenu();
 		std::cout << "\n" << std::flush;
 		rl_on_new_line();
-		rl_redisplay();
+		redisplayPrompt();
 	} else if (kind == PendingRefreshKind::IsoList) {
 		std::shared_ptr<RefreshState> state;
 		{
@@ -409,7 +409,7 @@ int checkPendingRefresh() {
 			                  state->currentPage, state->originalPage, state);
 			std::cout << "\n" << std::flush;
 			rl_on_new_line();
-			rl_redisplay();
+			redisplayPrompt();
 		}
 	}
 	return 0;
@@ -431,7 +431,7 @@ int checkPendingRefresh() {
  *
  * The actual redraw — clearing the "Auto-Update" status line, re-rendering the
  * banner and menu, and restoring the user's input prompt via Readline's
- * @c rl_on_new_line() / @c rl_redisplay() — happens later, on the main thread,
+ * @c rl_on_new_line() / @c redisplayPrompt() — happens later, on the main thread,
  * in @c checkPendingRefresh. This function makes no Readline calls and writes
  * nothing to the terminal, since Readline is not thread-safe.
  *

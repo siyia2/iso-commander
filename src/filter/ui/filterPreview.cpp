@@ -12,6 +12,7 @@ import isocmd.core.uiState;
 import isocmd.filter.filter;
 import isocmd.ui.display.display;
 import isocmd.ui.display.printList;
+import isocmd.ui.display.readlineResize;
 import isocmd.ui.display.stringListView;
 import isocmd.ui.display.themes;
 import isocmd.util.stringManipulation;
@@ -954,7 +955,7 @@ namespace {
 	 * Repaints the list, prints its separator row, and forces Readline to redraw
 	 * the prompt and current input after the screen has been repainted.
 	 *
-	 * The hook skips repainting (falling back to rl_redisplay()) when:
+	 * The hook skips repainting (drawing only the input row) when:
 	 *   - the preview is not active/configured;
 	 *   - a forced repaint is pending, a dangling backslash was followed by a
 	 *     forward keystroke, and this isn't the first frame of the call;
@@ -965,7 +966,7 @@ namespace {
 	{
 
 		if (!liveMainListEnabled()) {
-			rl_redisplay();
+			redisplayPrompt();
 			return;
 		}
 
@@ -986,7 +987,7 @@ namespace {
 			        g_livePreview.lastQuery) == 0;
 
 			if (typedForward) {
-				rl_redisplay();
+				redisplayPrompt();
 				return;
 			}
 		}
@@ -994,17 +995,18 @@ namespace {
 		if (!forced &&
 		    !isFirstFrameOfThisCall &&
 		    query == g_livePreview.lastQuery) {
-			rl_redisplay();
+			redisplayPrompt();
 			return;
 		}
 
 		paintLivePreviewFrame(query);
 
 		// Blank separator row between the preview and the single-line prompt.
-		std::cout << "\n";
+		std::cout << "\n" << std::flush;
 
-		// The whole screen was repainted under Readline.
-		rl_forced_update_display();
+		// The list was repainted; draw the input without re-entering this hook.
+		rl_on_new_line();
+		redisplayPrompt();
 
 	}
 

@@ -376,9 +376,9 @@ namespace MappingPrompt {
 					    devicePrompt, mainInputString, warnRows, wt);
 
 				},
-			    drawnCols, drawnWidths, promptText);
+			    drawnCols, drawnWidths);
 
-			confirmation.reset(readline(confirmPrompt.c_str()));
+			confirmation = readlineWithResize(confirmPrompt);
 			watcher.stop();
 		}
 
