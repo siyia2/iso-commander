@@ -24,6 +24,25 @@ integration executable links the system `libutil` for PTY support. Runners
 use GNU coreutils `timeout`, `realpath` and `mktemp`. Do not run separate make
 invocations concurrently in the same build variant.
 
+### RAII and Readline restoration regressions
+
+`make test-unit` checks nested `AtomicFlagGuard` instances, `release()`,
+normal and exceptional scope exit, unmount-sensitive ISO-list restoration,
+and cleanup of filtering indicators, staged paths, pending input and
+completion mode. `make test-integration` runs an isolated PTY child that
+checks exact Readline handler pointers across selection, search, copy/move,
+remove, live preview, settings (including enum and numeric completion), USB
+mapping and confirmation modes. It checks startup, completion display,
+attempted-completion, redisplay and event hooks, including scope unwinding.
+
+The PTY tests compare terminal flags, control characters, speeds, SIGINT and
+SIGWINCH dispositions (including masks and flags), and the process signal
+mask after Esc, Ctrl+D, a resize followed by cancellation, and a throwing
+pause repaint callback. Tests distinguish restoration of previous state from
+resetting to application defaults. In particular, the USB mapping guard's
+intentional SIGINT-ignore and disabled-VEOF policy is asserted, not changed.
+No external dependencies or production code changes are required.
+
 ### Asynchronous USB cancellation regression coverage
 
 The unit and integration suites check that cancellation remains latched after

@@ -24,6 +24,8 @@ namespace isocmd_tests {
 	void usbInflightParsing();
 	void historyPersistence();
 	void writeTelemetry();
+	void atomicScopeGuards();
+	void selectionScopeGuards();
 	void usbMappingValidation();
 }
 
@@ -50,6 +52,8 @@ int main() {
 		{"pagination command boundaries and jumps", paginationCommands},
 		{"USB speed, stall and progress telemetry", writeTelemetry},
 		{"USB mapping grammar and validation", usbMappingValidation},
+		{"atomic scope guards, nesting and release", atomicScopeGuards},
+		{"selection scope cleanup and unwinding", selectionScopeGuards},
 	});
 
 }

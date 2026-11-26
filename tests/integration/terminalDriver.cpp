@@ -368,6 +368,35 @@ namespace isocmd_tests {
 
 	}
 
+	int readlineGuardsTest(const char* binary) {
+
+		try {
+			TerminalSession terminal(binary, "--readline-guards-child");
+			try {
+				terminal.waitFor("RAII-ESC> ");
+				terminal.send("\x1b");
+				terminal.waitFor("RAII-EOF> ");
+				terminal.send("\x04");
+				const auto pause = terminal.waitFor("to return...", terminal.waitFor("RAII-PAUSE"));
+				terminal.resize(21, 70);
+				terminal.waitFor("to return...", terminal.waitFor("RAII-PAUSE", pause));
+				terminal.send("\x1b");
+				const char* inputs[] = {"5 6\n", "\x1b[6~", "\x1b", "r", "n\n", "\x1b"};
+				for (std::size_t stage = 0; stage < std::size(inputs); ++stage) {
+					terminal.waitFor("RAII-SETTINGS-" + std::to_string(stage) + "-READY");
+					terminal.send(inputs[stage]);
+				}
+				terminal.waitFor("RAII-GUARDS-PASS");
+				terminal.waitForExit();
+			} catch (...) { printOutput(terminal.output); throw; }
+			std::cout << "PASS: RAII keybindings, hooks, completion and terminal restoration\n";
+			return 0;
+		} catch (const std::exception& e) {
+			std::cerr << "FAIL: RAII restoration: " << e.what() << '\n'; return 1;
+		}
+
+	}
+
 	// Drive the real application entry point, linked with a sandbox-only lock.
 	int menuTest(const char* binary) {
 
