@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
+#include <stddef.h>
 
 import std;
 import isocmd.core.cancellation;
@@ -24,24 +26,39 @@ namespace windowsWriter_engine::copy {
 		constexpr std::uint64_t kFatMaxFileSize = 0xffffffffULL;
 
 		/**
-		 * @brief Use the reported DIO alignment where available, with a
-		 *        conservative 4 KiB minimum for drivers without STATX_DIOALIGN.
+		 * @brief Use the reported DIO alignment, independently of libc's statx
+		 *        definition, with a conservative 4 KiB minimum and fallback.
 		 *        Some drivers do not report alignment for resident files.
 		 */
 		std::size_t directAlignment(int fd) {
 
-			std::size_t alignment = kBufferAlign;
-#ifdef STATX_DIOALIGN
-			struct statx info{};
-			if (statx(fd, "", AT_EMPTY_PATH | AT_STATX_DONT_SYNC,
-			          STATX_DIOALIGN, &info) == 0 &&
-			    (info.stx_mask & STATX_DIOALIGN)) {
-				alignment = std::max({alignment,
-				    static_cast<std::size_t>(info.stx_dio_mem_align),
-				    static_cast<std::size_t>(info.stx_dio_offset_align)});
+			constexpr unsigned kStatxDioAlign = 0x00002000U;
+
+			// Linux statx UAPI: fixed 256-byte layout, including reserved fields.
+			struct alignas(8) StatxDio {
+				std::uint32_t mask;
+				std::uint8_t reserved1[148];
+				std::uint32_t memAlign;
+				std::uint32_t offsetAlign;
+				std::uint8_t reserved2[96];
+			};
+
+			static_assert(sizeof(StatxDio) == 256);
+			static_assert(offsetof(StatxDio, mask) == 0);
+			static_assert(offsetof(StatxDio, memAlign) == 152);
+			static_assert(offsetof(StatxDio, offsetAlign) == 156);
+
+			StatxDio info{};
+			if (syscall(SYS_statx, fd, "", AT_EMPTY_PATH | AT_STATX_DONT_SYNC,
+			    kStatxDioAlign, &info) == 0 && (info.mask & kStatxDioAlign)) {
+				return std::max({
+				    kBufferAlign,
+				    static_cast<std::size_t>(info.memAlign),
+				    static_cast<std::size_t>(info.offsetAlign)
+				});
 			}
-#endif
-			return alignment;
+
+			return kBufferAlign;
 
 		}
 
