@@ -24,13 +24,42 @@ namespace usb_verify {
 
 	}();
 
+	// Each successive slice advances the previous slice by one zero byte.
+	inline constexpr auto crcSlices = [] {
+
+		std::array<std::array<std::uint64_t, 256>, 8> tables{};
+		tables[0] = crcTable;
+		for (std::size_t slice = 1; slice < tables.size(); ++slice) {
+			for (std::size_t i = 0; i < tables[slice].size(); ++i) {
+				const auto previous = tables[slice - 1][i];
+				tables[slice][i] = (previous << 8) ^ tables[0][previous >> 56];
+			}
+		}
+		return tables;
+
+	}();
+
 	struct Checksum64 {
 		std::uint64_t value = 0;
 
 		void update(const char* data, std::size_t size) noexcept {
 
+			const auto* bytes = reinterpret_cast<const unsigned char*>(data);
+			while (size >= 8) {
+				// Byte loads preserve input order on all endiannesses and need no alignment.
+				value = crcSlices[7][(value >> 56) ^ bytes[0]] ^
+				        crcSlices[6][((value >> 48) & 0xFF) ^ bytes[1]] ^
+				        crcSlices[5][((value >> 40) & 0xFF) ^ bytes[2]] ^
+				        crcSlices[4][((value >> 32) & 0xFF) ^ bytes[3]] ^
+				        crcSlices[3][((value >> 24) & 0xFF) ^ bytes[4]] ^
+				        crcSlices[2][((value >> 16) & 0xFF) ^ bytes[5]] ^
+				        crcSlices[1][((value >> 8) & 0xFF) ^ bytes[6]] ^
+				        crcSlices[0][(value & 0xFF) ^ bytes[7]];
+				bytes += 8;
+				size -= 8;
+			}
 			for (std::size_t i = 0; i < size; ++i)
-			    value = (value << 8) ^ crcTable[(value >> 56) ^ static_cast<unsigned char>(data[i])];
+			    value = (value << 8) ^ crcSlices[0][(value >> 56) ^ bytes[i]];
 
 		}
 	};
