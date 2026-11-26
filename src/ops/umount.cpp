@@ -43,7 +43,7 @@ namespace {
 
 			};
 
-			// Comparison of string_view with "literals" is highly optimized in C++20
+			// Compare mount paths without allocating strings.
 			if (messageType == "success") {
 				buf.append(tc.label).append("Unmounted: ")
 				   .append(tc.path).append("'").append(path).append(tc.path).append("'")

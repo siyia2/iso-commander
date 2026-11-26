@@ -53,9 +53,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief RAII guard to safely configure and restore terminal raw mode settings.
-	 */
+	/// scope guard to safely configure and restore terminal raw mode settings.
 	struct TerminalGuard {
 		struct termios saved{};
 		bool active = false;
@@ -95,9 +93,7 @@ namespace {
 		}
 	};
 
-	/**
-	 * @brief RAII guard to manage SIGWINCH signal blocking and action handlers.
-	 */
+	/// scope guard to manage SIGWINCH signal blocking and action handlers.
 	struct SigwinchGuard {
 		struct sigaction old_sa{};
 		sigset_t old_mask{};
@@ -153,9 +149,7 @@ namespace {
 		}
 	};
 
-	/**
-	 * @brief Synchronizes Readline's screen dimensions with the current terminal size.
-	 */
+	/// Synchronizes Readline's screen dimensions with the current terminal size.
 	void syncReadlineScreenSize() {
 
 		const TermSize sz = terminalSize();
@@ -338,27 +332,21 @@ void pressEnterToWithRepaint(const std::string& prompt,
 
 }
 
-/**
- * @brief Repaint-aware variant of pressEnterToTry().
- */
+/// Repaint-aware variant of pressEnterToTry().
 void pressEnterToTryWithRepaint(const std::function<void()>& repaint) {
 
 	pressEnterToWithRepaint("\u21B5 to try again...", repaint);
 
 }
 
-/**
- * @brief Repaint-aware variant of pressEnterToReturn().
- */
+/// Repaint-aware variant of pressEnterToReturn().
 void pressEnterToReturnWithRepaint(const std::function<void()>& repaint) {
 
 	pressEnterToWithRepaint("\u21B5 to return...", repaint);
 
 }
 
-/**
- * @brief Repaint-aware variant of pressEnterToContinue().
- */
+/// Repaint-aware variant of pressEnterToContinue().
 void pressEnterToContinueWithRepaint(const std::function<void()>& repaint) {
 
 	pressEnterToWithRepaint("\u21B5 to continue...", repaint);

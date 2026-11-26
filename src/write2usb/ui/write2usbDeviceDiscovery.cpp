@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Finds removable USB block devices and checks their properties through Linux sysfs.
+
 import std;
 
 import isocmd.write2usb.ui.write2usbUI;

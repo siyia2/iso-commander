@@ -4,11 +4,8 @@ export module isocmd.core.caches;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- core/caches ----
 
 // Transparent hasher to allow find(string_view) without allocations
 struct StringViewHash {

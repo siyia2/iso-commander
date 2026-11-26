@@ -24,64 +24,26 @@ namespace {
 	// ─────────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * @class HazardPointerDomain
-	 * @brief Process-wide hazard-pointer registry (Maged Michael, "Safe Memory
-	 *        Reclamation for Dynamic Lock-Free Objects Using Atomic Reads and
-	 *        Writes", PODC 2002 / expanded 2004).
+	 * @brief Prevents queue nodes from being freed while another thread uses them.
 	 *
-	 * @details
-	 * The problem hazard pointers solve: in a lock-free structure built on raw
-	 * `atomic<Node*>`, a thread that has just read a `Node*` (e.g. via
-	 * `head.load()`) needs to dereference it a moment later. Between the read and
-	 * the dereference, another thread could unlink *and free* that same node,
-	 * leaving the first thread holding a dangling pointer (use-after-free), or —
-	 * worse — a different node could be allocated at the same address in the
-	 * meantime, producing the classic ABA problem where a CAS silently "succeeds"
-	 * against a node that isn't logically the one it was compared against.
-	 * `shared_ptr` sidesteps this via atomic refcounting, at the cost of the
-	 * spinlock-table implementation described in the file-level comment above.
-	 * Hazard pointers solve the same problem without ever taking a lock:
+	 * Before reading a shared node, a thread publishes its address in a hazard
+	 * slot and checks that the pointer is still current. The sequentially
+	 * consistent store and reload prevent unsafe reordering of these steps.
+	 * Removing a node only retires it; a later scan frees retired nodes that
+	 * are not protected by any active hazard slot.
 	 *
-	 *  1. Before dereferencing a node it doesn't yet own, a thread **publishes**
-	 *     that node's address into one of its own hazard-pointer slots
-	 *     (`hazards[i].store(node, seq_cst)`), then **re-validates** that the
-	 *     node is still reachable from the structure (re-reads `head`/`tail`/etc
-	 *     and retries if it changed). This close-together store+reload pair
-	 *     (both `seq_cst`, which forbids the store/load reordering that a plain
-	 *     acquire/release pair would still permit) is what closes the race: any
-	 *     thread that might free the node is guaranteed to see the published
-	 *     hazard pointer before it can safely reclaim.
-	 *  2. A thread that logically removes a node never `delete`s it directly.
-	 *     It calls @ref retire, which appends the node to that thread's private
-	 *     retire list.
-	 *  3. Once a thread's retire list grows past a threshold, it scans every
-	 *     *active* hazard-pointer record in the whole process, unions all
-	 *     currently-published addresses into one set, and only `delete`s the
-	 *     retired nodes that are **not** in that set. Anything still hazarded is
-	 *     kept for the next scan.
-	 *
-	 * This bounds the number of not-yet-reclaimed nodes (unlike leaking forever)
-	 * while guaranteeing a node is never freed while any thread might still
-	 * dereference it — and every operation involved (`load`, `store`, CAS on the
-	 * hazard slots and on the registry's intrusive list) is itself lock-free.
-	 *
-	 * @note This is a compact, self-contained implementation intended for use by
-	 *       @ref LockFreeQueue. It is not a general-purpose replacement for
-	 *       `<experimental/hazard_pointer>` — in particular its retire-list scan
-	 *       is O(retired × active-threads) per scan, which is standard for a
-	 *       from-scratch hazard-pointer implementation and entirely adequate for
-	 *       a thread-pool-sized number of threads, but a production system with
-	 *       very large thread counts may prefer a more elaborate scheme (e.g.
-	 *       per-domain sharding).
+	 * This is based on Maged Michael's hazard-pointer reclamation algorithm
+	 * (PODC 2002; expanded in 2004). It is designed for this pool, not as a
+	 * general-purpose reclamation library.
 	 */
 	class HazardPointerDomain {
 	public:
-		/// @brief Hazard-pointer slots reserved per thread. Two suffices for
+		/// Hazard-pointer slots reserved per thread. Two suffices for
 		/// Michael–Scott: `dequeue` must simultaneously protect `first` (head)
 		/// and `next` (the node whose data is being extracted).
 		static constexpr std::size_t HAZARDS_PER_THREAD = 2;
 
-		/// @brief One record per thread that has ever touched the queue, reused
+		/// One record per thread that has ever touched the queue, reused
 		/// across a thread's lifetime and recyclable once a thread exits.
 		struct HPRecord {
 			std::atomic<void*> hazards[HAZARDS_PER_THREAD];
@@ -89,7 +51,7 @@ namespace {
 			std::atomic<bool> active{false};
 		};
 
-		/// @brief Returns the single process-wide domain instance.
+		/// Returns the single process-wide domain instance.
 		static HazardPointerDomain& instance() {
 
 			static HazardPointerDomain domain;
@@ -180,7 +142,7 @@ namespace {
 		}
 
 	private:
-		/// @brief Batch size that triggers a reclamation scan. Sized relative to
+		/// Batch size that triggers a reclamation scan. Sized relative to
 		/// a generous upper bound on concurrent threads so that, even at that
 		/// bound, no more than a small multiple of (threads × HAZARDS_PER_THREAD)
 		/// retired nodes are ever outstanding at once.
@@ -224,7 +186,7 @@ namespace {
 			}
 		};
 
-		/// @brief Intrusive singly-linked list of every HPRecord ever allocated
+		/// Intrusive singly-linked list of every HPRecord ever allocated
 		/// by this domain (active or recycled-but-inactive).
 		std::atomic<HPRecord*> head_{nullptr};
 
@@ -248,7 +210,7 @@ namespace {
 			OrphanNode* next;
 		};
 
-		/// @brief Lock-free Treiber stack of nodes left behind by a thread that
+		/// Lock-free Treiber stack of nodes left behind by a thread that
 		/// force-reclaimed on exit (see @ref RetireList's destructor) but found
 		/// some still hazarded by another live thread at that moment.
 		std::atomic<OrphanNode*> orphan_head_{nullptr};
@@ -390,7 +352,7 @@ namespace {
 	};
 
 	/**
-	 * @brief RAII holder that acquires an @ref HazardPointerDomain::HPRecord on
+	 * @brief scope-bound holder that acquires an @ref HazardPointerDomain::HPRecord on
 	 * first use by the calling thread and releases it back to the pool when the
 	 * thread exits.
 	 *
@@ -690,9 +652,7 @@ ThreadPool::ThreadPool(std::size_t n) : num_threads(n) {
 
 }
 
-/**
- * @brief Stops the pool: calls shutdown(), joining all workers.
- */
+/// Stops the pool: calls shutdown(), joining all workers.
 ThreadPool::~ThreadPool() {
 
 	shutdown();

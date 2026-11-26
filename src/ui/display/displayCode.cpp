@@ -34,9 +34,7 @@ bool syncIsoPendingDisplay(std::vector<std::string>& pendingIndices, bool& hasPe
 // Constants
 // =============================================================================
 
-/**
- * @brief Base path where ISO files are mounted.
- */
+/// Base path where ISO files are mounted.
 const std::string MOUNTED_ISO_PATH = "/mnt/ISOs";
 
 // =============================================================================
@@ -150,8 +148,8 @@ namespace {
  * Synchronizes the global ISO list with the database when the dirty flag is
  * set. If a filter is active during a reload, the entries already shown are
  * kept (if they still exist), and only newly discovered ISOs are tested
- * against the filter stack, each level using the text mode (filenames-only or
- * full path) it was committed with. Existing results are not re-evaluated.
+ * against the committed query using its saved text mode (filenames-only or
+ * full path). Existing results are not re-evaluated.
  * See @c refreshFilterKeepingResults.
  *
  * @note When no entries remain after the refresh (for example, every filtered
@@ -515,9 +513,7 @@ bool loadAndDisplayMountedISOs(std::vector<std::string>& isoDirs, std::vector<st
 
 namespace {
 
-	/**
-	 * @brief Binds a format-specific file cache to its synchronization mutex.
-	 */
+	/// Binds a format-specific file cache to its synchronization mutex.
 	struct CacheTarget {
 		std::vector<std::string>* cache;
 		std::mutex* mutex;

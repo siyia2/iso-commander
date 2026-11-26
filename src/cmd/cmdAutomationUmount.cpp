@@ -20,9 +20,7 @@ using namespace IsoCli;
 
 // ─── Umount branch ──────────────────────────────────────────────────────────
 
-/**
- * @brief Executes concurrent unmount workers across sorted mount paths.
- */
+/// Executes concurrent unmount workers across sorted mount paths.
 static void runUnmountWorkers(const std::vector<std::string>& paths,
                               bool silentMode,
                               std::atomic<std::size_t>& completedBytes,
@@ -70,9 +68,7 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
 
 }
 
-/**
- * @brief Holds the aggregated results and execution state from collecting and validating ISO mount points.
- */
+/// Holds the aggregated results and execution state from collecting and validating ISO mount points.
 struct CollectionResult {
 	std::unordered_set<std::string> mountPoints;
 	bool hasErrors = false;

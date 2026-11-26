@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Completes shared promises for void-returning thread-pool jobs.
+
 import std;
 
 // These functions have global-module linkage, as declared in

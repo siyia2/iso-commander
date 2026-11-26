@@ -8,23 +8,11 @@ import isocmd.ui.display.display;
 std::vector<FilteringState> filteringStack;
 
 /**
- * @brief Translates a filter match's local index (relative to the current
- * display list) into its corresponding globalIsoFileList index.
+ * @brief Maps an index in the filtered view to its source-list index.
  *
- * filteringStack[lvl].originalIndices always stores fully resolved global
- * indices at every level (applyFilterCore builds each level from the source
- * list's indices). Because every committed filter now searches the ORIGINAL
- * source (not the previous level's output), the stack only ever holds a
- * single top level describing the current commit; lower levels are cleared
- * on each commit. resolveGlobalIndex() therefore reads only the top of the
- * stack. On an ISO list refresh only the top level is rewritten (see
- * refreshFilterKeepingResults), and only the top level is ever read, so
- * resolving a local index requires one lookup against the top of the stack;
- * it must not walk back through earlier levels, whose stored indices may be
- * stale.
- *
- * @param localIdx Index into the list currently being searched/displayed.
- * @return The corresponding index into globalIsoFileList.
+ * Each committed filter searches the full source list and replaces the
+ * previous result. The current filter stores source indices directly, so
+ * only one lookup is needed. With no valid mapping, return localIdx unchanged.
  */
 std::size_t resolveGlobalIndex(std::size_t localIdx) {
 

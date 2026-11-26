@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Preserves filter results and source indices across database refreshes.
+
 import std;
 
 import isocmd.core.lists;
@@ -102,27 +104,16 @@ static std::vector<std::size_t> evaluateNewCandidates(
 }
 
 /**
- * @brief Refreshes the active filter after the global ISO list was reloaded,
- *        WITHOUT re-evaluating the entries that are already shown.
+ * @brief Updates filtered results after the ISO database is reloaded.
  *
- * - Entries currently displayed (@p filteredFiles) are kept as they are, as
- *   long as they still exist in @p newGlobal. They are never re-tested, so
- *   toggling filenames-only between commits cannot change them.
- * - Only paths that were NOT in the old list (@p oldPaths) are tested. Each
- *   must satisfy every level of @p filteringStack, each level evaluated
- *   against the text mode it was committed with
- *   (@c FilteringState::namesOnly).
- * - If nothing is left, the filter is cleared (same as the old "broken" case).
+ * Keep existing displayed paths if they still exist, without testing them
+ * again. Test only newly discovered paths using the query and filename-only
+ * setting saved at commit time. Rebuild source indices for the new list;
+ * clear the filter if no results remain.
  *
- * Only the top level's @c originalIndices is rewritten: resolveGlobalIndex()
- * and printList()'s "[N]^" tags read only the top of the stack. Lower levels'
- * stored indices go stale after a reload but are never read.
- *
- * @param newGlobal        The freshly loaded, sorted global ISO list.
- * @param oldPaths         Paths of the global list BEFORE the reload.
- * @param filteringStack   Active filter levels; updated in place.
- * @param filteredFiles    In/out: the displayed filtered list.
- * @param isFiltered       In/out: set to false if nothing remains.
+ * @param oldPaths Paths present before the reload.
+ * @param filteredFiles In/out: the displayed matches.
+ * @param isFiltered In/out: cleared if no results remain.
  */
 void refreshFilterKeepingResults(
     const std::vector<std::string>& newGlobal,
@@ -195,7 +186,6 @@ void refreshFilterKeepingResults(
  *       @p globalIsoFileList. Only the first occurrence of a path in the
  *       global list is used.
  *
- * @param globalIsoFileList The current global ISO file list.
  * @param filteringStack    The stack of active filtering states; only the
  *                          last state's source indices are updated.
  * @param filteredFiles     The currently filtered ISO file paths. Must

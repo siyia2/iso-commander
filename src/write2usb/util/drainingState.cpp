@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Tracks USB devices with unfinished cleanup so they cannot be selected for another write.
+
 import std;
 
 import isocmd.write2usb.util.drainingState;

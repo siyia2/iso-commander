@@ -4,11 +4,8 @@ export module isocmd.ui.cli.termSize;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- ui/cli/termSize ----
 
 /**
  * @brief Terminal size in columns and rows; {0, 0} if it has never been known.

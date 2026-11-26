@@ -209,8 +209,6 @@ namespace {
 /**
  * @brief Converts an MDF disc image into an ISO image by stripping sector headers and ECC data.
  *
- * @param[in] mdfPath Path to the input MDF file.
- * @param[in] isoPath Path to the output ISO file.
  * @param[in,out] completedBytes Optional atomic byte counter updated as payload data is written.
  * @return true if conversion completes successfully, false on I/O failure or cancellation.
  */

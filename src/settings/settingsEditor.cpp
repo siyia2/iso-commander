@@ -22,7 +22,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
                     const std::vector<std::string>& inputErrors,
                     std::size_t pos, std::size_t total);
 
-// Editor helpers (formerly in settings.h; only used here).
+// Helpers local to the settings editor.
 namespace settings_ops {
 
 	inline std::string resolveCurrent(const std::string& key, const ConfigEntry* entry) {
@@ -103,9 +103,7 @@ namespace settings_ops {
 
 namespace {
 
-	/**
-	 * @brief Batch edit navigation parsing and queue index progression.
-	 */
+	/// Batch edit navigation parsing and queue index progression.
 	namespace nav {
 
 		/// 1-based target index parsed from a `g<number>` jump command.
@@ -208,9 +206,7 @@ namespace {
 
 	} // namespace nav
 
-	/**
-	 * @brief GNU Readline configuration, resize-aware prompting, and RAII state guards.
-	 */
+	/// GNU Readline configuration, resize-aware prompting, and RAII state guards.
 	namespace term {
 
 		/**
@@ -241,7 +237,7 @@ namespace {
 
 		/**
 		 * @brief Configures completion, tab/form-feed keys, and batch navigation bindings.
-		 * @param total Number of items in the current edit batch (`> 1` enables PageUp/PageDown).
+		 * @param total Number of items in the current edit batch (`> 1` enables Page Up/Page Down).
 		 * @param isNumeric `true` if the setting expects a numeric value rather than enumerated choices.
 		 * @param validValues Allowed discrete values for completion when non-empty.
 		 */
@@ -264,11 +260,9 @@ namespace {
 
 		}
 
-		/**
-		 * @brief RAII guard that restores history navigation and escape bindings on scope exit.
-		 */
+		/// scope guard that restores history navigation and escape bindings on scope exit.
 		struct NavBindGuard {
-			bool on; ///< Whether PageUp/PageDown were rebound for batch navigation.
+			bool on; ///< Whether Page Up/Page Down were rebound for batch navigation.
 
 			~NavBindGuard() {
 
@@ -281,9 +275,7 @@ namespace {
 			}
 		};
 
-		/**
-		 * @brief RAII guard that clears active completion state and resets key bindings on exit.
-		 */
+		/// scope guard that clears active completion state and resets key bindings on exit.
 		struct CompletionGuard {
 			~CompletionGuard() {
 
@@ -296,9 +288,7 @@ namespace {
 			}
 		};
 
-		/**
-		 * @brief RAII guard that preserves and restores Readline completion mode flags.
-		 */
+		/// scope guard that preserves and restores Readline completion mode flags.
 		struct CompleteModeGuard {
 			int saved = RetainAndRestoreReadlineBuffer::g_rl_complete_mode;
 
@@ -311,16 +301,12 @@ namespace {
 
 	} // namespace term
 
-	/**
-	 * @brief Terminal rendering routines for the settings list, edit view, prompts, and status messages.
-	 */
+	/// Terminal rendering routines for the settings list, edit view, prompts, and status messages.
 	namespace view {
 
 		using ThemeColors = decltype(resolveOptionsTheme());
 
-		/**
-		 * @brief Renders the main settings overview screen.
-		 */
+		/// Renders the main settings overview screen.
 		struct SettingsScreen {
 			const std::string& configPath; ///< Path to the active configuration file.
 			ThemeColors tc;                ///< Resolved theme color palette.
@@ -369,9 +355,7 @@ namespace {
 
 			}
 
-			/**
-			 * @brief Prints the header, config path, all setting rows, and action hints.
-			 */
+			/// Prints the header, config path, all setting rows, and action hints.
 			void paintBody() const {
 
 				std::cout << "\n" << tc.accent << "=== Settings Editor ===\n\n" << tc.reset;
@@ -386,9 +370,7 @@ namespace {
 
 			}
 
-			/**
-			 * @brief Synchronously clears the scroll buffer and draws the full settings screen.
-			 */
+			/// Synchronously clears the scroll buffer and draws the full settings screen.
 			void draw() const {
 
 				SyncOutput sync;
@@ -634,9 +616,7 @@ namespace {
 
 	} // namespace view
 
-	/**
-	 * @brief High-level editor workflows for resetting defaults, batch editing, and input dispatch.
-	 */
+	/// High-level editor workflows for resetting defaults, batch editing, and input dispatch.
 	namespace flow {
 
 		/**
@@ -904,7 +884,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  * - **Persistence:** edits update the in-memory cache and runtime state, then
  *   attempt to write the configuration file. Resetting all settings follows
  *   the same sequence after confirmation.
- * - **Terminal cleanup:** a local RAII guard restores the settings-editor
+ * - **Terminal cleanup:** a local scope guard restores the settings-editor
  *   keybindings on every exit path.
  * - **Signals:** SIGINT is set to @c SIG_IGN for the duration of the editor.
  *   The previous disposition is @b not restored on exit; this matches the

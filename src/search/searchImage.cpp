@@ -700,9 +700,7 @@ static bool dispatchSpecialCommandForBinImgMdfNrgSearch(const std::string& input
 
 }
 
-/**
- * @brief Configuration structure representing a disc-image file type and its extension.
- */
+/// Configuration structure representing a disc-image file type and its extension.
 struct FileTypeConfig {
 	std::string extension;
 	std::string name;

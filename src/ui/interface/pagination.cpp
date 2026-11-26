@@ -106,7 +106,6 @@ namespace {
 	 * @param isConversion Flag indicating if the current operation is an ISO conversion.
 	 * @param need2Sort Reference to a flag indicating whether sorting needs to be re-run.
 	 * @param needsClrScrn Reference to the flag set to true if the screen needs to be cleared/redrawn.
-	 * @param filteredFiles Reference to the vector storing filtered files.
 	 */
 	void handleToggleNamesCommand(bool isUnmount, bool isFiltered, bool isConversion, bool& need2Sort, bool& needsClrScrn, std::vector<std::string>& filteredFiles) {
 

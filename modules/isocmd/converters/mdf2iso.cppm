@@ -4,11 +4,9 @@ export module isocmd.converters.mdf2iso;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- converters/mdf2iso ----
 // Special thanks to the original author of mdf2iso:
 
 // Salvatore Santagati (mdf2iso).
@@ -48,18 +46,14 @@ struct MdfTypeInfo {
 	std::size_t sector_data; ///< Number of user-data bytes extracted per sector.
 	std::size_t seek_head;   ///< Number of header bytes to skip before the payload.
 
-	/**
-	 * @brief Initializes all sector layout parameters to zero.
-	 */
+	/// Initializes all sector layout parameters to zero.
 	MdfTypeInfo()
 	    : seek_ecc(0),
 	      sector_size(0),
 	      sector_data(0),
 	      seek_head(0) {}
 
-	/**
-	 * @brief Detects the MDF sector layout by examining CD-ROM sync patterns.
-	 */
+	/// Detects the MDF sector layout by examining CD-ROM sync patterns.
 	bool determineMdfType(std::ifstream& mdfFile);
 };
 

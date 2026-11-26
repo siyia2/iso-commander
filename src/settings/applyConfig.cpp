@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Applies configuration values to the active application settings.
+
 import std;
 
 import isocmd.settings.settings;
@@ -17,9 +19,7 @@ void printConfigError(const std::string& configPath);
 
 namespace {
 
-	/**
-	 * @brief Maps a boolean setting key and enabled value to a target flag reference.
-	 */
+	/// Maps a boolean setting key and enabled value to a target flag reference.
 	struct BoolToggleRule {
 		const char* key;          ///< Configuration key name.
 		bool& target;             ///< Destination boolean state updated from the cache.

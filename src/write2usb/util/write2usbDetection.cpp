@@ -24,20 +24,8 @@ namespace {
 		constexpr std::uint8_t kTypePrimary = 0x01;               // Primary Volume Descriptor
 
 		/**
-		 * @brief Tells whether a volume descriptor identifies a usable disc image.
-		 *
-		 * Accepts an ISO 9660 Primary Volume Descriptor (type 0x01, "CD001"), which
-		 * also covers UDF-bridge images, or a UDF "NSR02"/"NSR03" descriptor, which
-		 * covers pure-UDF images.
-		 *
-		 * @par Utility
-		 * A disc image begins with small "labels" that say what kind of disc it is.
-		 * This function is the single place that decides whether a label means "yes,
-		 * this is a real disc image", so every check applies exactly the same rule.
-		 *
-		 * @param type Descriptor type byte (offset 0 of the descriptor).
-		 * @param id   Five-byte standard identifier (offset 1 of the descriptor).
-		 * @return true if the descriptor is accepted.
+		 * @brief Recognizes the ISO 9660 and UDF volume descriptors used to identify disc images.
+		 * Accept ISO 9660 primary descriptors (type 0x01, CD001) and UDF NSR02/NSR03.
 		 */
 		constexpr bool isAcceptedDescriptor(std::uint8_t type, std::string_view id) {
 
@@ -47,20 +35,8 @@ namespace {
 		}
 
 		/**
-		 * @brief Tells whether an identifier may appear in a Volume Recognition Sequence.
-		 *
-		 * "CD001", "BEA01" and "TEA01" are legitimate entries that the sequence walk
-		 * skips over; any other identifier means the image is not a recognised
-		 * optical image and the walk stops.
-		 *
-		 * @par Utility
-		 * Between the main labels, a disc image may contain a few harmless marker
-		 * entries that only mean "the list starts here" or "the list ends here". This
-		 * tells those markers apart from entries that mean the file is not a disc image
-		 * at all, so real images are not rejected and unrelated files fail quickly.
-		 *
-		 * @param id Five-byte standard identifier of the descriptor.
-		 * @return true if the identifier is a known sequence entry.
+		 * @brief Recognizes CD001, BEA01 and TEA01 entries that can be skipped while
+		 * searching for a UDF volume descriptor. An unknown identifier ends the scan.
 		 */
 		constexpr bool isRecognitionSequenceId(std::string_view id) {
 
@@ -68,18 +44,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Validates the descriptor at sector 16 of an already-mapped image.
-		 *
-		 * @par Utility
-		 * This is a quick sanity test of the very beginning of the image. Most files
-		 * that are not disc images fail it at once, so the slower search for Windows
-		 * files is never wasted on them.
-		 *
-		 * @param addr    Pointer to the mapped file memory window.
-		 * @param mapSize Size of the mapped window in bytes.
-		 * @return true if the descriptor at sector 16 is accepted.
-		 */
+		/// Checks the descriptor at sector 16, if the mapped region contains it.
 		bool hasValidVolumeHeader(const char* addr, std::size_t mapSize) {
 
 			if (mapSize < kVrsStart + kHeaderSize) return false;
@@ -95,15 +60,8 @@ namespace {
 	namespace case_fold {
 
 		/**
-		 * @brief Returns a static 256-entry ASCII case-folding table.
-		 *
-		 * Deliberately locale-independent (unlike std::tolower), so bytes >= 0x80
-		 * never fold and the automaton build and the scan loop always agree.
-		 *
-		 * @par Utility
-		 * Lets "BOOTMGR", "bootmgr" and "BootMgr" count as the same word. It uses
-		 * a fixed table instead of the computer's language settings, so the result is
-		 * the same on every machine, and converting a letter is a single quick lookup.
+		 * @brief Converts ASCII uppercase bytes to lowercase using a lookup table.
+		 * Leave non-ASCII bytes unchanged so the scan is independent of locale.
 		 */
 		const std::array<std::uint8_t, 256>& table() {
 
@@ -145,35 +103,14 @@ namespace {
 		constexpr std::array<std::string_view, 3> kPatterns{
 			"boot.wim", "bootmgr.efi", "bootmgr"};
 
-		/**
-		 * @brief Returns the bitmask bit for one (pattern, encoding) pair.
-		 *
-		 * @par Utility
-		 * The program has to remember many yes/no findings, such as "found boot.wim
-		 * written as plain text". This gives every combination of file name and
-		 * writing style its own on/off switch, so all the findings fit in one number.
-		 *
-		 * @param pattern  Pattern index.
-		 * @param encoding Encoding index.
-		 * @return A mask with exactly one bit set: 1 << (pattern * 3 + encoding).
-		 */
+		/// Assigns one bit to each filename/encoding pair in the match mask.
 		constexpr std::uint32_t bit(int pattern, int encoding) {
 
 			return 1u << (pattern * kEncodingCount + encoding);
 
 		}
 
-		/**
-		 * @brief Returns the mask covering all three encodings of one pattern.
-		 *
-		 * @par Utility
-		 * The same file name can be written on a disc in three different ways, so
-		 * there are three switches per name. This combines them, so the code can ask one
-		 * question: "was this name found in any of the three ways?"
-		 *
-		 * @param pattern Pattern index.
-		 * @return The three adjacent bits belonging to @p pattern.
-		 */
+		/// Combines the bits for ASCII, UTF-16LE and UTF-16BE of one filename.
 		constexpr std::uint32_t group(int pattern) {
 
 			return bit(pattern, Ascii) | bit(pattern, Utf16Le) | bit(pattern, Utf16Be);
@@ -187,17 +124,8 @@ namespace {
 		constexpr std::uint32_t kMaskBootMgr = group(BootmgrEfi) | group(Bootmgr);
 
 		/**
-		 * @brief Tells whether the matches found so far are enough to call it Windows media.
-		 *
-		 * A Windows ISO needs at least one hit from each group: "boot.wim" and
-		 * "bootmgr[.efi]", in any encoding.
-		 *
-		 * @par Utility
-		 * This is the one place that defines what "looks like a Windows install disc"
-		 * means: boot.wim was found, and so was a bootmgr file.
-		 *
-		 * @param found Bitmask accumulated by aho_corasick::scan().
-		 * @return true if both groups have at least one match.
+		 * @brief Recognizes likely Windows media when boot.wim and either bootmgr
+		 * or bootmgr.efi have been found, in any supported encoding.
 		 */
 		constexpr bool isComplete(std::uint32_t found) {
 
@@ -383,38 +311,21 @@ namespace {
 
 	//---- Read-only file mapping ---------------------------------
 	/**
-	 * @brief RAII wrapper around a private, read-only mmap of a file from offset 0.
-	 *
-	 * Unmaps on destruction. Not copyable. Check ok() before using the data.
-	 *
-	 * @par Utility
-	 * "Mapping" lets the program look at a file as if it were already in memory,
-	 * while the system loads only the parts that are actually used. This wrapper
-	 * releases the mapping automatically, so it can never be left behind.
+	 * @brief Maps part of a file into memory for read-only access.
+	 * The operating system loads pages on demand. The mapping is released when
+	 * this object goes out of scope; check ok() before accessing the data.
 	 */
 	class ScopedMapping {
 	public:
 		/**
-		 * @brief Maps the first @p length bytes of @p fd read-only.
-		 *
-		 * @par Utility
-		 * Only the parts of the file that are looked at are really read from disk, so
-		 * checking a multi-gigabyte image stays fast.
-		 *
-		 * @param fd     Open, readable file descriptor (not owned, not closed).
-		 * @param length Number of bytes to map; must not exceed the file size.
+		 * @brief Maps the first length bytes of an open file without taking ownership
+		 * of the file descriptor. The length must not exceed the file size.
 		 */
 		ScopedMapping(int fd, std::size_t length)
 		    : addr_(mmap(nullptr, length, PROT_READ, MAP_PRIVATE, fd, 0)),
 		      length_(length) {}
 
-		/**
-		 * @brief Unmaps the window if the mapping succeeded.
-		 *
-		 * @par Utility
-		 * Cleanup happens by itself, so nobody has to remember to do it.
-		 *
-		 */
+		/// Releases a successful mapping automatically.
 		~ScopedMapping() {
 
 			if (ok()) munmap(addr_, length_);
@@ -424,44 +335,21 @@ namespace {
 		ScopedMapping(const ScopedMapping&)            = delete;
 		ScopedMapping& operator=(const ScopedMapping&) = delete;
 
-		/**
-		 * @brief Reports whether mmap succeeded.
-		 *
-		 * @par Utility
-		 * The system reports a failed mapping with a special value that is easy to
-		 * overlook. This turns it into a plain yes or no.
-		 *
-		 * @return true if mmap succeeded.
-		 */
+		/// Reports whether the file mapping succeeded.
 		bool        ok()   const {
 
 			return addr_ != MAP_FAILED;
 
 		}
 
-		/**
-		 * @brief Returns the start of the mapped window.
-		 *
-		 * @par Utility
-		 * Tells the other functions where the image data begins.
-		 *
-		 * @return Pointer to the start of the mapped window (valid only if ok()).
-		 */
+		/// Returns the mapped data pointer; valid only if ok() is true.
 		const char* data() const {
 
 			return static_cast<const char*>(addr_);
 
 		}
 
-		/**
-		 * @brief Returns the length of the mapped window.
-		 *
-		 * @par Utility
-		 * Tells the other functions how much data is available, so nothing reads past
-		 * the end. This can be less than the whole file.
-		 *
-		 * @return Size of the mapped window in bytes.
-		 */
+		/// Returns the mapped length in bytes, not necessarily the file size.
 		std::size_t      size() const {
 
 			return length_;
@@ -469,19 +357,9 @@ namespace {
 		}
 
 		/**
-		 * @brief Hints the kernel about the upcoming sequential scan.
-		 *
-		 * Applies MADV_WILLNEED to the first @p eagerBytes so page-faulting starts
-		 * immediately, and MADV_SEQUENTIAL to the whole window so read-ahead stays
-		 * primed if the full window is scanned. Hints are best-effort; failures
-		 * are ignored.
-		 *
-		 * @par Utility
-		 * It tells the operating system "I will read this from start to end, in order".
-		 * The system can then load the next part of the file ahead of time, so the
-		 * search does not have to wait for the disk.
-		 *
-		 * @param eagerBytes Prefix length to prefetch (clamped to the window size).
+		 * @brief Requests read-ahead for a sequential scan.
+		 * MADV_WILLNEED requests prefetch of the initial region; MADV_SEQUENTIAL
+		 * describes the access pattern for the whole mapping. Both hints are best-effort.
 		 */
 		void adviseSequentialScan(std::size_t eagerBytes) const {
 

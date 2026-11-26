@@ -4,11 +4,8 @@ export module isocmd.ui.cli.syncOutput;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- ui/cli/syncOutput ----
 
 /// Synchronized-output (DEC mode 2026) control sequences, kept as named
 /// constants so callers that write the sequences by hand stay in sync
@@ -18,7 +15,7 @@ inline constexpr std::string_view kSyncBegin             = "\033[?2026h";
 inline constexpr std::string_view kSyncEnd               = "\033[?2026l";
 
 /**
- * @brief RAII guard that brackets a terminal repaint in DEC mode 2026
+ * @brief scope guard that brackets a terminal repaint in DEC mode 2026
  *        (synchronized output).
  *
  * Writes @ref kSyncBegin (`CSI ? 2026 h`) on construction and @ref kSyncEnd

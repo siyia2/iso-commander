@@ -4,11 +4,8 @@ export module isocmd.ui.info.verbose;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- ui/info/verbose ----
 
 /// Monotonic timestamp in nanoseconds, for the @c start_time_ns fields below.
 /// Keeps <chrono> out of this header, which many translation units include.

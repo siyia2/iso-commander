@@ -54,7 +54,6 @@ namespace AnsiEscape {
  * query, persists it, and clears the in-memory history list.
  *
  * @param query The query string to save.
- * @param filterHistory Reference to the filter-history flag.
  * @param alreadyLoaded If true, skips loadHistory (caller loaded before prompt).
  */
 static void saveQueryToHistory(
@@ -272,7 +271,7 @@ static void runFilterLoop(
  * Only the literal @c "/" input is treated as a filter request; any other
  * input returns false without side effects. On the filter path, sets
  * @c g_suppressPendingRefresh for the duration (via a scope guard that clears
- * it on exit), restores PageUp/PageDown to history navigation, resets custom
+ * it on exit), restores Page Up/Page Down to history navigation, resets custom
  * select keybindings, and binds Escape to exit_handler before running the
  * loop. The filter prompt is themed via getFilterTheme("", false).
  *
@@ -374,7 +373,6 @@ static bool runSharedFilterFlow(
  *
  * @param inputString Original command input.
  * @param filteredFiles Destination filtered list.
- * @param operation Operation name.
  * @param operationColor Operation display color.
  * @param isoDirs Mounted ISO directories.
  * @param isUnmount Whether this is an unmount operation.
@@ -443,7 +441,6 @@ bool handleFilteringForISO(
  * @param files Image files to filter (the current display list).
  * @param sourceFiles Original unfiltered image list used as the filter
  *        corpus on every prompt.
- * @param operation Operation name.
  * @param ctx Optional caller-owned filter state and callbacks.
  */
 void handleFilteringConvert2ISO(

@@ -2,11 +2,9 @@
 
 export module isocmd.ui.display.display;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- ui/display/display ----
 /**
  * @brief Canonical list of all supported configuration settings with validation.
  * @details Namespace containing global toggles that control the verbosity and

@@ -203,7 +203,6 @@ std::tuple<std::string_view, std::string_view, std::string_view> parseMountPoint
 
 /**
  * @brief Cleans up a string by trimming edges and collapsing spaces around semicolons.
- * @param str The input string.
  * @return A cleaned version of the string.
  */
 std::string trimWhitespace(const std::string& str) {

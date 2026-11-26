@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Turns a selection of ISO rows into file-operation tasks and coordinates progress reporting.
+
 #include <signal.h>
 #include <sys/stat.h>
 
@@ -15,9 +17,7 @@ import isocmd.threadpool.threadpool;
 import isocmd.ui.display.themes;
 import isocmd.ui.info.verbose;
 
-/**
- * @brief High-level processing functions for copy, move and remove operations.
- */
+/// High-level processing functions for copy, move and remove operations.
 
 /**
  * @brief Groups file indices into chunks for parallel processing, preventing

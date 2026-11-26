@@ -704,9 +704,7 @@ namespace {
 
 namespace {
 
-	/**
-	 * @brief Scans /proc/mounts and returns the set of currently active mount targets.
-	 */
+	/// Scans /proc/mounts and returns the set of currently active mount targets.
 	std::unordered_set<std::string> buildMountPointCache() {
 
 		std::unordered_set<std::string> mounted;

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Renders the live USB progress screen and handles resize and cancellation notifications.
+
 #include <stdio.h>
 #include <errno.h>
 #include <assert.h>
@@ -968,7 +970,7 @@ private:
 	std::thread         thread_;
 };
 
-// Opaque WriteScreen interface declared in write2usbUI.h.
+// Opaque WriteScreen interface declared in the write2usbUI module.
 std::shared_ptr<WriteScreen> createWriteScreen(
         std::shared_ptr<std::vector<ProgressInfo>> progressData,
         std::shared_ptr<WriteSync> sync, WriteTheme theme) {

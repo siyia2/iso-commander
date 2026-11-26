@@ -760,7 +760,7 @@ namespace {
 			/**
 			 * @brief Runs the active batch command ("P" or a direct selection).
 			 *
-			 * Installs RAII guards that drop @c isAtISOList during processing
+			 * Installs scope guards that drop @c isAtISOList during processing
 			 * and set the filtering indicator on entry, marks the screen for
 			 * redraw, then delegates to @c runPending() or @c runDirect().
 			 *
@@ -862,98 +862,21 @@ bool syncIsoPendingDisplay(std::vector<std::string>& pendingIndices,
 }
 
 /**
- * @brief Interactive TUI for batch ISO operations (mount, umount, cp, mv, rm,
- * write2usb).
+ * @brief Runs the interactive ISO selection screen and dispatches operations.
  *
- * Paginated, multi-layer filterable interface for selecting ISO files and
- * executing system operations. Manages terminal state, background imports, and
- * operation dispatch inside a readline-driven event loop.
+ * The screen uses the database's ISO list or the mounted-ISO list for unmount.
+ * Each committed filter searches the full source list, not the previous result.
+ * Esc clears an active filter and restores the original page; otherwise it
+ * returns to the menu. Filtering is blocked while a database import is active.
  *
- * - **Dynamic context:** toggles between @c GlobalState::globalIsoFileList and
- *   active mount points (@c isoDirs) based on @p operation; unmount operations
- *   skip database cleanup and disable the manual-refresh keybinding (R). The
- *   operation colour is chosen from @p operation at entry (red for rm, green
- *   for cp/mount, yellow for mv/write2usb/umount).
- * - **RAII keybindings:** @c ReadlineKeybindingGuard calls
- *   @c setup_custom_keybindingsForSelect() on construction and
- *   @c reset_custom_keybindingsForSelect() on destruction, so cleanup runs on
- *   every exit path (break, ESC return, exception) without manual resets. The
- *   guard is scoped to the whole function.
- * - **RAII atomic flags:** @c AtomicFlagGuard sets @p isAtISOList to @c false
- *   for the processing block and restores it on scope exit.
- *   @c GlobalState::g_filteringIndicator is likewise wrapped by its own
- *   @c AtomicFlagGuard during the same block. For non-unmount operations,
- *   @c IsoListStateGuard restores @p isAtISOList to its prior value on scope
- *   exit.
- * - **Event-driven refresh:** a detached watcher shares @c RefreshState via
- *   @c std::shared_ptr. It is started only for non-unmount operations while an
- *   import is running, at most once per session, and publishes a pending list
- *   refresh when @c importCV signals completion. The main Readline thread
- *   performs the actual redraw.
- * - **Stacked filtering:** supports successive narrowing via @c filteringStack.
- *   Reads/writes of @c filteredFiles and sizing evaluations are protected by
- *   @c GlobalMutexes::updateListMutex to avoid races with the watcher thread.
- *   On ESC (@c '\\x1b', typically bound to the @c '<' key via
- *   @c setup_custom_keybindingsForSelect): if a filter is active, clears the
- *   filter stack, restores @c currentPage to @c originalPage, and continues;
- *   if no filter is active, sets @c currentPage to 0 and returns to the
- *   previous menu (keybinding cleanup handled by the RAII guard).
- * - **Filtering lock enforcement:** attempting to filter while a background
- *   import is running blocks the operation and sets
- *   @c GlobalState::g_filteringIndicator to @c true ("Filtering locked during
- *   sync") to notify the user.
- * - **Two-phase execution (path-based):** a selection typed with a trailing
- *   semicolon ("3 5-9;") is staged as PATHS (@c g_isoPending). Bare numbers
- *   are what is on screen (the filtered view when filtering); "n^" numbers are
- *   source indices. The @c "P" command resolves the staged paths to source
- *   indices at that moment, drops files that no longer exist, and runs the
- *   operation against the full source list, so a selection staged under
- *   different filters (or none) is always executed correctly. The
- *   "Pending Indices" line shows the same source numbers as the "n:m^"
- *   column, merged into ranges. @c "clr" discards the staged set; @c "P" with
- *   nothing staged is a no-op. Running a direct selection (an index
- *   expression without ';') also discards any staged set once the operation
- *   returns, even if it failed or was cancelled. Staged paths survive list
- *   reloads and filter changes, but not a direct run.
- * - **Manual refresh:** pressing @c "R" (when not unmount, the ISO list is
- *   non-empty, and no import is running) spawns a background database import.
- *   Stale completed threads in @p backgroundThreads are joined and erased
- *   before each new import is launched.
- * - **Persistent directory state:** @c isoDirs is @c static, so its contents
- *   survive re-entry for the lifetime of the process.
- * - **Terminal integrity:** @c \\f and @c \\t are bound to no-ops via Readline
- *   to prevent terminal corruption. PgUp/PgDn are disabled when
- *   @c ITEMS_PER_PAGE is 0.
- * - **Prompt-row invariant:** the prompt is a single line and always lands on
- *   the same row (list, one blank separator row, prompt). When the list is
- *   redrawn the loop prints one @c "\\n" after it; when it is not, a single
- *   @c term::rewindToPromptRow() at the top of the loop returns to the prompt
- *   row. See the "Prompt-row cursor invariant" note near the top of this file.
- * - **Resize repaint:** each @c readline() is wrapped by
- *   @c readlineWithResize, whose lambda re-runs the normal display step so the
- *   list repaints on terminal-width changes while the prompt waits. The same
- *   lambda is passed to the filter handler for the case where the live preview
- *   is off. (Image select repaints with a throwaway sort flag, so a resize
- *   never re-sorts the list.)
- * - **Structure:** the loop body is delegated to @c iso_select::SelectSession,
- *   whose input handlers are tried in a fixed order (ignore, manual refresh,
- *   ESC, staged commands, pagination/help, filtering, staging, execute).
+ * Selections ending in ';' are staged as paths, so they survive filtering,
+ * sorting and refreshes. Bare numbers select visible rows; a '^' suffix selects
+ * source-list indices. P runs the staged paths and clr clears them. A direct
+ * operation also clears the staged selection, including on failure or cancellation.
  *
- * @param operation         Target action ("mount", "umount", "cp", "mv", "rm",
- *                          or "write2usb"). Determines list source, colour
- *                          scheme, and dispatch.
- * @param isAtISOList       Set to @c true while the ISO list is displayed
- *                          (non-unmount only); managed by the RAII guards
- *                          during operation execution. Also gates
- *                          watcher-thread refresh requests.
- * @param backgroundThreads Joinable worker threads (from manual R-press
- *                          imports), retained for lifetime management; stale
- *                          completed threads are joined and erased before each
- *                          new import.
- * @param refreshState      Shared UI state and condition variable used to
- *                          synchronize the watcher with the active import
- *                          session. If @c nullptr, a new @c RefreshState is
- *                          constructed internally.
+ * SelectSession handles input and redraws. Scope guards restore keybindings
+ * and UI flags on exit. Background workers request refreshes, but the main
+ * Readline thread draws the screen. See selectShared.cppm for cursor rules.
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,

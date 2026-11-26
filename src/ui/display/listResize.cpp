@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Keeps the current list and prompt aligned when the terminal is resized.
+
 #include <stdio.h>
 #include <assert.h>
 #include <signal.h>

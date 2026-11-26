@@ -5,52 +5,18 @@ export module isocmd.threadpool.threadpool;
 import std;
 import isocmd.threadpool.moveOnlyTask;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- threadpool/threadpool ----
 
 /**
  * @file threadpool.cppm
- * @brief Lock-free thread pool with type-erased move-only tasks.
+ * @brief Worker threads, task submission and the shared task queue.
  *
- * Provides four cooperative components:
- *  - @ref MoveOnlyTask       – a small-buffer-optimised, move-only type-erased callable.
- *  - @ref HazardPointerDomain – a process-wide hazard-pointer registry providing safe
- *                                deferred reclamation for lock-free node-based structures.
- *  - @ref TaskQueue      – a Michael–Scott lock-free FIFO queue built on raw
- *                                `atomic<Node*>`, reclaiming retired nodes via hazard pointers.
- *  - @ref ThreadPool         – a fully lock-free worker-thread pool built on the two above.
- *
- * @note Requires C++20 (`std::atomic::wait` / `notify_*`).
- *
- * @par Revision notes (this revision)
- * `LockFreeQueue` previously stored its nodes behind `std::atomic<std::shared_ptr<Node>>`.
- * That compiles and is correct, but on every mainstream libstdc++ build as of
- * this writing, `atomic<shared_ptr<T>>` is **not** lock-free — `is_lock_free()` and
- * the compile-time `is_always_lock_free` both report `false`, because the
- * implementation protects the pointer+control-block pair with an internal spinlock
- * table keyed by address. That meant every `load`/`store`/`compare_exchange` on
- * `head`, `tail`, or any node's `next` silently took an internal lock — worse, a
- * lock *shared across every unrelated `atomic<shared_ptr<T>>` in the process* that
- * happens to hash to the same table slot — while still paying the cost of
- * heap-allocated control blocks and atomic refcount churn per node.
- *
- * This revision replaces that with the standard fix for the underlying problem
- * (safe reclamation of a node another thread might still be dereferencing) without
- * giving up lock-freedom to get it: **hazard pointers** (Maged Michael, 2004).
- * Nodes are now linked via plain `std::atomic<Node*>`, which *is* natively
- * lock-free CAS on every mainstream 64-bit target. Before a thread dereferences a
- * node it doesn't yet own, it publishes that node's address into a hazard-pointer
- * slot; any other thread wanting to actually `delete` a retired node first scans
- * every live hazard-pointer slot in the process and defers deletion of any node
- * still published there. This removes both the false-sharing/global-lock-table
- * problem and the per-node control-block allocation entirely.
- *
- * The `ThreadPool`'s own `shutdown()` fix from the previous revision (folding the
- * stop flag into `task_state` instead of clobbering it with placeholder wakeup
- * values) is unchanged and still applies — see the `ThreadPool` class doc below.
+ * MoveOnlyTask stores jobs that cannot be copied. TaskQueue is a Michael–Scott
+ * first-in, first-out queue that uses atomic pointers instead of a queue mutex.
+ * Hazard pointers (see threadpool.cpp) prevent a removed node from being freed
+ * while another thread may still use it. Workers sleep with atomic wait/notify
+ * when there is no work.
  */
 
 // Common future-state operations for void tasks, implemented once in taskPromise.cpp.
@@ -70,54 +36,22 @@ namespace threadpool_detail {
 }
 
 /**
- * @class ThreadPool
- * @brief Fully lock-free thread pool backed by C++20 atomic wait/notify.
+ * @brief Runs submitted jobs on a fixed number of worker threads.
  *
- * Manages a fixed set of worker threads that drain tasks from a @ref TaskQueue.
- * Task submission is done via @ref enqueue, which returns a `std::future` allowing
- * the caller to obtain the result (or re-throw exceptions) asynchronously.
+ * enqueue() returns a future: the caller can wait for the result or receive
+ * an exception thrown by the job. The destructor shuts down the pool.
  *
- * ### State encoding
- * A single 64-bit atomic `task_state` encodes two counters and a shutdown flag:
- * | Bits  | Meaning                                      |
- * |-------|----------------------------------------------|
- * | 63–32 | Pending tasks (enqueued, not yet picked up)   |
- * | 31    | Shutdown-requested flag, set by `shutdown()`  |
- * | 30–0  | Active tasks (currently executing)            |
+ * A single atomic 64-bit state tracks pending jobs (bits 63–32), the shutdown
+ * flag (bit 31) and running jobs (bits 30–0). Updating the shutdown flag in
+ * this same value wakes waiting workers without losing either count.
+ * Workers wait when no work is pending and are notified on submission or shutdown.
  *
- * Workers park on `task_state.wait()` when no pending work is available and
- * are woken by `task_state.notify_one()` after each submission, or by
- * `task_state.notify_all()` once `shutdown()` sets the flag above.
- *
- * @par Fix: shutdown signalling
- * The shutdown flag used to be a separate `std::atomic<bool> stop`, with
- * `shutdown()` additionally overwriting `task_state` with placeholder values
- * purely to force any parked worker to wake up. That "destructive wakeup"
- * clobbered the real pending/active counts. Folding the flag into
- * `task_state` itself removes the need to touch the counters at all:
- * `task_state.wait(old)` is specified to return immediately if the atomic's
- * current value no longer equals `old` — so setting @ref STOP_BIT is
- * guaranteed to either be observed by a worker before it parks, or to make
- * its very next `wait()` call return immediately.
- *
- * @note `TaskQueue` now reclaims nodes via hazard pointers
- * instead of `atomic<shared_ptr<Node>>` — see that class's doc comment. This
- * is transparent to `ThreadPool`; its interface (`enqueue`/`dequeue`) is
- * unchanged.
- *
- * ### Typical usage
  * @code
- *   ThreadPool pool(std::thread::hardware_concurrency());
- *
- *   auto f = pool.enqueue([](int x){ return x * x; }, 7);
- *   std::cout << f.get() << '\n'; // 49
- *
- *   pool.waitAllTasksCompleted();
- *   pool.shutdown();
+ * ThreadPool pool(4);
+ * auto result = pool.enqueue([](int x) { return x * x; }, 7);
+ * // result.get() returns 49.
+ * pool.waitAllTasksCompleted();
  * @endcode
- *
- * @note The destructor calls @ref shutdown automatically, so explicit shutdown
- *       is only necessary when you need to drain the pool before destruction.
  */
 class ThreadPool {
 private:

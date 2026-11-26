@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Maintains the persistent ISO database: scan, add, load and remove missing paths.
+
 #include <errno.h>
 #include <signal.h>
 #include <fcntl.h>

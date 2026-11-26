@@ -7,11 +7,9 @@ module;
 
 export module isocmd.converters.ccd2iso;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- converters/ccd2iso ----
 // Special thanks to the original authors of ccd2iso:
 
 // Danny Kurniawan and Kerry Harris (ccd2iso).

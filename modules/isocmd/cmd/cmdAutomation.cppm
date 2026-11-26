@@ -4,15 +4,10 @@ export module isocmd.cmd.cmdAutomation;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- cmd/cmdAutomation ----
-
-/**
- * @brief Stores parsed command-line arguments and action options.
- */
+/// Stores parsed command-line arguments and action options.
 struct ParsedArgs {
 	std::string              action;      ///< Action keyword: "mount" / "umount" / "convert" (c2iso) / "w2usb"
 	std::vector<std::string> paths;       ///< Positional arguments that follow the action keyword

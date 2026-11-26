@@ -4,12 +4,10 @@ export module isocmd.select.selectShared;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- select/selectShared ----
-// Internal helpers shared by selectIso.cpp and selectImage.cpp: RAII guards
+// Internal helpers shared by selectIso.cpp and selectImage.cpp: scope guards
 // and the path-based pending-selection logic. Not for use outside src/select/.
 
 /// Pending state of the ISO select screen. Main-thread only.
@@ -20,26 +18,12 @@ struct IsoPending {
 
 extern IsoPending g_isoPending;
 
-// ======================================================================
-// RAII Guards for Select Functions
-// ======================================================================
-//
-// These guards manage terminal state, readline keybindings, atomic flags,
-// and cursor position across the interactive TUI selection functions
-// (selectForIsoFiles, selectForImageFiles). They eliminate manual cleanup
-// calls and guarantee proper teardown on all exit paths, including early
-// returns, loop breaks, and stack unwinding from exceptions.
-// ======================================================================
+// Scope guards restore terminal state, keybindings and UI flags on every exit path.
 
 /**
- * @brief Installs the select-mode readline keybindings on construction and
- *        resets them on destruction.
- *
- * The destructor also clears @c RetainAndRestoreReadlineBuffer::g_rl_pending_text,
- * so a pending prompt-text restore from a previous session cannot leak into
- * the caller. Call @ref restore after any sub-mode that replaces the selection
- * keybindings (e.g. the filter flow via @c runSharedFilterFlow) so the select
- * prompt keeps its own bindings.
+ * @brief Installs selection keybindings and restores them automatically on exit.
+ * Also clears pending prompt text so it cannot leak into another screen.
+ * Call restore() after a sub-mode replaces the keybindings.
  */
 class ReadlineKeybindingGuard {
 public:
@@ -49,18 +33,15 @@ public:
 	/// Re-establish custom keybindings after a sub-mode overrode them.
 	void restore();
 
-	// Non-copyable, non-movable
+
 	ReadlineKeybindingGuard(const ReadlineKeybindingGuard&) = delete;
 	ReadlineKeybindingGuard& operator=(const ReadlineKeybindingGuard&) = delete;
 };
 
 /**
- * @brief Sets an @c std::atomic<bool> to @p activeValue on construction and
- *        restores the previous value on destruction (unless released).
- *
- * The previous value is captured at construction time, so nested guards and
- * pre-existing values round-trip correctly; the flag is not simply flipped.
- * Call @ref release to leave the flag at @p activeValue.
+ * @brief Temporarily sets a shared atomic flag.
+ * Restores its original value on scope exit, including when guards are nested.
+ * Call release() to keep the new value instead.
  */
 class AtomicFlagGuard {
 public:
@@ -98,18 +79,9 @@ private:
 };
 
 /**
- * @brief Restores @c isAtISOList to its pre-scope value on destruction
- *        (unless the operation is an unmount) and always clears the global
- *        filtering indicator.
- *
- * The unmount exemption is per-instance and re-evaluated at destruction
- * time via @p isUnmountCheck, so a long-lived guard can observe a change in
- * whether the current operation is an unmount.
- *
- * The filtering indicator (@c GlobalState::g_filteringIndicator) is cleared
- * unconditionally, regardless of whether the flag above was restored, so a
- * failed filter cannot leave the "locked during sync" banner stuck on
- * screen after the guard goes out of scope.
+ * @brief Restores the ISO-list flag on exit except during unmount.
+ * The unmount check runs at destruction time. Always clear the filtering
+ * indicator so the "Filtering locked during sync" message cannot remain stuck.
  */
 class IsoListStateGuard {
 public:
@@ -137,27 +109,10 @@ private:
 
 namespace select_shared {
 
-	// ─── Prompt-row cursor invariant ─────────────────────────────────────────────
-	//
-	// Layout of every select screen (rows counted from the last list row L):
-	//
-	//     L      last list row
-	//     L+1    blank separator row
-	//     L+2    the prompt row            <- readline() is called with the cursor
-	//                                         here, at column 0
-	//
-	// The prompt string itself is a SINGLE line (no leading "\n"), so readline's
-	// own cursor bookkeeping is never off by a row. Long input scrolls horizontally
-	// instead of wrapping, preserving this invariant. The blank separator row is
-	// printed by the caller ("\n" after the list is drawn).
-	//
-	// After the user submits, the cursor is one row below the prompt row (L+3).
-	// That holds for Enter AND for every hotkey: the hotkey handlers finish the
-	// line with rl_newline() (see submitHotkey), so readline echoes the newline
-	// exactly as it does for Enter. The filter prompt keeps the same rule on every
-	// exit (Enter, Esc, Ctrl+D). Every iteration that does not redraw the list
-	// therefore brings the cursor back with exactly one call, rewindToPromptRow(),
-	// at the top of the loop. There are no other up/down escapes in the loop.
+	// Keep the prompt on a fixed row: list, blank separator, then one input line.
+	// Long input scrolls horizontally instead of wrapping. Enter and hotkeys
+	// finish one row below the prompt; if the list is not redrawn, rewind once.
+	// The filter prompt follows the same rule on every exit path.
 	namespace term {
 
 		/**
@@ -168,23 +123,11 @@ namespace select_shared {
 
 	} // namespace term
 
-	// ─── Pending selection (path-based) ──────────────────────────────────────────
-	//
-	// Staged ("pending") selections are stored as PATHS, not as index strings.
-	// A path is stable across filter changes, filter clears, list refreshes and
-	// re-sorts; an index is not. The index strings the UI shows
-	// (RefreshState::pendingIndices, the "Pending Indices [P]" line) are only a
-	// DISPLAY projection: loadAndDisplayIso / loadAndDisplayMountedISOs recompute
-	// them from the paths (syncIsoPendingDisplay) against the final source list
-	// right before every print, always as 1-based SOURCE indices, i.e. the same
-	// numbers as the "n:m^" column, merged into ranges ("1-3 7 9-10").
-	//
-	//  - Staging ("3 5-9;"): bare numbers refer to what is on screen (the filtered
-	//    view when a filter is active); a trailing '^' ("12^") refers to the
-	//    source list directly. Each number is turned into a path immediately.
-	//  - "P": the paths are resolved to source indices NOW, against the current
-	//    source list, and the operation runs on the full source list. Paths that
-	//    no longer exist are dropped.
+	// Store staged selections as paths, not row numbers, so sorting, filtering
+	// and refreshes cannot change which files are selected. Bare numbers refer
+	// to visible rows; a '^' suffix refers to the source list. P resolves paths
+	// against the current source list and drops missing paths. The displayed
+	// pending indices are rebuilt from those paths before each list redraw.
 	namespace pending {
 
 		/// One parsed pending token: "N" or "A-B", with an optional trailing '^'.

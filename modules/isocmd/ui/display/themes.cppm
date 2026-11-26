@@ -6,11 +6,9 @@ export module isocmd.ui.display.themes;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- ui/display/themes ----
 /**
  * @file themes.h
  * @brief Terminal UI theme management system for ISO Commander.
@@ -51,9 +49,7 @@ namespace UI {
 		extern std::string BoldReset;
 		extern std::string RL_BoldAlt;
 
-		/**
-		 * @brief Updates BoldReset and RL_BoldAlt based on the current 'defaultColor' string.
-		 */
+		/// Updates BoldReset and RL_BoldAlt based on the current 'defaultColor' string.
 		void updateDefaultColors();
 	}
 
@@ -129,9 +125,7 @@ VerboseAndDatabaseTheme getDatabaseTheme();
 ReadlineAndPromptTheme getPromptTheme();
 ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso);
 
-/**
- * @brief Resolves the current theme structure based on the globalTheme string.
- */
+/// Resolves the current theme structure based on the globalTheme string.
 const UI::MainTheme* getActiveTheme();
 
 } // extern "C++"

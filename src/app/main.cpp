@@ -30,7 +30,7 @@ namespace fs = std::filesystem;
 /**
  * @brief Prints the program version to stdout, bolded.
  *
- * @param version The semantic version string (e.g. "6.3.5").
+ * @param version The version string to display.
  */
 static void printVersionNumber(const std::string& version) {
 
@@ -41,15 +41,8 @@ static void printVersionNumber(const std::string& version) {
 namespace {
 
 	/**
-	 * @brief Checks and dispatches non-interactive command-line modes or version information.
-	 *
-	 * Evaluates command-line arguments to handle utility requests such as version queries
-	 * (`--version`, `-v`) or delegated operations (`mount`, `umount`, `c2iso`, `w2usb`).
-	 *
-	 * @param argc Number of command-line arguments.
-	 * @param argv Array of null-terminated argument strings.
-	 * @return std::optional<int> Exit code if a CLI mode was handled, or
-	 *  std::nullopt to fall back to interactive mode.
+	 * @brief Handles version queries and non-interactive commands.
+	 * @return The command's exit code, or std::nullopt to start the interactive menu.
 	 */
 	std::optional<int> tryExecuteCliMode(int argc, char *argv[]) {
 
@@ -69,10 +62,8 @@ namespace {
 	}
 
 	/**
-	 * @brief Initializes application state flags, collection reserves, Readline behavior, and signal handlers.
-	 *
-	 * Configures non-interactive state flags, allocates generous vector capacities for caches,
-	 * sets up custom Readline completers, key bindings, event hooks, and ignores SIGINT while handling SIGTERM.
+	 * @brief Prepares application state, caches, Readline and signal handling.
+	 * Ctrl+C is ignored at the main prompt; SIGTERM is handled by signalHandler.
 	 */
 	void initializeEnvironment() {
 
@@ -110,15 +101,9 @@ namespace {
 	}
 
 	/**
-	 * @brief Acquires an exclusive single-instance advisory lock on the lock file.
-	 *
-	 * Attempts to place an exclusive write lock on `/tmp/isocmd.lock`. On failure, prints
-	 * a descriptive error hint suggesting stale lock cleanup.
-	 *
-	 * @param lockFd Reference to the integer storing the opened file descriptor handle.
-	 * @param c The list theme color palette used for formatted error messages.
-	 * @param lockFile Path to the lock file.
-	 * @return bool true if the lock was acquired successfully, false otherwise.
+	 * @brief Locks the supplied lock file so only one interactive instance can run.
+	 * On failure, print a diagnostic and close the descriptor. The caller keeps
+	 * the open descriptor on success; closing it releases the advisory lock.
 	 */
 	bool acquireSingleInstanceLock(int& lockFd, const PrintListTheme& c, const char* lockFile) {
 
@@ -162,20 +147,9 @@ namespace {
 	}
 
 	/**
-	 * @brief Evaluates and generates the status line string for background operations.
-	 *
-	 * Checks background auto-update progress or missing folder configurations, generating
-	 * appropriate status messages and spawning monitor threads when necessary.
-	 *
-	 * @param search Atomic flag indicating active configuration search/update states.
-	 * @param importState Shared pointer to the database refresh state.
-	 * @param messageActive Atomic flag indicating whether a status message is currently active.
-	 * @param stopMessage Atomic flag signaling background tasks to stop.
-	 * @param monitorThreadSpawned Atomic flag ensuring the monitoring thread is spawned only once.
-	 * @param isAtMain Atomic flag specifying whether the application is at the main menu.
-	 * @param backgroundThreads Vector storing background worker threads.
-	 * @param messagePrinted Reference to a flag ensuring one-time informational messages print only once.
-	 * @param statusLine Output string parameter receiving the formatted status line.
+	 * @brief Updates the main-menu status for background database imports.
+	 * Starts a monitor only once for a running import, or a timed message when
+	 * auto-update is enabled but no stored scan folders are available.
 	 */
 	void updateStatusLine(std::atomic<bool>& search,
 	                      std::shared_ptr<RefreshState>& importState,
@@ -212,21 +186,8 @@ namespace {
 	}
 
 	/**
-	 * @brief Dispatches user selection from the main interactive menu options.
-	 *
-	 * Routes user choices (1 through 5) to appropriate submenus or control handlers:
-	 * - 1: ISO browsing and selection
-	 * - 2: Image selection for ISO conversion
-	 * - 3: Database filesystem refresh
-	 * - 4: Interactive configuration editor
-	 * - 5: Program exit
-	 *
-	 * @param choice String input representing the user's menu option.
-	 * @param exitProgram Reference flag set to true when choice 5 is selected.
-	 * @param isAtMain Reference to atomic flag tracking main menu state.
-	 * @param isAtISOList Reference to atomic flag tracking ISO list state.
-	 * @param importState Shared pointer to database refresh state.
-	 * @param backgroundThreads Vector storing background threads.
+	 * @brief Routes the main-menu choice to browsing, conversion, database refresh,
+	 * settings or exit.
 	 */
 	void dispatchMenuChoice(const std::string& choice,
 	                        bool& exitProgram,
@@ -278,7 +239,6 @@ namespace {
 	 * @param importState Shared pointer managing refresh state flags.
 	 * @param stopMessage Atomic flag signaling workers to terminate.
 	 * @param lockFd File descriptor handle for the advisory lock.
-	 * @param lockFile Path string to the lock file.
 	 */
 	void cleanupAndExit(std::vector<std::thread>& backgroundThreads,
 	                    std::shared_ptr<RefreshState>& importState,

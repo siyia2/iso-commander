@@ -9,42 +9,21 @@ export namespace write_telemetry {
 	inline constexpr int windowsStallTimeoutSeconds = 300;
 
 	/**
-	 * @brief Exponentially smoothed write-speed estimator with stall handling.
+	 * @brief Smooths transfer-speed readings so bursty USB I/O does not make the display flicker.
 	 *
-	 * Fed periodically with the cumulative byte count. Samples closer than one
-	 * second apart are ignored. While bytes keep arriving it publishes a smoothed
-	 * MB/s figure (heavier smoothing below 10 MB/s). If nothing arrives it holds
-	 * the last figure, and reports 0 after the configured timeout without progress.
-	 *
-	 * @par Utility
-	 * USB drives write in bursts, so the raw speed jumps up and down and would
-	 * flicker on screen. This evens it out, keeps showing the last speed during short
-	 * pauses, and shows 0 after the configured stall timeout.
+	 * Samples less than one second apart are ignored. New measurements are blended
+	 * with earlier ones, with stronger smoothing below 10 MiB/s. During a pause,
+	 * retain the last estimate until the stall timeout, then report zero.
 	 */
 	class SpeedEstimator {
 	public:
-		/**
-		 * @brief Creates an estimator whose baseline is the transfer start.
-		 *
-		 * @par Utility
-		 * Starting the clock at the real start time makes the first measurement
-		 * accurate.
-		 * @param start Time the transfer started (initial baseline).
-		 */
+		/// Starts measuring from the beginning of the transfer.
 		explicit SpeedEstimator(Clock::time_point start, int stallTimeoutSeconds)
 		    : stallTimeoutSeconds_(stallTimeoutSeconds), lastUpdate_(start), stallStart_(start) {}
 
 		/**
-		 * @brief Feeds one observation.
-		 *
-		 * @par Utility
-		 * It is the single place where measurements are fed in. It ignores updates that
-		 * arrive too quickly and picks the right handling for "data was written" or
-		 * "nothing was written".
-		 *
-		 * @param currentWritten Cumulative bytes written so far.
-		 * @param now            Time of the observation.
-		 * @return Speed in MB/s to publish, or std::nullopt if nothing should change.
+		 * @brief Updates the speed estimate from a cumulative byte count and timestamp.
+		 * @return Speed in MiB/s, or std::nullopt to retain the previous display.
 		 */
 		std::optional<double> sample(std::uint64_t currentWritten, Clock::time_point now) {
 
@@ -68,20 +47,9 @@ export namespace write_telemetry {
 		const int stallTimeoutSeconds_;
 
 		/**
-		 * @brief Handles a sample in which bytes arrived.
-		 *
-		 * Computes the instantaneous speed over the window since the last real
-		 * data point, folds it into the smoothed value and resets the baseline.
-		 *
-		 * @par Utility
-		 * Works out the speed from what was written since the last measurement, and
-		 * blends it with earlier values so the number changes smoothly.
-		 *
-		 * @param currentWritten Cumulative bytes written.
-		 * @param delta          Bytes written since the last baseline (> 0).
-		 * @param elapsedMs      Milliseconds since the last baseline.
-		 * @param now            Time of the observation.
-		 * @return The new smoothed speed in MB/s.
+		 * @brief Blends the measured speed with the previous estimate and resets the baseline.
+		 * @param delta Bytes written since the previous baseline (> 0).
+		 * @param elapsedMs Milliseconds since that baseline.
 		 */
 		double onProgress(std::uint64_t currentWritten, std::uint64_t delta, long long elapsedMs,
 		                  Clock::time_point now) {
@@ -108,19 +76,8 @@ export namespace write_telemetry {
 		}
 
 		/**
-		 * @brief Handles a sample in which no bytes arrived.
-		 *
-		 * Starts (or continues) stall tracking and leaves the baseline untouched
-		 * so the next real sample spans the full transfer duration.
-		 *
-		 * @par Utility
-		 * Handles the case where nothing new was written. It waits, keeps the last
-		 * speed on screen, and only reports 0 after the configured timeout. The
-		 * measuring window keeps growing meanwhile, so a slow write is judged fairly.
-		 *
-		 * @param now Time of the observation.
-		 * @return 0.0 once the stall timeout is reached; otherwise std::nullopt
-		 *         (keep showing the last speed).
+		 * @brief Tracks stalls without resetting the measurement baseline.
+		 * @return Zero after the configured timeout; otherwise std::nullopt.
 		 */
 		std::optional<double> onNoProgress(Clock::time_point now) {
 

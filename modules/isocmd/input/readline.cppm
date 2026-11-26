@@ -4,11 +4,8 @@ export module isocmd.input.readline;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- input/readline ----
 
 /**
  * C-LINKAGE INTERFACE
@@ -69,15 +66,13 @@ extern CompleterData g_completerData;
  * @brief Global state management for Readline buffer persistence during completion cycles.
  */
 namespace RetainAndRestoreReadlineBuffer {
-	/// @brief Mode flag to determine if completion text should be persisted across Readline calls.
+	/// Mode flag to determine if completion text should be persisted across Readline calls.
 	inline int g_rl_complete_mode = 0;
-	/// @brief Storage for the completed line text to be restored after a reset.
+	/// Storage for the completed line text to be restored after a reset.
 	extern std::string g_rl_pending_text;
 }
 
-/**
- * @brief Clears pending Readline text when the guard goes out of scope.
- */
+/// Clears pending Readline text when the guard goes out of scope.
 struct PendingReadlineTextClearGuard {
 	~PendingReadlineTextClearGuard();
 };
@@ -140,13 +135,13 @@ char** setting_value_completion_entry(const char* text, int start, int end);
  * snapshot first (@c clear_list_and_screen).
  */
 namespace SettingsEditorRepaint {
-	/// @brief Active body-repaint callback; empty when no editor prompt is live.
+	/// Active body-repaint callback; empty when no editor prompt is live.
 	extern std::function<void()> g_fn;
 
-	/// @brief Installs (or, with an empty function, clears) the hook.
+	/// Installs (or, with an empty function, clears) the hook.
 	void set(std::function<void()> fn);
 
-	/// @brief Returns the active hook; empty when none is installed.
+	/// Returns the active hook; empty when none is installed.
 	const std::function<void()>& get();
 }
 

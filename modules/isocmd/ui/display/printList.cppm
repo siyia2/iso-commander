@@ -4,18 +4,15 @@ export module isocmd.ui.display.printList;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
 struct RefreshState;
 class StringListView;
 
-// ---- ui/display/printList ----
 
-/**
- * @brief Holds the state and options required for printList.
- */
+
+/// Holds the state and options required for printList.
 struct PrintListContext {
 	std::vector<std::string>& pendingIndices;
 	bool& hasPendingProcess;

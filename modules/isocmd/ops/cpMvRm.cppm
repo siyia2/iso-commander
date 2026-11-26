@@ -8,11 +8,8 @@ export module isocmd.ops.cpMvRm;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- ops/cpMvRm ----
 
 // C / System Headers
 
@@ -100,7 +97,7 @@ struct DestinationCheckParams {
 
 /**
  * @struct RlFormFeedGuard
- * @brief RAII guard to restore the '\f' key binding to @c prevent_readline_keybindings.
+ * @brief scope guard to restore the '\f' key binding to @c prevent_readline_keybindings.
  *
  * Use in functions that bind '\f' but do not modify '\t' to ensure scope integrity.
  */
@@ -110,7 +107,7 @@ struct RlFormFeedGuard {
 
 /**
  * @struct RlKeyBindGuard
- * @brief RAII guard that restores the '\f' and '\t' bindings and rebinds Esc to
+ * @brief scope guard that restores the '\f' and '\t' bindings and rebinds Esc to
  *        @c exit_handler, undoing the Esc hijack left by a completion list.
  *
  * Fires only when the guarded call returns, not on in-loop page turns.
@@ -121,7 +118,7 @@ struct RlKeyBindGuard {
 
 /**
  * @struct RlCompleteModeGuard
- * @brief RAII guard to preserve the state of @c g_rl_complete_mode.
+ * @brief scope guard to preserve the state of @c g_rl_complete_mode.
  */
 struct RlCompleteModeGuard {
 	int saved; ///< Saved value of @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode
@@ -131,7 +128,7 @@ struct RlCompleteModeGuard {
 
 /**
  * @struct RlStartupHookGuard
- * @brief RAII guard to clear @c rl_startup_hook on scope exit.
+ * @brief scope guard to clear @c rl_startup_hook on scope exit.
  *
  * Prevents stale hooks from persisting into subsequent Readline calls.
  */
@@ -245,9 +242,7 @@ std::vector<std::string> generateIsoEntries(
     const std::vector<std::string>& isoFiles
 );
 
-/**
- * @brief Resolves the real (invoking) user and group IDs and names.
- */
+/// Resolves the real (invoking) user and group IDs and names.
 void getRealUserId(
     uid_t& real_uid,
     gid_t& real_gid,
@@ -255,9 +250,7 @@ void getRealUserId(
     std::string& real_groupname
 );
 
-/**
- * @brief Copies a file to a temporary destination and renames it on success.
- */
+/// Copies a file to a temporary destination and renames it on success.
 bool bufferedCopyWithProgress(
     const fs::path& src,
     const fs::path& dst,
@@ -265,9 +258,7 @@ bool bufferedCopyWithProgress(
     std::error_code& ec
 );
 
-/**
- * @brief Logs the result of a copy or move and updates operation counters.
- */
+/// Logs the result of a copy or move and updates operation counters.
 void logOperationResult(
     OperationContext& ctx,
     bool success,
@@ -280,27 +271,21 @@ void logOperationResult(
     std::string_view destFile
 );
 
-/**
- * @brief Performs a buffered copy to one destination and reports its result.
- */
+/// Performs a buffered copy to one destination and reports its result.
 bool performBufferedCopyOperation(
     OperationContext& ctx,
     const TransferPaths& paths,
     std::string_view verb
 );
 
-/**
- * @brief Performs a move to one destination, using copy/delete across devices.
- */
+/// Performs a move to one destination, using copy/delete across devices.
 bool performMoveOperation(
     OperationContext& ctx,
     const TransferPaths& paths,
     std::size_t fileSize
 );
 
-/**
- * @brief Handles the interactive confirmation for permanently deleting files.
- */
+/// Handles the interactive confirmation for permanently deleting files.
 bool handleDeleteOperation(
     const std::vector<std::string>& isoFiles,
     const std::vector<std::vector<int>>& indexChunks,
@@ -308,9 +293,7 @@ bool handleDeleteOperation(
     bool& abortDel
 );
 
-/**
- * @brief Performs a single-file deletion and reports its result.
- */
+/// Performs a single-file deletion and reports its result.
 void performDeleteOperation(
     OperationContext& ctx,
     const fs::path& srcPath,

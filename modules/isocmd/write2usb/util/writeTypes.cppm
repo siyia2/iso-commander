@@ -5,11 +5,8 @@ export module isocmd.write2usb.util.writeTypes;
 import std;
 import isocmd.core.cancellation;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/util/writeTypes ----
 
 // The global flag is the signal-safe front end. The UI latches the batch's
 // stop state before allowing the global flag to be reset.
@@ -21,9 +18,7 @@ inline bool isUsbWriteCancelled(const std::stop_token& token = {}) noexcept {
 
 // --- Data Structures ---
 
-/**
- * @brief Information about an ISO image file.
- */
+/// Information about an ISO image file.
 struct IsoInfo {
 	std::string path;          /** Full filesystem path to the ISO file. */
 	std::string filename;      /** Name of the file without path. */
@@ -57,14 +52,14 @@ struct ProgressInfo {
 	std::atomic<double> speed{0.0}; // Live write speed, then the final write-only average.
 	std::atomic<double> verificationSpeed{0.0};
 
-	// Constructor
+
 	ProgressInfo(std::string filename, std::string device, std::string totalSize,
 	             std::string sourcePath);
 
-	// Move Constructor
+
 	ProgressInfo(ProgressInfo&& other) noexcept;
 
-	// Move Assignment
+
 	ProgressInfo& operator=(ProgressInfo&& other) noexcept;
 
 	// Disable Copying (Atomics cannot be copied)

@@ -4,14 +4,11 @@ export module isocmd.search.search;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- search/search ----
-
 /**
- * @brief RAII guard for Readline session state during search operations.
+ * @brief scope guard for Readline session state during search operations.
  *
  * This class ensures that Readline's completion function and custom keybindings
  * are safely restored to their default or previous states upon exiting the scope,
@@ -32,7 +29,6 @@ public:
 	SearchReadlineGuard();
 	~SearchReadlineGuard();
 
-	// Non-copyable, non-movable
 	SearchReadlineGuard(const SearchReadlineGuard&) = delete;
 	SearchReadlineGuard& operator=(const SearchReadlineGuard&) = delete;
 

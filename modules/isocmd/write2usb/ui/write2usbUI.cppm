@@ -5,11 +5,8 @@ export module isocmd.write2usb.ui.write2usbUI;
 import std;
 import isocmd.write2usb.util.writeTypes;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/ui/write2usbUI ----
 
 /**
  * Performs the actual write2usb.
@@ -141,18 +138,14 @@ std::shared_ptr<WriteScreen> performWriteOperation(
 /** @brief Enumerates removable USB block devices visible to the system. */
 std::vector<std::string> getRemovableDevices();
 
-/**
- * @brief Validates parsed ISO-to-device mappings and returns viable pairs.
- */
+/// Validates parsed ISO-to-device mappings and returns viable pairs.
 std::vector<std::pair<IsoInfo, std::string>> validateDevices(
     const std::vector<std::pair<std::size_t, std::string>>& deviceMap,
     const std::vector<IsoInfo>& selectedIsos,
     bool noPermissions,
     std::vector<std::string>& validationErrors);
 
-/**
- * @brief Parses semicolon-delimited INDEX>DEVICE mappings.
- */
+/// Parses semicolon-delimited INDEX>DEVICE mappings.
 std::vector<std::pair<std::size_t, std::string>> parseDeviceMappings(
     const std::string& pairString,
     const std::vector<std::string>& selectedIsos,

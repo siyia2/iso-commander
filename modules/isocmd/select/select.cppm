@@ -4,11 +4,8 @@ export module isocmd.select.select;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- select/select ----
 
 // Forward declarations
 struct RefreshState;
@@ -161,7 +158,6 @@ bool handleFilteringForISO(const std::string& inputString,
  * @param files       Image files to filter (the current display list).
  * @param sourceFiles Original unfiltered image list used as the filter
  *                    corpus on every prompt.
- * @param operation   Operation name.
  * @param ctx         Optional caller-owned filter state and callbacks.
  */
 void handleFilteringConvert2ISO(const std::string& inputString,

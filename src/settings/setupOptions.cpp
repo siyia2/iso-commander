@@ -47,9 +47,7 @@ bool isNum(const std::string& v, int min, int max) {
 
 }
 
-/**
- * @brief Removes leading and trailing whitespace from a string.
- */
+/// Removes leading and trailing whitespace from a string.
 std::string trim(std::string str) {
 
 	if (str.empty()) return str;
@@ -76,9 +74,7 @@ ConfigEntry enumEntry(std::string key, std::string def, std::string comment,
 
 }
 
-/**
- * @brief Builds a numeric setting whose validator and editor range hint share [min, max].
- */
+/// Builds a numeric setting whose validator and editor range hint share [min, max].
 ConfigEntry numericEntry(std::string key, std::string def, std::string comment,
                                 std::string section, int min, int max) {
 
@@ -197,9 +193,7 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 // Core Config I/O
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Logic to write the current configuration state back to disk.
- */
+/// Logic to write the current configuration state back to disk.
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config) {
 
 	std::ofstream outFile(configPath);
@@ -215,9 +209,7 @@ bool writeConfig(const std::string& configPath, const std::map<std::string, std:
 
 }
 
-/**
- * @brief Reads the configuration file into a key-value map.
- */
+/// Reads the configuration file into a key-value map.
 std::map<std::string, std::string> readConfig(const std::string& configPath) {
 
 	std::map<std::string, std::string> config;
@@ -238,9 +230,7 @@ std::map<std::string, std::string> readConfig(const std::string& configPath) {
 
 }
 
-/**
- * @brief Self-Healing logic: Checks for missing keys, bad values, OR wrong ordering.
- */
+/// Self-Healing logic: Checks for missing keys, bad values, OR wrong ordering.
 static bool ensureDefaults(std::map<std::string, std::string>& configMap, const std::string& configPath) {
 
 	bool needsUpdate = false;
@@ -298,9 +288,7 @@ void syncCache(const std::string& filePath) {
 
 }
 
-/**
- * @brief Synchronizes configuration map values with internal global variables.
- */
+/// Synchronizes configuration map values with internal global variables.
 void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& configMap) {
 
 	auto getVal = [&](const std::string& key, std::size_t defaultVal) -> std::size_t {
@@ -336,9 +324,7 @@ void applyThreadCapsAndHistoryLimits(const std::map<std::string, std::string>& c
 // Read-only accessors
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Optimized: Checks if auto_update is enabled using cache.
- */
+/// Optimized: Checks if auto_update is enabled using cache.
 bool readUserConfigUpdates(const std::string& filePath) {
 
 	syncCache(filePath);
@@ -347,9 +333,7 @@ bool readUserConfigUpdates(const std::string& filePath) {
 
 }
 
-/**
- * @brief Returns the current interactive USB checksum verification setting.
- */
+/// Returns the current interactive USB checksum verification setting.
 bool write2usbChecksumEnabled() {
 
 	const auto it = ConfigCaches::g_configCache.find("verify_checksum");
@@ -357,9 +341,7 @@ bool write2usbChecksumEnabled() {
 
 }
 
-/**
- * @brief Returns whether Windows USB writes should use the kernel page cache (default: on).
- */
+/// Returns whether Windows USB writes should use the kernel page cache (default: on).
 bool write2usbBufferedEnabled() {
 
 	const auto it = ConfigCaches::g_configCache.find("buffered_writes");
@@ -367,9 +349,7 @@ bool write2usbBufferedEnabled() {
 
 }
 
-/**
- * @brief Optimized: Loads pagination setting into the global ITEMS_PER_PAGE via cache.
- */
+/// Optimized: Loads pagination setting into the global ITEMS_PER_PAGE via cache.
 bool paginationSet(const std::string& filePath) {
 
 	syncCache(filePath);

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Renders and controls the interactive menus, including background status messages.
+
 #include <stdio.h>
 #include <readline/readline.h>
 

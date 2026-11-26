@@ -647,55 +647,17 @@ namespace {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Interactive TUI for selecting disc images to convert to ISO.
+ * @brief Runs the interactive image selection screen for ISO conversion.
  *
- * Paginated, filterable interface for choosing BIN/IMG, MDF, NRG, CHD, or
- * DAA/GBI files and dispatching them to the convert2iso pipeline. Drives the
- * same Readline event loop as @c selectForIsoFiles, but over the image cache
- * for the requested @p fileType, with the matching operation name.
+ * ImageSession uses the RAM cache for the requested image format. Filtering
+ * always searches the full cache; Esc clears the filter or returns to the
+ * menu. The screen does not support manual database refresh (R).
  *
- * - **File type mapping:** @p fileType selects the conversion operation
- *   (@c "ccd2iso", @c "mdf2iso", @c "nrg2iso", @c "chd2iso", @c "daa2iso").
- * - **RAII keybindings:** @c ReadlineKeybindingGuard installs select-mode
- *   bindings on construction and resets them on destruction, so cleanup runs
- *   on every exit path.
- * - **Prompt-row invariant:** same as @c selectForIsoFiles: a single-line
- *   prompt on a fixed row (list, one blank separator row, prompt), reached
- *   either by printing one @c "\\n" after a list redraw or by a single
- *   @c term::rewindToPromptRow() when the list is not redrawn.
- * - **Resize repaint:** each @c readline() is wrapped in
- *   @c readlineWithResize with a lambda that re-runs the display step. A
- *   throwaway sort flag is used so a resize never re-sorts the list.
- * - **Cancellation:** ESC clears the filter (restoring the unfiltered cache
- *   for this file type and the original page) if a filter is active,
- *   otherwise resets the page and returns to the caller. The @c R key is
- *   unbound because this prompt has no manual refresh.
- * - **Single-level filtering:** the filter prompt always searches the
- *   unfiltered RAM cache for this file type (see
- *   @c ImageSession::filterSourceList()), never the current filtered view, so
- *   a second Enter replaces the previous result instead of narrowing it. The
- *   filter stack never holds more than one level.
- * - **Two-phase execution (path-based):** "3 5-9;" is staged as paths. Bare
- *   numbers are what is on screen, "n^" numbers are indices into the
- *   unfiltered list. "P" resolves the paths to indices of the unfiltered list
- *   and converts against it; an active filter stays in place. The pending line
- *   shows the unfiltered-list numbers. Running a direct selection (an index
- *   expression without ';') also discards any staged set, even if the
- *   conversion failed or was cancelled; staged paths survive filter changes
- *   but not a direct run. Verbose output, when enabled, is printed after
- *   each dispatch.
- * - **Structure:** the loop body is delegated to @c image_select::ImageSession,
- *   whose input handlers are tried in a fixed order (ESC, staged commands,
- *   ignored input, pagination/help, "P", filtering, staging, direct
- *   conversion).
- *
- * @param fileType  "bin", "img", "mdf", "nrg", "chd", "daa", or "gbi".
- * @param files     The image file list being filtered/selected; updated in
- *                  place by filtering and by ESC-restore.
- * @param list      Toggled by the "ls" command (from the caller) to view the
- *                  RAM cache.
- * @param state     Shared @c RefreshState forwarded to
- *                  @c handleFilteringConvert2ISO for display coordination.
+ * Selections ending in ';' are staged as paths. Bare numbers select visible
+ * rows; a '^' suffix selects source-list indices. P runs the staged paths
+ * without clearing the filter. Direct conversion clears staged paths even
+ * on failure or cancellation. Keybinding guards and resize callbacks keep
+ * the terminal state consistent; see selectShared.cppm for cursor rules.
  */
 void selectForImageFiles(const std::string& fileType, std::vector<std::string>& files,
                          bool& list, std::shared_ptr<RefreshState> state) {

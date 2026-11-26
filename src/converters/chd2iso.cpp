@@ -12,9 +12,7 @@ import std;
 import isocmd.core.cancellation;
 
 namespace {
-	/**
-	 * @brief Layout and buffer size parameters for extracting sector user data from CHD hunks.
-	 */
+	/// Layout and buffer size parameters for extracting sector user data from CHD hunks.
 	struct HunkExtractConfig {
 		std::uint32_t hunkSize;       ///< Size of each compressed/decompressed hunk in bytes.
 		std::uint32_t rawSectorSize;  ///< Size of each raw sector within a hunk in bytes.
@@ -22,9 +20,7 @@ namespace {
 		std::uint32_t userDataOffset; ///< Byte offset of user payload data inside each raw sector.
 	};
 
-	/**
-	 * @brief Per-worker execution context for parallel hunk decompression and mapping.
-	 */
+	/// Per-worker execution context for parallel hunk decompression and mapping.
 	struct HunkWorkerContext {
 		const std::string& chdPath;            ///< Path to the source CHD file.
 		void* mapped;                          ///< Writable memory-mapped output buffer.
@@ -35,9 +31,7 @@ namespace {
 		std::atomic<bool>& errorOccurred;      ///< Shared flag signaling read, open, or cancel failure.
 	};
 
-	/**
-	 * @brief Conversion parameters describing CHD layout, hunk count, and total output size.
-	 */
+	/// Conversion parameters describing CHD layout, hunk count, and total output size.
 	struct HunkConvertParams {
 		HunkExtractConfig extract; ///< Sector layout and hunk extraction configuration.
 		std::uint32_t totalHunks;       ///< Total number of hunks in the CHD image.
@@ -145,7 +139,6 @@ static std::uint32_t detectUserDataOffset(chd_file* chd, std::uint32_t hunkSize,
  * @param isoPath        Path where the output ISO file will be written.
  * @param hunkSize       Size of each hunk in bytes.
  * @param rawSectorSize  Size of each raw sector in bytes.
- * @param sectorsPerHunk Number of sectors per hunk.
  * @param userDataOffset Offset of user data within each sector.
  * @param totalHunks     Total number of hunks in the CHD file.
  * @param completedBytes Optional atomic counter updated with bytes written.

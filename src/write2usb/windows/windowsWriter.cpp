@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Prepares Windows USB media by partitioning, formatting, copying files and flushing the targets.
+
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -52,9 +54,7 @@ namespace {
 // Global scope: device readiness
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Checks if a block device is accessible and ready for I/O operations.
- */
+/// Checks if a block device is accessible and ready for I/O operations.
 bool isDeviceReady(const std::string& path) {
 
 	int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
@@ -64,9 +64,7 @@ bool isDeviceReady(const std::string& path) {
 
 }
 
-/**
- * @brief Waits for a device node to appear and become ready within a timeout.
- */
+/// Waits for a device node to appear and become ready within a timeout.
 bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
 
 	auto start = std::chrono::steady_clock::now();
@@ -98,9 +96,7 @@ namespace {
 
 	namespace retry {
 
-		/**
-		 * @brief Sleeps for a randomized backoff interval, waking early on cancel.
-		 */
+		/// Sleeps for a randomized backoff interval, waking early on cancel.
 		void sleepWithJitter(int baseMs) {
 
 			static thread_local std::mt19937 rng{std::random_device{}()};
@@ -118,9 +114,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Calls @p fn until it returns 0, with jittered linear backoff.
-		 */
+		/// Calls @p fn until it returns 0, with jittered linear backoff.
 		template <class Fn>
 		int withBackoff(Fn&& fn, int attempts = 3, int baseDelayMs = 500) {
 
@@ -148,9 +142,7 @@ namespace {
 
 	namespace proc {
 
-		/**
-		 * @brief Runs an external command with stdout/stderr suppressed.
-		 */
+		/// Runs an external command with stdout/stderr suppressed.
 		int runCommand(const std::vector<std::string>& args) {
 
 			if (args.empty() || windowsCancelled()) return -1;
@@ -223,9 +215,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Runs an external command, retrying on failure.
-		 */
+		/// Runs an external command, retrying on failure.
 		int runCommandRetry(const std::vector<std::string>& args,
 		                    int attempts = 3,
 		                    int baseDelayMs = 500) {
@@ -243,9 +233,7 @@ namespace {
 
 	namespace mnt {
 
-		/**
-		 * @brief Mount @p src at @p target using libmnt_context.
-		 */
+		/// Mount @p src at @p target using libmnt_context.
 		int libMount(const char* src,
 		             const char* target,
 		             const char* options = nullptr,
@@ -328,7 +316,7 @@ namespace {
 
 		/**
 		 * @struct ScopedMount
-		 * @brief RAII wrapper to ensure automatic unmounting and directory removal.
+		 * @brief scope-bound wrapper to ensure automatic unmounting and directory removal.
 		 */
 		struct ScopedMount {
 			std::string path;
@@ -358,9 +346,7 @@ namespace {
 			}
 		};
 
-		/**
-		 * @brief libMount() with retry and jittered backoff.
-		 */
+		/// libMount() with retry and jittered backoff.
 		int libMountRetry(const char* src,
 		                  const char* target,
 		                  const char* options = nullptr,
@@ -374,9 +360,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Mounts an NTFS partition through a specific kernel driver.
-		 */
+		/// Mounts an NTFS partition through a specific kernel driver.
 		int libMountNtfsRetry(const char* src,
 		                      const char* target,
 		                      const char* fstype,
@@ -416,13 +400,11 @@ namespace {
 
 	namespace iso {
 
-		// Shared definitions live in write2usb.h.
+		// Shared definitions live in the write2usb utility modules.
 		using IsoType = write2usb_detail::IsoType;
 		using IsoCopyEntry = write2usb_detail::IsoCopyEntry;
 
-		/**
-		 * @brief Classify a mounted ISO as a full Windows install or FAT-only disk.
-		 */
+		/// Classify a mounted ISO as a full Windows install or FAT-only disk.
 		IsoType detectIsoType(const std::string& isoMnt) {
 
 			return (fs::exists(isoMnt + "/sources/install.wim") ||
@@ -432,9 +414,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Decide whether an ISO entry belongs on the ESP partition.
-		 */
+		/// Decide whether an ISO entry belongs on the ESP partition.
 		bool isEspEntry(const fs::path& rel, IsoType isoType) {
 
 			if (isoType == IsoType::FatOnly) return true;
@@ -457,9 +437,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Walk the ISO tree and classify each entry into NTFS and ESP lists.
-		 */
+		/// Walk the ISO tree and classify each entry into NTFS and ESP lists.
 		bool enumerateIsoEntries(const std::string& isoMnt,
 		                         IsoType isoType,
 		                         const std::string& fatMnt,
@@ -538,9 +516,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Erase all filesystem/partition signatures on @p device.
-		 */
+		/// Erase all filesystem/partition signatures on @p device.
 		bool wipeDeviceSignatures(const std::string& device) {
 
 			if (windowsCancelled()) return false;
@@ -622,9 +598,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Format the FAT32 partition and, for WindowsInstall, the NTFS one.
-		 */
+		/// Format the FAT32 partition and, for WindowsInstall, the NTFS one.
 		bool formatTargetPartitions(const std::string& fatPart,
 		                            const std::string& ntfsPart,
 		                            IsoType isoType) {
@@ -650,9 +624,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Mount FAT32 and (WindowsInstall only) NTFS target filesystems.
-		 */
+		/// Mount FAT32 and (WindowsInstall only) NTFS target filesystems.
 		bool mountTargetFilesystems(IsoType isoType,
 		                            const std::string& fatPart,
 		                            const std::string& ntfsPart,
@@ -712,9 +684,7 @@ namespace {
 
 	namespace telemetry {
 
-		/**
-		 * @brief Polls progress and speed into @p info.
-		 */
+		/// Polls progress and speed into @p info.
 		void runProgressMonitor(std::atomic<std::uint64_t>& accumulator,
 		                        std::atomic<bool>& active,
 		                        std::uint64_t totalBytes,
@@ -997,9 +967,7 @@ namespace {
 // Global scope: public entry points
 // ---------------------------------------------------------------------------
 
-/**
- * @brief Detects whether an ISO image is Windows installation media.
- */
+/// Detects whether an ISO image is Windows installation media.
 bool isWindowsIso(const std::string& isoPath) {
 
 	char tmpDir[] = "/tmp/iso_probe_XXXXXX";
@@ -1136,7 +1104,6 @@ static bool copyAndVerifyWindowsIso(
  * @param isoPath       Path to the source ISO file.
  * @param device        Target block device. Will be wiped.
  * @param progressIndex Index into progressData for live status reporting.
- * @param progressData  Shared progress tracking array.
  * @return true on successful writing and optional verification;
  *         false on error, truncated source, or cancellation.
  */

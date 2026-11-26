@@ -4,11 +4,8 @@ export module isocmd.core.cancellation;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- core/cancellation ----
 
 namespace GlobalState {
 

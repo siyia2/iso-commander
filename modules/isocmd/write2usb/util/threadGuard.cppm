@@ -4,15 +4,12 @@ export module isocmd.write2usb.util.threadGuard;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/util/threadGuard ----
 
 /**
  * @struct ThreadGuard
- * @brief RAII wrapper that stops and joins a background thread on destruction.
+ * @brief scope-bound wrapper that stops and joins a background thread on destruction.
  */
 struct ThreadGuard {
 	std::thread&       thread;

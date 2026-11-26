@@ -4,45 +4,25 @@ export module isocmd.threadpool.moveOnlyTask;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- threadpool/moveOnlyTask ----
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MoveOnlyTask
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * @class MoveOnlyTask
- * @brief A move-only, type-erased callable wrapper with small-buffer optimisation.
+ * @brief Stores a zero-argument job that can be moved but not copied.
  *
- * Stores any callable (function pointer, lambda, `std::bind` expression, …) that
- * accepts zero arguments and returns `void`.  The callable is held inside an
- * inline storage buffer of @ref StorageSize bytes when size, alignment and
- * non-throwing move construction permit; otherwise it
- * is heap-allocated via `std::unique_ptr` and the pointer itself lives in the
- * buffer.  Either way the external interface – move, call, destroy – is uniform
- * through a compile-time-generated VTable.
- *
- * Copy construction and copy assignment are explicitly deleted because the stored
- * callable may itself be non-copyable (e.g. a lambda that captures a
- * `std::unique_ptr`).
- *
- * ### Typical usage
- * @code
- *   MoveOnlyTask task = []{ std::puts("hello"); };
- *   task();   // prints "hello"
- *
- *   MoveOnlyTask moved = std::move(task);
- *   moved();  // still prints "hello"
- *   // task is now empty (operator bool() == false)
- * @endcode
+ * Jobs are stored directly in a small internal buffer when their size,
+ * alignment and non-throwing move constructor allow it. Larger or unsuitable
+ * jobs are allocated on the heap. A table of function pointers handles
+ * calling, moving and destroying the stored job without knowing its type.
+ * This also supports lambdas that own non-copyable objects such as unique_ptr.
  */
 class MoveOnlyTask {
 private:
-	/// @brief Maximum number of bytes that may be stored inline (without heap allocation).
+	/// Maximum number of bytes that may be stored inline (without heap allocation).
 	static constexpr std::size_t StorageSize = 120;
 
 	/**
@@ -59,10 +39,10 @@ private:
 		void (*move)(void*, void*) noexcept; ///< Move-construct from @p src into @p dst.
 	};
 
-	/// @brief Aligned raw storage for the callable (or a `unique_ptr` to it).
+	/// Aligned raw storage for the callable (or a `unique_ptr` to it).
 	alignas(std::max_align_t) std::byte storage[StorageSize];
 
-	/// @brief Active dispatch table, or `nullptr` when the task is empty.
+	/// Active dispatch table, or `nullptr` when the task is empty.
 	const VTable* vtable{nullptr};
 
 	// ── Inline-storage VTable implementations ────────────────────────────────
@@ -123,7 +103,7 @@ private:
 public:
 	// ── Constructors / destructor ─────────────────────────────────────────────
 
-	/// @brief Constructs an empty (null) task.
+	/// Constructs an empty (null) task.
 	MoveOnlyTask() noexcept = default;
 
 	template <typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, MoveOnlyTask>>>

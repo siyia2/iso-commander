@@ -79,17 +79,13 @@ static void scanDirectoryForImages(const fs::path& dir,
 
 // ─── Convert branch (c2iso) ─────────────────────────────────────────────────────
 
-/**
- * @brief Represents a conversion task with its target file path and backend kind.
- */
+/// Represents a conversion task with its target file path and backend kind.
 struct ConversionTask {
 	std::string path;
 	ImgKind kind;
 };
 
-/**
- * @brief Collects and validates disk image paths from command-line arguments and directories.
- */
+/// Collects and validates disk image paths from command-line arguments and directories.
 static bool collectAndValidateImages(const ParsedArgs& args,
                                       std::unordered_set<std::string>& images,
                                       bool& hasErrors) {
@@ -151,9 +147,7 @@ static bool collectAndValidateImages(const ParsedArgs& args,
 
 }
 
-/**
- * @brief Executes concurrent conversion workers across prepared tasks.
- */
+/// Executes concurrent conversion workers across prepared tasks.
 static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
                               std::atomic<std::size_t>& completedBytes,
                               std::atomic<std::size_t>& completedTasks,

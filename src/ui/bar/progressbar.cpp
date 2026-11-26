@@ -45,9 +45,7 @@ namespace {
 	// Progress-bar terminal input handling
 	// ============================================================================
 
-	/**
-	 * @brief Terminal progress bar with input blocking and themed output.
-	 */
+	/// Terminal progress bar with input blocking and themed output.
 
 	struct termios oldt {};
 	int oldf = 0;
@@ -165,9 +163,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Returns the byte length of the UTF-8 character starting at s[i].
-	 */
+	/// Returns the byte length of the UTF-8 character starting at s[i].
 	std::size_t utf8CharLength(const std::string& s, std::size_t i) {
 
 		std::size_t len = 1;
@@ -181,9 +177,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Clips one line to maxCols visible columns, keeping ANSI escapes intact.
-	 */
+	/// Clips one line to maxCols visible columns, keeping ANSI escapes intact.
 	std::string clipToWidth(const std::string& s, std::size_t maxCols) {
 
 		std::string out;
@@ -215,9 +209,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Clips every line of a multi-line text.
-	 */
+	/// Clips every line of a multi-line text.
 	std::string clipText(const std::string& text, std::size_t maxCols) {
 
 		std::string out;
@@ -240,9 +232,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Returns the configured processing bar width for an operation.
-	 */
+	/// Returns the configured processing bar width for an operation.
 	int processingBarWidthFor(const std::string& operation) {
 
 		if (operation.find("mount") != std::string::npos ||
@@ -515,9 +505,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Returns the widest bar the bytes/speed lines allow.
-		 */
+		/// Returns the widest bar the bytes/speed lines allow.
 		std::size_t bytesLinesMaxBar(std::size_t usable) const {
 
 			const std::size_t sizeWidth =
@@ -875,9 +863,7 @@ namespace {
 
 		}
 
-		/**
-		 * @brief Asks "Display verbose output?" and returns true for y/Y.
-		 */
+		/// Asks "Display verbose output?" and returns true for y/Y.
 		bool promptVerbose() {
 
 			std::cout << "\033[?25h" << std::flush;
@@ -1102,7 +1088,6 @@ namespace {
  * @param totalBytes     Total bytes to process.
  * @param completedTasks Atomic counter for successful tasks.
  * @param failedTasks    Atomic counter for failed tasks.
- * @param totalTasks     Total number of tasks.
  * @param isComplete     Atomic boolean signaling operation completion.
  * @param verbose        Pointer to boolean to store user preference for
  *                       verbose output.

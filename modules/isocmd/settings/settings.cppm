@@ -4,11 +4,8 @@ export module isocmd.settings.settings;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- config/settings ----
 
 /**
  * DATA STRUCTURES
@@ -37,9 +34,7 @@ struct ConfigEntry {
 	int  maxValue = 0;
 };
 
-/**
- * @brief Result of a single @c editSetting screen.
- */
+/// Result of a single @c editSetting screen.
 enum class EditNav { Advance, Updated, Next, Prev, GoTo, Abort, Handled };
 
 /**
@@ -79,9 +74,7 @@ bool isOneOf(const std::vector<std::string>& values, const std::string& v);
  */
 bool isNum(const std::string& v, int min, int max);
 
-/**
- * @brief Removes leading and trailing whitespace from a string.
- */
+/// Removes leading and trailing whitespace from a string.
 std::string trim(std::string str);
 
 /**
@@ -92,9 +85,7 @@ std::string trim(std::string str);
 ConfigEntry enumEntry(std::string key, std::string def, std::string comment,
                       std::string section, const std::vector<std::string>& values);
 
-/**
- * @brief Builds a numeric setting whose validator and editor range hint share [min, max].
- */
+/// Builds a numeric setting whose validator and editor range hint share [min, max].
 ConfigEntry numericEntry(std::string key, std::string def, std::string comment,
                          std::string section, int min, int max);
 

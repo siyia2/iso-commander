@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Scans saved folders in the background and publishes database refresh requests to the UI.
+
 import std;
 
 import isocmd.core.paths;

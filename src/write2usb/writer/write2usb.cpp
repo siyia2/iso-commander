@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Writes raw ISO images to USB devices and dispatches Windows media to the filesystem-based writer.
+
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -41,15 +43,11 @@ namespace {
 		static_assert(kMaxWriteChunk <= kDesiredBuffer,
 		              "write chunk larger than the buffer is pointless");
 
-		/// Pool of sector-aligned buffers. AlignedBuffer (write2usb.h) is non-movable,
+		/// Pool of sector-aligned buffers. AlignedBuffer owns its allocation and cannot be moved,
 		/// so the pool holds unique_ptrs.
 		using IsoBufferPool = std::vector<std::unique_ptr<AlignedBuffer>>;
 
-		/**
-		 * @brief RAII owner of a file descriptor.
-		 *
-		 * Closes the descriptor on scope exit if it is valid (!= -1). Not copyable.
-		 */
+		/// Owns an open file descriptor and closes it automatically on scope exit.
 		struct FdGuard {
 			int fd;
 
@@ -66,21 +64,11 @@ namespace {
 		};
 
 		/**
-		 * @brief Queries the sector size that O_DIRECT I/O must be aligned to.
+		 * @brief Determines the alignment required for raw direct I/O.
 		 *
-		 * Returns max(logical, physical) sector size, which is correct for 512n,
-		 * 512e and 4Kn drives. BLKPBSZGET is best-effort: if it fails, the logical
-		 * size is used.
-		 *
-		 * @par Utility
-		 * Drives store data in fixed-size blocks called sectors, usually 512 or 4096
-		 * bytes. Writing straight to the drive, bypassing the system's cache, only works
-		 * if the data is sent in whole sectors of exactly the right size. The size
-		 * differs between drives, so the program has to ask the drive.
-		 *
-		 * @param devFd      Open block-device descriptor.
-		 * @param[out] sectorSize Receives the effective sector size in bytes.
-		 * @return true on success; false if the logical size cannot be determined.
+		 * Direct I/O bypasses the page cache and requires aligned buffers and offsets.
+		 * Use the larger of the logical and physical sector sizes; if BLKPBSZGET
+		 * fails, use the logical size alone. Return false if that size is unavailable.
 		 */
 		bool queryEffectiveSectorSize(int devFd, int& sectorSize) {
 
@@ -414,17 +402,7 @@ namespace {
 
 			}
 
-			/**
-			 * @brief Publishes byte count and percentage to the UI.
-			 *
-			 * The percentage is capped at 99 until finishIfComplete() sets 100.
-			 *
-			 * @par Utility
-			 * Turns "bytes written" into the percentage shown on screen. It stops at 99 %
-			 * because the data is not safely on the drive until the final flush is done.
-			 *
-			 * @param currentWritten Cumulative bytes written, excluding tail padding.
-			 */
+			/// Publishes logical bytes written and caps progress at 99% until the final flush succeeds.
 			void publishProgress(std::uint64_t currentWritten) {
 
 				auto& info = progressData_[progressIndex_];
@@ -433,13 +411,7 @@ namespace {
 
 			}
 
-			/**
-			 * @brief Monitor-thread body: every tick, publishes progress and the smoothed speed.
-			 *
-			 * @par Utility
-			 * A separate worker updates the progress and speed, so the screen stays
-			 * current even while the drive is busy with a slow write.
-			 */
+			/// Updates progress and smoothed speed independently of blocking device writes.
 			void monitorLoop() {
 
 				write_telemetry::SpeedEstimator estimator(Clock::now(), write_telemetry::rawStallTimeoutSeconds);
@@ -461,14 +433,8 @@ namespace {
 			// ---- reader thread ---------------------------------------------------
 
 			/**
-			 * @brief Queues the end-of-stream marker for the writer.
-			 *
-			 * @par Utility
-			 * The writer waits for data, so it has to be told clearly when no more will
-			 * come, whether the file ended normally or reading failed. The failure note is
-			 * recorded together with this message so the writer cannot miss it.
-			 *
-			 * @param failed If true, also records that the reader failed.
+			 * @brief Wakes the writer with an end-of-stream marker.
+			 * Record a read failure under the same queue lock so the writer sees it.
 			 */
 			void pushSentinel(bool failed) {
 
@@ -481,13 +447,7 @@ namespace {
 
 			}
 
-			/**
-			 * @brief Hands a filled buffer to the writer and wakes it.
-			 *
-			 * @par Utility
-			 * Passes the buffer on and alerts the writer in one step, so a buffer is never
-			 * left waiting unnoticed.
-			 */
+			/// Enqueues a filled buffer and wakes the writer.
 			void pushFull(const Chunk& c) {
 
 				{
@@ -499,15 +459,8 @@ namespace {
 			}
 
 			/**
-			 * @brief Blocks until an empty buffer is available.
-			 *
-			 * @par Utility
-			 * The reader waits here until a buffer is free. That stops it from racing ahead
-			 * of the writer and using more and more memory. It can also be interrupted, so
-			 * the copy can always be stopped.
-			 *
-			 * @param[out] out The acquired buffer.
-			 * @return false if the reader was told to stop while waiting.
+			 * @brief Waits for a free buffer, keeping the reader from outrunning the writer.
+			 * @return False if the reader was stopped while waiting.
 			 */
 			bool acquireEmptyBuffer(Chunk& out) {
 
@@ -521,21 +474,12 @@ namespace {
 			}
 
 			/**
-			 * @brief Reads until @p toRead bytes are gathered, EOF, or an error.
-			 *
-			 * Retries on EINTR. A short read mid-file is not treated as EOF; only a
-			 * read() returning 0 is.
-			 *
-			 * @par Utility
-			 * A read can return less data than asked for even though more is coming, and
-			 * the drive wants full blocks. This keeps asking until the buffer is full or
-			 * the file really ends, and it tells a real end apart from an error.
-			 *
-			 * @param buf            Destination buffer.
-			 * @param toRead         Bytes wanted.
-			 * @param[out] got       Bytes actually read.
-			 * @param[out] reachedEof Set when read() returned 0.
-			 * @return false on a read error; true otherwise.
+			 * @brief Fills a buffer until the requested length, EOF or error.
+			 * Retry EINTR (an interrupted system call) and accumulate partial reads.
+			 * Only a zero-byte read means EOF.
+			 * @param[out] got Bytes actually read.
+			 * @param[out] reachedEof True if read() returned zero.
+			 * @return False on error or cancellation.
 			 */
 			bool readFully(char* buf, std::size_t toRead, std::size_t& got, bool& reachedEof) {
 
@@ -629,9 +573,7 @@ namespace {
 
 			}
 
-			/**
-			 * @brief Returns a written buffer to the empty queue and wakes the reader.
-			 */
+			/// Returns a written buffer to the empty queue and wakes the reader.
 			void recycle(char* buf) {
 
 				{

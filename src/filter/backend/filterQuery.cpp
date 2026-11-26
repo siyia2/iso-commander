@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Parses filter expressions and matches entries using case-aware substring search.
+
 #include <emmintrin.h>
 
 import std;

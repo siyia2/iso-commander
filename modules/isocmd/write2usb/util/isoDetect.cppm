@@ -6,11 +6,8 @@ module;
 
 export module isocmd.write2usb.util.isoDetect;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/util/isoDetect ----
 
 // C / System Headers
 
@@ -18,14 +15,10 @@ export extern "C++" {
 
 namespace iso_detect {
 
-	/**
-	 * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
-	 */
+	/// Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
 	bool isValidIso9660(int fd);
 
-	/**
-	 * @brief Probes an ISO image to detect Windows 10/11 installation media.
-	 */
+	/// Probes an ISO image to detect Windows 10/11 installation media.
 	bool isWindowsIsoInitialCheck(int fd, off_t fileSize);
 
 } // namespace iso_detect

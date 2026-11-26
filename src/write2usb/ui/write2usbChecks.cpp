@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Validates USB targets and ISO-to-device mappings before any destructive operation.
+
 import std;
 import isocmd.core.uiState;
 import isocmd.ui.display.themes;

@@ -4,15 +4,12 @@ export module isocmd.write2usb.util.alignedBuffer;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/util/alignedBuffer ----
 
 /**
  * @struct AlignedBuffer
- * @brief RAII wrapper for an aligned I/O buffer (std::aligned_alloc).
+ * @brief scope-bound wrapper for an aligned I/O buffer (std::aligned_alloc).
  */
 struct AlignedBuffer {
 	void*  ptr  = nullptr;

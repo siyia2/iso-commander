@@ -4,11 +4,8 @@ export module isocmd.ops.convert;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- ops/convert ----
 
 /**
  * @brief Shared dependencies and output collection for a conversion batch.

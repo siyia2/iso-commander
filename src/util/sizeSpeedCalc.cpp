@@ -327,9 +327,7 @@ static std::string extractLowerExtension(const std::string& filePath)
  */
 using FormatEstimatorFn = std::size_t (*)(const std::string& file);
 
-/**
- * @brief Mapping entry linking a file extension, active mode flag, and estimator.
- */
+/// Mapping entry linking a file extension, active mode flag, and estimator.
 struct FormatEstimatorRule {
 	std::string_view extension;   ///< Lowercase file extension without leading dot.
 	bool modeEnabled;             ///< Whether the associated conversion mode is active.

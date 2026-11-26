@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Handles interactive Readline hotkeys and turns them into commands for the active screen.
+
 #include <stdio.h>
 #include <readline/readline.h>
 
@@ -117,7 +119,7 @@ int exit_handler(int, int) {
  *
  * Sets @c rl_completion_display_matches_hook to @c customListingsFunction,
  * clears @c rl_attempted_completion_function, and rebinds the Up/Down arrows and
- * PageUp/PageDown to history navigation.
+ * Page Up/Page Down to history navigation.
  *
  * @note Ctrl+L (@c '\\f') and Tab (@c '\\t') are bound to
  *       @c prevent_readline_keybindings here, i.e. they are disabled. Use
@@ -137,9 +139,7 @@ void restoreReadline() {
 
 }
 
-/**
- * @brief Disables standard completion and history navigation for confirmation prompts.
- */
+/// Disables standard completion and history navigation for confirmation prompts.
 void disableReadlineForConfirmation() {
 
 	rl_bind_key('\f', prevent_readline_keybindings);
@@ -154,7 +154,7 @@ void disableReadlineForConfirmation() {
 /**
  * @brief Keybindings for the main File Selection interface.
  *
- * Binds PageUp/PageDown (navigation), `*` (toggle file-number display),
+ * Binds Page Up/Page Down (navigation), `*` (toggle file-number display),
  * `/` (filter), `P` (process), `C` (clear), `R` (refresh), `~` (toggle
  * list view), Esc (exit), and `?` (help).
  */
@@ -176,9 +176,7 @@ void setup_custom_keybindingsForSelect(void) {
 
 }
 
-/**
- * @brief Keybindings for the Settings Editor.
- */
+/// Keybindings for the Settings Editor.
 void setup_custom_keybindingsForSettingsEditor(void) {
 
 	rl_bind_keyseq("r", reset_handler);
@@ -187,9 +185,7 @@ void setup_custom_keybindingsForSettingsEditor(void) {
 
 }
 
-/**
- * @brief Keybindings for the Search Prompts.
- */
+/// Keybindings for the Search Prompts.
 void setup_custom_keybindingsForSearches(void) {
 
 	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
@@ -200,9 +196,7 @@ void setup_custom_keybindingsForSearches(void) {
 
 }
 
-/**
- * @brief Restores all bindings used in the Selection UI to defaults.
- */
+/// Restores all bindings used in the Selection UI to defaults.
 void reset_custom_keybindingsForSelect(void) {
 
 	// Restore navigation to history
@@ -263,9 +257,7 @@ void reset_custom_keybindingsForRm(void) {
 
 }
 
-/**
- * @brief Restores bindings used in the Settings Editor.
- */
+/// Restores bindings used in the Settings Editor.
 void reset_custom_keybindingsForSettingsEditor(void) {
 
 	rl_bind_keyseq("r", rl_insert);

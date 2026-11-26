@@ -15,7 +15,6 @@ import isocmd.write2usb.util.drainingState;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
 
-// Constructor
 ProgressInfo::ProgressInfo(std::string filename, std::string device, std::string totalSize,
              std::string sourcePath)
     : filename(std::move(filename)),
@@ -23,7 +22,6 @@ ProgressInfo::ProgressInfo(std::string filename, std::string device, std::string
       totalSize(std::move(totalSize)),
       sourcePath(std::move(sourcePath)) {}
 
-// Move Constructor
 ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
     : filename(std::move(other.filename)),
       device(std::move(other.device)),
@@ -42,7 +40,6 @@ ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
       speed(other.speed.load()),
       verificationSpeed(other.verificationSpeed.load()) {}
 
-// Move Assignment
 ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
 
 	if (this != &other) {
@@ -76,36 +73,13 @@ namespace fs = std::filesystem;
 namespace WriteExecution {
 
 	/**
-	 * @brief Builds the per-task ProgressInfo vector from (IsoInfo, device)
-	 * pairs, in the order they would appear after a stable, case-insensitive
-	 * natural sort by ISO filename (device path as tie-break).
+	 * @brief Builds progress rows in stable, case-insensitive natural filename order.
 	 *
-	 * The caller's vector is not modified or copied. A vector of indices into
-	 * @p validPairsIn is stable-sorted instead, and the pairs are visited in
-	 * that order; only the four fields ProgressInfo carries (filename, device,
-	 * sizeStr, sourcePath) are copied, directly into the progress vector.
-	 *
-	 * The progress vector is reserved to exactly @p validPairsIn.size() before
-	 * filling, so its backing storage never reallocates after construction
-	 * (ProgressInfo holds atomics and is therefore non-movable — the reserve is
-	 * load-bearing, not just an optimisation).
-	 *
-	 * The returned shared_ptr is captured by every pooled write task and by the
-	 * cancellation drain, so the entries outlive this function whenever a task
-	 * or drain thread still needs them.
-	 *
-	 * @par Ordering
-	 * Primary key: IsoInfo::filename via naturalCompare (case-insensitive,
-	 * numeric-aware: "archlinux-9.iso" before "archlinux-10.iso"). Secondary
-	 * key: the device path under ordinary std::string ordering. Equal
-	 * (filename, device) keys keep their input order.
-	 *
-	 * @param validPairsIn Validated (IsoInfo, device) pairs targeted for writing.
-	 *                     Not modified.
-	 * @return A shared pointer to a new vector of ProgressInfo entries, one per
-	 *         input pair, in stable sorted order.
-	 *
-	 * @see ::performWriteOperation
+	 * Sort indices instead of copying or rearranging the validated input pairs.
+	 * Device paths break filename ties. Reserve storage before filling the vector
+	 * so progress entries stay at fixed addresses during the operation.
+	 * The shared pointer keeps the rows alive for write tasks and cancellation
+	 * drain threads that may outlive this function.
 	 */
 	std::shared_ptr<std::vector<ProgressInfo>>
 	prepareWriteData(const std::vector<std::pair<IsoInfo, std::string>>& validPairsIn) {

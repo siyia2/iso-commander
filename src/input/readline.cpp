@@ -53,9 +53,7 @@ namespace SettingsEditorRepaint {
 static int current_page = 0;
 static char last_common_prefix[1024] = "";
 
-/**
- * @brief List of available special commands for completion.
- */
+/// List of available special commands for completion.
 const char* special_cmds[] = {
 	"!clr", "!clr_paths", "!clr_filter", "*stats",
 	NULL
@@ -128,9 +126,7 @@ static void install_esc_hijack() {
 
 }
 
-/**
- * @brief Rebinds Esc back to @c exit_handler.
- */
+/// Rebinds Esc back to @c exit_handler.
 static void restore_esc_default() {
 
 	rl_bind_keyseq("\\e", exit_handler);
@@ -974,7 +970,7 @@ static char* setting_value_generator(const char* text, int state) {
  * clears the list, second Esc exits) all behave exactly like the search prompt.
  *
  * @note The candidate list @c g_activeSettingValues is populated/cleared by
- *       the Settings Editor (see @c editSetting / the RAII guard in
+ *       the Settings Editor (see @c editSetting / the scope guard in
  *       settingsEditor.cpp); this function only consumes it.
  */
 char** setting_value_completion_entry(const char* text, int /*start*/, int /*end*/) {

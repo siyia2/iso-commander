@@ -4,17 +4,12 @@ export module isocmd.proc.process;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- proc/process ----
 
 struct CpMvPromptContext;
 
-/**
- * @brief Input options and operation mode flags for an ISO file operation batch.
- */
+/// Input options and operation mode flags for an ISO file operation batch.
 struct FileOperationOptions {
 	const std::vector<std::string>& isoFiles; ///< Source ISO file paths to operate on.
 	std::string userDestDir;                  ///< Raw destination directory string from user input.
@@ -24,9 +19,7 @@ struct FileOperationOptions {
 	bool overwriteExisting = false;           ///< True to overwrite existing destination files.
 };
 
-/**
- * @brief Shared progress counters and recorded destination paths for an ISO operation.
- */
+/// Shared progress counters and recorded destination paths for an ISO operation.
 struct FileOperationProgress {
 	std::atomic<std::size_t>& completedBytes;          ///< Total bytes processed across operations.
 	std::atomic<std::size_t>& completedTasks;          ///< Count of completed tasks.

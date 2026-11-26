@@ -328,9 +328,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Appends a mounted-ISO entry, optionally including mount point and hash components.
-	 */
+	/// Appends a mounted-ISO entry, optionally including mount point and hash components.
 	void appendMountedModeBody(std::string& output, const std::string& item, const RowConfig& cfg)
 	{
 
@@ -517,9 +515,7 @@ namespace {
 		std::size_t maxDigits;
 	};
 
-	/**
-	 * @brief Calculates pagination boundaries based on item count and global page constraints.
-	 */
+	/// Calculates pagination boundaries based on item count and global page constraints.
 	PaginationInfo computePagination(const StringListView& items, std::size_t currentPage) {
 
 		const std::size_t totalItems = items.size();
@@ -569,9 +565,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Computes original index mappings and padding digit bounds when a filter is active.
-	 */
+	/// Computes original index mappings and padding digit bounds when a filter is active.
 	PrintFilterContext computePrintFilterContext(std::size_t startIndex, std::size_t endIndex) {
 
 		const auto* origIdx = filteringStack.empty() ? nullptr : &filteringStack.back().originalIndices;

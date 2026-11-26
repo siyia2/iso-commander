@@ -4,11 +4,8 @@ export module isocmd.filter.filter;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- filter/filter ----
 
 // Forward declaration of shared state (needed for live main-list rendering)
 struct RefreshState;
@@ -18,18 +15,11 @@ struct RefreshState;
  */
 
 /**
- * @brief A single search term within a query.
+ * @brief One search term, optionally negated with a leading unescaped '!'.
  *
- * Matching is "smart case" per term: if @c original contains an uppercase
- * letter, @c isCaseSensitive is true and the term is matched against the
- * entry's original text. Otherwise matching is case-insensitive and the
- * lowercased form (@c lower) is matched against the entry's lowercased text.
- * @c lower is populated only for case-insensitive terms.
- *
- * A negated term (leading unescaped '!' in the query, e.g. "!boot") inverts
- * the match: the term is satisfied when it does NOT occur in the entry.
- * @c original and @c lower hold the term text without the '!' prefix, and
- * smart-case applies to negated terms the same way.
+ * Matching is case-sensitive if the term contains an uppercase letter;
+ * otherwise the lowercase term is compared with lowercase candidate text.
+ * Negation requires the term to be absent. Stored text excludes the '!'.
  */
 struct QueryToken {
 	std::string original;            ///< Term text as typed (escapes resolved, '!' prefix removed).
@@ -38,9 +28,7 @@ struct QueryToken {
 	bool negated = false;            ///< True if the term must NOT occur in the entry.
 };
 
-/**
- * @brief A single level of filter state, enabling nested (stacked) filtering.
- */
+/// The current committed filter and its source-list indices.
 struct FilteringState {
 	std::vector<std::size_t> originalIndices;
 	std::string query;
@@ -48,9 +36,7 @@ struct FilteringState {
 	bool namesOnly = false;
 };
 
-/**
- * @brief All mutable state needed to perform a single filter operation.
- */
+/// All mutable state needed to perform a single filter operation.
 struct FilterContext {
 	std::vector<std::string>& files;
 	bool& isFiltered;
@@ -74,24 +60,16 @@ struct FilterContext {
 	std::shared_ptr<RefreshState> state = nullptr;
 };
 
-/**
- * @brief Translates a local filtered-list index into its global list index.
- */
+/// Translates a local filtered-list index into its global list index.
 std::size_t resolveGlobalIndex(std::size_t localIdx);
 
-/**
- * @brief Extracts the basename-based unmount key from a mounted ISO path.
- */
+/// Extracts the basename-based unmount key from a mounted ISO path.
 std::string extractUnmountKey(const std::string& path);
 
-/**
- * @brief Applies and commits a filter query to the supplied filter context.
- */
+/// Applies and commits a filter query to the supplied filter context.
 bool applyFilterCore(const std::string& searchString, FilterContext& ctx);
 
-/**
- * @brief Configuration for runSharedFilterFlow, describing one filter operation.
- */
+/// Configuration for runSharedFilterFlow, describing one filter operation.
 struct FilterCallConfig {
 	std::vector<std::string>* files = nullptr;
 	const std::vector<std::string>* sourceOverride = nullptr;
@@ -138,9 +116,7 @@ struct FilterEntryContext {
  * GLOBAL STATE
  */
 
-/**
- * @brief Stack of all active filter levels, in LIFO order.
- */
+/// Stores the current committed filter (zero or one entry).
 extern std::vector<FilteringState> filteringStack;
 
 /**
@@ -172,7 +148,7 @@ using QueryGroup = std::vector<QueryToken>;
 /// True if @p query ends in an unpaired backslash (a dangling escape).
 bool hasDanglingBackslash(const std::string& query);
 
-/// Parses a query into OR-ed groups of AND-ed terms (grammar documented in filteringQuery.cpp).
+/// Parses a query into OR-ed groups of AND-ed terms (grammar documented in filterQuery.cpp).
 std::vector<QueryGroup> buildQueryGroups(const std::string& query,
                                          bool* trailingEmptyGroup = nullptr);
 
@@ -191,8 +167,8 @@ std::vector<std::size_t> filterFilesIndicesSubset(
  * @brief Refreshes an active filter after a list reload, preserving results.
  *
  * Entries already shown are kept if they still exist; newly discovered ISOs
- * are tested against every filter level, each using the text mode it was
- * committed with. Clears the filter if nothing remains.
+ * are tested using the committed query and its saved text mode.
+ * Clears the filter if nothing remains.
  */
 void refreshFilterKeepingResults(
     const std::vector<std::string>& newGlobal,
@@ -201,9 +177,7 @@ void refreshFilterKeepingResults(
     std::vector<std::string>& filteredFiles,
     bool& isFiltered);
 
-/**
- * @brief Rebuilds the source indices for the current filtered results.
- */
+/// Rebuilds the source indices for the current filtered results.
 void refreshFilteredSourceIndices(
     const std::vector<std::string>& globalIsoFileList,
     std::vector<FilteringState>& filteringStack,
@@ -230,14 +204,10 @@ void configureLivePreview(
  */
 bool repaintLivePreviewOnResizeIfConfigured();
 
-/**
- * @brief Resets incremental matching and scrolling state before a prompt read.
- */
+/// Resets incremental matching and scrolling state before a prompt read.
 void resetLivePreviewIteration();
 
-/**
- * @brief Marks the current live-preview session as inactive.
- */
+/// Marks the current live-preview session as inactive.
 void deactivateLivePreview();
 
 /**
@@ -251,7 +221,7 @@ bool livePreviewWasRepainted();
 /**
  * @brief Manages Readline hooks and keybindings for a live-preview session.
  *
- * Installs the preview redisplay hook and PageUp/PageDown bindings on
+ * Installs the preview redisplay hook and Page Up/Page Down bindings on
  * construction, then restores the original Readline configuration and
  * resets preview state on destruction.
  */

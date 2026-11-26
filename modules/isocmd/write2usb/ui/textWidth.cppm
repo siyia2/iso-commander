@@ -4,11 +4,8 @@ export module isocmd.write2usb.ui.textWidth;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/ui/textWidth ----
 
 // --- UTF-8 / ANSI-escape width helpers (defined in src/write2usb/ui/textWidth.cpp) ---
 

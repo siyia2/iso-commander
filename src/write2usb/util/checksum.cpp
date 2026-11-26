@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Reads data back from a target and compares CRC-64 checksums with the original data.
+
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>

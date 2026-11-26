@@ -38,9 +38,7 @@ void displayErrors();
 
 namespace MappingPrompt {
 
-	/**
-	 * @brief Represents summary information for a physical removable storage device.
-	 */
+	/// Represents summary information for a physical removable storage device.
 	struct DeviceInfo {
 		std::string path;     ///< Device node path (e.g., /dev/sdb).
 		std::uint64_t size;        ///< Total storage capacity in bytes.
@@ -50,9 +48,7 @@ namespace MappingPrompt {
 		bool error;           ///< True if an error occurred while probing the device.
 	};
 
-	/**
-	 * @brief Represents a single row in the pre-burn warning confirmation table.
-	 */
+	/// Represents a single row in the pre-burn warning confirmation table.
 	struct WarnRow {
 		std::string device;       ///< Target device path.
 		std::string driveName;    ///< Drive model/name description.
@@ -303,7 +299,6 @@ namespace MappingPrompt {
 	/**
 	 * @brief Renders error messages with the specified prompt, main input string, and theme styling.
 	 *
-	 * @param devicePrompt The current device input prompt string.
 	 * @param mainInputString The raw input string entered by the user.
 	 * @param errors Vector of error messages to display.
 	 * @param wt The current write theme configuration.
@@ -330,7 +325,6 @@ namespace MappingPrompt {
 	/**
 	 * @brief Confirms valid ISO-to-device mappings.
 	 *
-	 * @param devicePrompt    The current device input prompt string.
 	 * @param mainInputString The raw input string entered by the user.
 	 * @param warnRows        Warning rows generated for the valid pairs.
 	 * @param wt              The current write theme configuration.
@@ -440,9 +434,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Clears any temporary Readline startup hook installed for input prefilling.
-	 */
+	/// Clears any temporary Readline startup hook installed for input prefilling.
 	void clearPrefillStartupHook()
 	{
 
@@ -508,9 +500,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Finalizes confirmed ISO-to-device mappings and prepares signal state for writing.
-	 */
+	/// Finalizes confirmed ISO-to-device mappings and prepares signal state for writing.
 	void finalizeConfirmedMappings()
 	{
 

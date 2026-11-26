@@ -4,22 +4,14 @@ export module isocmd.write2usb.windows.windowsWriter;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/windows/windowsWriter ----
 
 // ------------------- Forward declarations -------------------
 
 /**
- * @brief Per-device progress slot (progress, speed, bytes written, and
- *        completed/failed flags).
- *
- * Only forward-declared here so this header stays independent of include
- * order. The full definition lives elsewhere in the project (e.g.
- * write2usbUI.h or state.h); any translation unit that actually accesses
- * its members must include that header.
+ * @brief Per-device progress state; defined in isocmd.write2usb.util.writeTypes.
+ * Import that module when accessing its members.
  */
 struct ProgressInfo;
 

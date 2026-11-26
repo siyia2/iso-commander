@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Updates the displayed filter results as the user types, without committing the filter.
+
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -48,9 +50,7 @@ namespace {
 		bool identity = false;
 	};
 
-	/**
-	 * @brief Bounded [start, end) window slice over a list of size @c total.
-	 */
+	/// Bounded [start, end) window slice over a list of size @c total.
 	struct WindowSlice {
 		std::size_t start = 0;
 		std::size_t end = 0;
@@ -593,9 +593,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Determines whether the preview status line should be displayed.
-	 */
+	/// Determines whether the preview status line should be displayed.
 	bool shouldShowPreviewStatus(std::size_t totalMatches, std::size_t sourceSize)
 	{
 
@@ -603,9 +601,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Calculates additional rows consumed by the preview status line.
-	 */
+	/// Calculates additional rows consumed by the preview status line.
 	std::size_t calculateStatusWrapExtra(
 	    std::size_t totalMatches,
 	    std::size_t termCols,
@@ -639,9 +635,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Estimates additional rows required by wrapped preview item labels.
-	 */
+	/// Estimates additional rows required by wrapped preview item labels.
 	std::size_t calculateItemWrapAdjustment(
 	    const std::vector<std::string>& displayLabels,
 	    const LivePreviewResult& preview,
@@ -739,18 +733,14 @@ namespace {
 
 	// ─── Preview Rendering ───────────────────────────────────────────────────────
 
-	/**
-	 * @brief Holds the data required for a windowed preview view.
-	 */
+	/// Holds the data required for a windowed preview view.
 	struct PreviewWindowData {
 		std::vector<std::size_t> local;
 		std::vector<std::size_t> global;
 		bool useWindowedView = false;
 	};
 
-	/**
-	 * @brief Builds the local and global index mappings for a preview window.
-	 */
+	/// Builds the local and global index mappings for a preview window.
 	PreviewWindowData buildPreviewWindowData(
 	    const LivePreviewResult& preview,
 	    const WindowSlice& win,
@@ -790,9 +780,7 @@ namespace {
 
 	}
 
-	/**
-	 * @brief Prints preview navigation hints when scrolling is available.
-	 */
+	/// Prints preview navigation hints when scrolling is available.
 	void renderPreviewNavigationHints(
 	    const WindowSlice& win,
 	    std::size_t totalMatches,
@@ -1206,9 +1194,7 @@ void resetLivePreviewIteration()
 
 }
 
-/**
- * @brief Marks the live-preview session inactive after readline() returns.
- */
+/// Marks the live-preview session inactive after readline() returns.
 void deactivateLivePreview()
 {
 
@@ -1223,7 +1209,7 @@ void deactivateLivePreview()
  * Destruction restores history navigation bindings, resets preview state,
  * and restores the default Readline redisplay callback.
  *
- * PageUp/PageDown are bound to previous/next history by default; the
+ * Page Up/Page Down are bound to previous/next history by default; the
  * constructor rebinds them to preview scrolling, and the destructor restores
  * those named functions and sets @c rl_redisplay_function back to
  * @c rl_redisplay.

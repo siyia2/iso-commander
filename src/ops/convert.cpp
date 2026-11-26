@@ -46,9 +46,7 @@ void getRealUserId(uid_t& real_uid, gid_t& real_gid, std::string& real_username,
 
 namespace {
 
-	/**
-	 * @brief Outcome of validating a source image file before conversion.
-	 */
+	/// Outcome of validating a source image file before conversion.
 	enum class ValidationResult {
 		Valid,    ///< File exists and can be opened for reading.
 		Missing,  ///< No filesystem entry at the requested path.
@@ -64,7 +62,7 @@ namespace {
 	 *
 	 * Kept in an anonymous namespace because it depends on project globals
 	 * (`verboseSets`, `GlobalMutexes`, `GlobalState`) and would otherwise
-	 * leak into the public `convert.h` header.
+	 * leak into the public conversion module interface.
 	 *
 	 * @warning The atomic-counter pointers and `outPathsMutex` must outlive
 	 *          this context. The batch driver guarantees that by holding them

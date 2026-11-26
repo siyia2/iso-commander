@@ -42,9 +42,7 @@ void enable_ctrl_d() {
 
 }
 
-/**
- * @brief Discards any unread data in the terminal input buffer.
- */
+/// Discards any unread data in the terminal input buffer.
 void flushStdin() {
 
 	tcflush(STDIN_FILENO, TCIFLUSH);
@@ -66,9 +64,7 @@ void disableInput() {
 
 }
 
-/**
- * @brief Restores standard canonical input and echoing.
- */
+/// Restores standard canonical input and echoing.
 void restoreInput() {
 
 	struct termios term;

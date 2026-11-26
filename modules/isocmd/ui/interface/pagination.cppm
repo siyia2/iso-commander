@@ -6,9 +6,7 @@ import std;
 
 export extern "C++" {
 
-/**
- * @brief Renders a paginated list and captures one line of user input.
- */
+/// Renders a paginated list and captures one line of user input.
 std::string handlePaginatedDisplay(
 	const std::vector<std::string>& entries,
 	const std::string& promptPrefix,

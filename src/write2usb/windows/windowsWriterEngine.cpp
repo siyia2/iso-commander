@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Copies files to prepared Windows USB filesystems using buffered or direct I/O.
+
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>

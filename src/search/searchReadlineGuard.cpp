@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Restores Readline session state when a directory-search prompt ends.
+
 #include <stdio.h>
 #include <readline/history.h>
 #include <readline/readline.h>

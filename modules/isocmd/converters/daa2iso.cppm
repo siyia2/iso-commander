@@ -6,11 +6,9 @@ module;
 
 export module isocmd.converters.daa2iso;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- converters/daa2iso ----
 /*
     Copyright 2007,2008,2009 Luigi Auriemma
 
@@ -40,9 +38,7 @@ typedef uint64_t u64;
 // ── DAA image type constants ───────────────────────────────────────────────
 enum { TYPE_DAA, TYPE_GBI, TYPE_NONE };
 
-/**
- * @brief DAA file header structure (packed to 4 bytes)
- */
+/// DAA file header structure (packed to 4 bytes)
 #pragma pack(4)
 struct daa_t {
 	uint8_t  sign[16];    /**< File signature ("DAA" or "GBI")          */
@@ -59,18 +55,14 @@ struct daa_t {
 };
 #pragma pack()
 
-/**
- * @brief DAA per-chunk index entry (packed to 1 byte, no padding)
- */
+/// DAA per-chunk index entry (packed to 1 byte, no padding)
 #pragma pack(1)
 struct daa_data_t {
 	uint8_t n1, n2, n3;
 };
 #pragma pack()
 
-/**
- * @brief Swap byte order of a 32-bit integer if big-endian
- */
+/// Swap byte order of a 32-bit integer if big-endian
 inline void swap32_if_be(uint32_t *n, int endian) {
 
 	if (!endian) return;
@@ -80,9 +72,7 @@ inline void swap32_if_be(uint32_t *n, int endian) {
 
 }
 
-/**
- * @brief Swap byte order of a 64-bit integer if big-endian
- */
+/// Swap byte order of a 64-bit integer if big-endian
 inline void swap64_if_be(uint64_t *n, int endian) {
 
 	if (!endian) return;
@@ -98,9 +88,7 @@ inline void swap64_if_be(uint64_t *n, int endian) {
 
 }
 
-/**
- * @brief Byte-swap all multi-byte fields of a daa_t header
- */
+/// Byte-swap all multi-byte fields of a daa_t header
 inline void swap_daa_if_be(daa_t *d, int endian) {
 
 	if (!endian) return;

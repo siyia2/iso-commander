@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Resolves selected disc images and dispatches conversion jobs with shared progress state.
+
 #include <signal.h>
 
 import std;

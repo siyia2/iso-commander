@@ -2,13 +2,11 @@
 
 export module isocmd.write2usb.util.terminalGuards;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// ---- write2usb/util/terminalGuards ----
 /**
- * @brief RAII guard for the readline/terminal state that needs to be set up
+ * @brief scope guard for the readline/terminal state that needs to be set up
  *        at the start of every loop iteration and torn down on every exit
  *        path (return, continue, or exception).
  */
@@ -36,16 +34,14 @@ struct TerminalStateGuard {
 };
 
 /**
- * @brief RAII guard for the brief window where readline is reconfigured to
+ * @brief scope guard for the brief window where readline is reconfigured to
  *        ask the y/n confirmation question.
  *
  * Restores the *outer* (TerminalStateGuard) readline configuration on
  * exit, regardless of how this scope is left.
  */
 struct ConfirmationModeGuard {
-	/**
-	 * @brief Switches readline into confirmation-prompt mode.
-	 */
+	/// Switches readline into confirmation-prompt mode.
 	ConfirmationModeGuard();
 
 	/**

@@ -4,27 +4,20 @@ export module isocmd.write2usb.windows.windowsWriterEngine;
 
 import std;
 
-// extern "C++" keeps these declarations attached to the global module, so the
-// existing .cpp files keep defining them unchanged and symbol names stay the same.
+// C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
-
-// ---- write2usb/windows/windowsWriterEngine ----
 
 // ------------------- Internal Windows writer implementation -------------------
 
 namespace write2usb_detail {
 
-	/**
-	 * @brief Layout variants that drive partitioning and copy strategy.
-	 */
+	/// Layout variants that drive partitioning and copy strategy.
 	enum class IsoType {
 		WindowsInstall,
 		FatOnly
 	};
 
-	/**
-	 * @brief A single file or directory discovered during the ISO tree walk.
-	 */
+	/// A single file or directory discovered during the ISO tree walk.
 	struct IsoCopyEntry {
 		std::filesystem::path src;
 		std::filesystem::path dst;

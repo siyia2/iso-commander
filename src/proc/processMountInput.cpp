@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Resolves selected rows for mounting or unmounting and dispatches the operation.
+
 #include <signal.h>
 
 import std;
@@ -17,9 +19,7 @@ import isocmd.ui.display.themes;
 
 namespace fs = std::filesystem;
 
-/**
- * @brief High-level processing functions for mounting and unmounting ISOs.
- */
+/// High-level processing functions for mounting and unmounting ISOs.
 
 /**
  * @brief Resolves raw user input into a list of 1-based file indices to process.
