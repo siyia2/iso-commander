@@ -15,7 +15,7 @@ TERM=xterm timeout -k 5s 95s "$binary" --progress-test
 
 # Each workflow has its own HOME/database/config, even when run after another.
 workflow_status=0
-for workflow in settings import conversion; do
+for workflow in settings theme import conversion; do
     if (
         setup_sandbox || exit 1
         TERM=xterm timeout -k 5s 190s "$binary" "--$workflow-workflow-test" "$menu"

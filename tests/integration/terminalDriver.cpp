@@ -326,6 +326,156 @@ namespace isocmd_tests {
 
 	}
 
+	namespace {
+		constexpr std::string_view selectPrompt="? for help: ";
+
+		std::string workflowStep(TerminalSession& term, std::string_view input, std::string_view prompt) {
+
+			const auto start=term.output.size(); term.send(input);
+			return listFrame(term,start,term.waitFor(prompt,start));
+
+		}
+
+		void checkWorkflowPage(TerminalSession& term, std::string_view input, std::string_view title,
+		                       std::string_view first, std::string_view absent) {
+
+			const auto frame=workflowStep(term, input,selectPrompt);
+			CHECK(has(frame,title) && has(frame,first) && !has(frame,absent));
+
+		}
+
+		std::string workflowPreview(TerminalSession& term, std::string_view key, std::string_view query) {
+
+			const auto start=term.output.size(); term.send(key);
+			return queryFrame(term,start,query);
+
+		}
+
+		void checkWorkflowPagination(TerminalSession& term) {
+
+			term.waitFor("Enter choice [1-5]: ",term.waitFor("Main Menu"));
+			workflowStep(term, "1\n","Enter choice [1-6]: ");
+			checkWorkflowPage(term, "5\n","Page 1/4","groupalpha1.iso","groupalpha3.iso");
+			checkWorkflowPage(term, "\x1b[5~","Page 1/4","groupalpha1.iso","groupalpha3.iso");
+			checkWorkflowPage(term, "\x1b[6~","Page 2/4","groupalpha3.iso","groupalpha1.iso");
+			checkWorkflowPage(term, "g4\n","Page 4/4","groupbeta1.iso","groupalpha1.iso");
+			checkWorkflowPage(term, "\x1b[6~","Page 4/4","groupbeta1.iso","groupalpha1.iso");
+			checkWorkflowPage(term, "g1\n","Page 1/4","groupalpha1.iso","groupbeta1.iso");
+
+		}
+
+		void checkWorkflowFilterPreview(TerminalSession& term) {
+
+			// Stage a selection before preview; cancellation must retain it.
+			CHECK(has(workflowStep(term, "1;\n",selectPrompt),"Pending Indices"));
+			workflowStep(term, "/","Filter: ");
+			auto begin=term.output.size(); term.send("groupalpha");
+			auto frame=queryFrame(term,begin,"groupalpha");
+			CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
+			frame=workflowPreview(term, "\x1b[6~","groupalpha");
+			CHECK(has(frame,"groupalpha3.iso") && !has(frame,"groupalpha1.iso"));
+			frame=workflowPreview(term, "\x1b[6~","groupalpha"); CHECK(has(frame,"groupalpha5.iso"));
+			frame=workflowPreview(term, "\x1b[6~","groupalpha"); CHECK(has(frame,"groupalpha5.iso"));
+			frame=workflowPreview(term, "\x1b[5~","groupalpha"); CHECK(has(frame,"groupalpha3.iso"));
+			begin=term.output.size(); term.resize(18,95);
+			frame=queryFrame(term,begin,"groupalpha"); CHECK(has(frame,"groupalpha3.iso"));
+			// Changing query resets scroll; widening must use original source.
+			frame=workflowPreview(term, "\x15groupbeta","groupbeta");
+			CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
+			frame=workflowPreview(term, "\x15zzzz-no-fixture","zzzz-no-fixture");
+			CHECK(has(frame,"No filter results"));
+			// No-match Enter must leave us in the filter prompt.
+			workflowStep(term, "\n","Filter: ");
+			CHECK(has(workflowStep(term, "\x1b",selectPrompt),"Pending Indices"));
+
+		}
+
+		void checkWorkflowCommittedFilters(TerminalSession& term) {
+
+			// Commit a non-overlapping filter, then replace it from the source.
+			workflowStep(term, "/","Filter: "); auto frame=workflowPreview(term, "groupbeta","groupbeta");
+			CHECK(has(frame,"groupbeta1.iso"));
+			frame=workflowStep(term, "\n",selectPrompt); CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
+			workflowStep(term, "/","Filter: "); frame=workflowPreview(term, "groupalpha","groupalpha");
+			CHECK(has(frame,"groupalpha1.iso"));
+			frame=workflowStep(term, "\n",selectPrompt); CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
+			CHECK(has(frame,"Pending Indices"));
+			checkWorkflowPage(term, "\x1b[6~","Page 2/3","groupalpha3.iso","groupalpha1.iso");
+			workflowStep(term, "\x1b",selectPrompt); // clear committed filter
+
+		}
+
+		void checkWorkflowCopy(TerminalSession& term, const fs::path& source, const fs::path& dest) {
+
+			// Execute the original staged path, regardless of filter history.
+			workflowStep(term, "P","into, ? for help:");
+			auto begin=term.output.size(); term.send(dest.string()+"\n");
+			auto end=term.waitFor("verbose output? (y/n): ",begin);
+			CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
+			begin=term.output.size(); term.resize(20,110);
+			end=term.waitFor("verbose output? (y/n): ",begin);
+			CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
+			auto frame=workflowStep(term, "y\n","to continue...");
+			CHECK(has(frame,"Copied:") && has(frame,"groupalpha1.iso"));
+			CHECK(!has(frame,"groupalpha2.iso"));
+			begin=term.output.size(); term.resize(24,120);
+			end=term.waitFor("to continue...",begin);
+			frame=listFrame(term,begin,end);
+			CHECK(has(frame,"Copied:") && has(frame,"groupalpha1.iso"));
+			CHECK(readFile(dest/"groupalpha1.iso")==readFile(source/"groupalpha1.iso"));
+			frame=workflowStep(term, "\n",selectPrompt);
+			CHECK(!has(frame,"Copied:"));
+
+		}
+
+		void checkWorkflowDelete(TerminalSession& term, const fs::path& source) {
+
+			// Return to menu; exercise delete rejection followed by confirmation.
+			workflowStep(term, "\x1b","Enter choice [1-6]: ");
+			workflowStep(term, "3\n",selectPrompt);
+			workflowStep(term, "1\n","Proceed? (y/n): ");
+			workflowStep(term, "n\n",selectPrompt); CHECK(fs::exists(source/"groupalpha1.iso"));
+			workflowStep(term, "1\n","Proceed? (y/n): ");
+			const auto begin=term.output.size(); term.send("y\n"); term.waitFor("verbose output? (y/n): ",begin);
+			auto frame=workflowStep(term, "Y\n","to continue...");
+			CHECK(has(frame,"Deleted:") && has(frame,"groupalpha1.iso") && !has(frame,"Copied:"));
+			frame=workflowStep(term, "\x1b",selectPrompt);
+			CHECK(!has(frame,"Deleted:") && !fs::exists(source/"groupalpha1.iso"));
+			CHECK(fs::exists(source/"groupalpha2.iso"));
+
+		}
+
+		void checkWorkflowMove(TerminalSession& term, const fs::path& source, const fs::path& dest) {
+
+			// The source directory sorts before the destination; the deleted
+			// first row is now replaced by alpha2. Move it to the fixture dir.
+			workflowStep(term, "\x1b","Enter choice [1-6]: ");
+			auto frame=workflowStep(term, "4\n",selectPrompt); CHECK(has(frame,"groupalpha2.iso"));
+			workflowStep(term, "1\n","into, ? for help:");
+			const auto begin=term.output.size(); term.send(dest.string()+"\n");
+			term.waitFor("verbose output? (y/n): ",begin);
+			frame=workflowStep(term, "y\n","to continue...");
+			CHECK(has(frame,"Moved:") && has(frame,"groupalpha2.iso") && !has(frame,"Deleted:") && !has(frame,"Copied:"));
+			frame=workflowStep(term, "\x04",selectPrompt);
+			CHECK(!has(frame,"Moved:") && !fs::exists(source/"groupalpha2.iso"));
+			CHECK(readFile(dest/"groupalpha2.iso")=="fixture payload: groupalpha2.iso");
+			CHECK(fs::exists(source/"groupalpha3.iso"));
+
+		}
+
+		void finishWorkflow(TerminalSession& term) {
+
+			workflowStep(term, "\x1b","Enter choice [1-6]: "); workflowStep(term, "\x1b","Enter choice [1-5]: ");
+			// Observe the exit action's clear-screen sequence before waiting
+			// for shutdown, distinguishing lost input from a cleanup hang.
+			const auto begin=term.output.size(); term.send("5\n");
+			term.waitFor("\033[2J\033[3J\033[H",begin);
+			term.waitForExit();
+
+		}
+
+	}
+
 	int workflowTest(const char* binary) {
 
 		try {
@@ -347,101 +497,13 @@ namespace isocmd_tests {
 			writeFile(db,database); writeFile(config,"pagination = 2\nauto_update = off\nfilenames_only = off\n");
 			TerminalSession term(binary,nullptr,120);
 			try {
-				constexpr std::string_view selectPrompt="? for help: ";
-				auto sendWait=[&](std::string_view input,std::string_view prompt) {
-
-					const auto start=term.output.size(); term.send(input);
-					return listFrame(term,start,term.waitFor(prompt,start));
-
-				};
-				auto page=[&](std::string_view input,std::string_view title,std::string_view first,std::string_view absent) {
-
-					const auto frame=sendWait(input,selectPrompt);
-					CHECK(has(frame,title) && has(frame,first) && !has(frame,absent));
-					return frame;
-
-				};
-				term.waitFor("Enter choice [1-5]: ",term.waitFor("Main Menu"));
-				sendWait("1\n","Enter choice [1-6]: ");
-				page("5\n","Page 1/4","groupalpha1.iso","groupalpha3.iso");
-				page("\x1b[5~","Page 1/4","groupalpha1.iso","groupalpha3.iso");
-				page("\x1b[6~","Page 2/4","groupalpha3.iso","groupalpha1.iso");
-				page("g4\n","Page 4/4","groupbeta1.iso","groupalpha1.iso");
-				page("\x1b[6~","Page 4/4","groupbeta1.iso","groupalpha1.iso");
-				page("g1\n","Page 1/4","groupalpha1.iso","groupbeta1.iso");
-				// Stage a selection before preview; cancellation must retain it.
-				CHECK(has(sendWait("1;\n",selectPrompt),"Pending Indices"));
-				sendWait("/","Filter: ");
-				auto begin=term.output.size(); term.send("groupalpha");
-				auto frame=queryFrame(term,begin,"groupalpha");
-				CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
-				auto preview=[&](std::string_view key,std::string_view query) {
-
-					const auto start=term.output.size(); term.send(key);
-					return queryFrame(term,start,query);
-
-				};
-				frame=preview("\x1b[6~","groupalpha");
-				CHECK(has(frame,"groupalpha3.iso") && !has(frame,"groupalpha1.iso"));
-				frame=preview("\x1b[6~","groupalpha"); CHECK(has(frame,"groupalpha5.iso"));
-				frame=preview("\x1b[6~","groupalpha"); CHECK(has(frame,"groupalpha5.iso"));
-				frame=preview("\x1b[5~","groupalpha"); CHECK(has(frame,"groupalpha3.iso"));
-				begin=term.output.size(); term.resize(18,95);
-				frame=queryFrame(term,begin,"groupalpha"); CHECK(has(frame,"groupalpha3.iso"));
-				// Changing query resets scroll; widening must use original source.
-				frame=preview("\x15groupbeta","groupbeta");
-				CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
-				frame=preview("\x15zzzz-no-fixture","zzzz-no-fixture");
-				CHECK(has(frame,"No filter results"));
-				// No-match Enter must leave us in the filter prompt.
-				sendWait("\n","Filter: ");
-				CHECK(has(sendWait("\x1b",selectPrompt),"Pending Indices"));
-				// Commit a non-overlapping filter, then replace it from the source.
-				sendWait("/","Filter: "); frame=preview("groupbeta","groupbeta");
-				CHECK(has(frame,"groupbeta1.iso"));
-				frame=sendWait("\n",selectPrompt); CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
-				sendWait("/","Filter: "); frame=preview("groupalpha","groupalpha");
-				CHECK(has(frame,"groupalpha1.iso"));
-				frame=sendWait("\n",selectPrompt); CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
-				CHECK(has(frame,"Pending Indices"));
-				page("\x1b[6~","Page 2/3","groupalpha3.iso","groupalpha1.iso");
-				sendWait("\x1b",selectPrompt); // clear committed filter
-				// Execute the original staged path, regardless of filter history.
-				sendWait("P","into, ? for help:");
-				begin=term.output.size(); term.send(dest.string()+"\n");
-				auto end=term.waitFor("verbose output? (y/n): ",begin);
-				CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
-				begin=term.output.size(); term.resize(20,110);
-				end=term.waitFor("verbose output? (y/n): ",begin);
-				CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
-				sendWait("n\n",selectPrompt);
-				CHECK(readFile(dest/"groupalpha1.iso")==readFile(source/"groupalpha1.iso"));
-				// Return to menu; exercise delete rejection followed by confirmation.
-				sendWait("\x1b","Enter choice [1-6]: ");
-				sendWait("3\n",selectPrompt);
-				sendWait("1\n","Proceed? (y/n): ");
-				sendWait("n\n",selectPrompt); CHECK(fs::exists(source/"groupalpha1.iso"));
-				sendWait("1\n","Proceed? (y/n): ");
-				begin=term.output.size(); term.send("y\n"); term.waitFor("verbose output? (y/n): ",begin);
-				sendWait("n\n",selectPrompt); CHECK(!fs::exists(source/"groupalpha1.iso"));
-				CHECK(fs::exists(source/"groupalpha2.iso"));
-				// The source directory sorts before the destination; the deleted
-				// first row is now replaced by alpha2. Move it to the fixture dir.
-				sendWait("\x1b","Enter choice [1-6]: ");
-				frame=sendWait("4\n",selectPrompt); CHECK(has(frame,"groupalpha2.iso"));
-				sendWait("1\n","into, ? for help:");
-				begin=term.output.size(); term.send(dest.string()+"\n");
-				term.waitFor("verbose output? (y/n): ",begin);
-				sendWait("n\n",selectPrompt);
-				CHECK(!fs::exists(source/"groupalpha2.iso"));
-				CHECK(readFile(dest/"groupalpha2.iso")=="fixture payload: groupalpha2.iso");
-				CHECK(fs::exists(source/"groupalpha3.iso"));
-				sendWait("\x1b","Enter choice [1-6]: "); sendWait("\x1b","Enter choice [1-5]: ");
-				// Observe the exit action's clear-screen sequence before waiting
-				// for shutdown, distinguishing lost input from a cleanup hang.
-				begin=term.output.size(); term.send("5\n");
-				term.waitFor("\033[2J\033[3J\033[H",begin);
-				term.waitForExit();
+				checkWorkflowPagination(term);
+				checkWorkflowFilterPreview(term);
+				checkWorkflowCommittedFilters(term);
+				checkWorkflowCopy(term, source, dest);
+				checkWorkflowDelete(term, source);
+				checkWorkflowMove(term, source, dest);
+				finishWorkflow(term);
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: real menu pagination, filter preview, staged copy, move and delete workflows\n";
 			return 0;
@@ -607,6 +669,144 @@ namespace isocmd_tests {
 
 	}
 
+	namespace {
+		// Use raw PTY output: stripping CSI would hide stale or incorrect palettes.
+		std::string rawStep(TerminalSession& term, std::string_view input, std::string_view marker) {
+
+			const auto start = term.output.size();
+			term.send(input);
+			const auto end = term.waitFor(marker, start);
+			return term.output.substr(start, end-start);
+
+		}
+
+		struct Appearance {
+			std::string_view accent, settingsAccent, prompt, skin, base;
+		};
+
+		constexpr Appearance originalAppearance{
+			"\033[1;38;2;235;50;245m", "\033[1;38;2;0;115;215m", "\033[1;38;2;0;115;215m",
+			"\033[1;38;2;222;222;222m", "\033[1;38;2;222;222;222m"};
+		constexpr Appearance draculaAppearance{
+			"\033[1;38;2;80;250;123m", "\033[1;38;2;80;250;123m", "\033[1;38;2;110;128;185m",
+			"\033[1;38;2;86;182;194m", "\033[1;38;2;106;128;154m"};
+		constexpr Appearance oceanAppearance{
+			"\033[1;38;2;130;225;190m", "\033[1;38;2;130;225;190m", "\033[1;38;2;110;140;175m",
+			"\033[1;38;2;86;182;194m", "\033[1;38;2;106;128;154m"};
+
+		void checkMenuAppearance(std::string_view frame, const Appearance& a, std::string_view prompt) {
+
+			CHECK(has(frame, std::string(a.skin)+"+----------------------+"));
+			CHECK(has(frame, std::string(a.prompt)+std::string(prompt)));
+
+		}
+
+		void checkListAppearance(std::string_view frame, const Appearance& a, std::size_t cols) {
+
+			const auto row = frame.find(std::string(a.accent)+"theme-fixture.iso");
+			CHECK(row != std::string_view::npos);
+			const auto end = frame.find('\n', row);
+			CHECK(end != std::string_view::npos);
+			const auto lineStart = frame.rfind('\n', row);
+			CHECK(lineStart != std::string_view::npos);
+			CHECK(has(frame.substr(row, end-row), std::string("\033[0m")+std::string(a.base)));
+			const auto line = plain(frame.substr(lineStart+1, end-lineStart-1));
+			CHECK(visibleWidth(line) < cols);
+			if (cols == 80) CHECK(has(line, "…"));
+			CHECK(has(frame, std::string(a.prompt)+", ? for help: "));
+
+		}
+
+		void checkAppearance(TerminalSession& term, const Appearance& a) {
+
+			auto frame = rawStep(term, "1\n", "Enter choice [1-6]: ");
+			CHECK(has(frame, "ManageISO"));
+			checkMenuAppearance(frame, a, "Enter choice [1-6]: ");
+			frame = rawStep(term, "5\n", selectionPrompt);
+			checkListAppearance(frame, a, 120);
+			const auto start = term.output.size(); term.resize(20, 80);
+			const auto end = term.waitFor(selectionPrompt, start);
+			checkListAppearance(std::string_view(term.output).substr(start, end-start), a, 80);
+			const auto wideStart = term.output.size(); term.resize(24, 120);
+			const auto wideEnd = term.waitFor(selectionPrompt, wideStart);
+			checkListAppearance(std::string_view(term.output).substr(wideStart, wideEnd-wideStart), a, 120);
+			step(term, "\x1b", "Enter choice [1-6]: ");
+			frame = rawStep(term, "\x1b", mainPrompt);
+			CHECK(has(frame, "Main Menu"));
+			checkMenuAppearance(frame, a, mainPrompt);
+
+		}
+
+		void setAppearanceValue(TerminalSession& term, const fs::path& config,
+		                        std::string_view index, std::string_view key, std::string_view value) {
+
+			expectStep(term, std::string(index)+"\n", valuePrompt, std::string("Setting: ")+std::string(key));
+			expectStep(term, std::string(value)+"\n", continuePrompt, "Updated and saved to:");
+			CHECK(has(readFile(config), std::string(key)+" = "+std::string(value)+"\n"));
+			step(term, "\n", selectionPrompt);
+
+		}
+
+		void enterAppearanceSettings(TerminalSession& term, const Appearance& a) {
+
+			const auto frame = rawStep(term, "4\n", selectionPrompt);
+			CHECK(has(frame, std::string(a.settingsAccent)+"=== Settings Editor ==="));
+
+		}
+	}
+
+	int themeWorkflowTest(const char* binary) {
+
+		try {
+			const auto home = workflowHome();
+			const auto config = home/".config/isocmd/config";
+			const auto db = home/".local/share/isocmd/database/iso_commander_database.txt";
+			TempDir fixture;
+			const auto directory = fixture.path/std::string(100, 'a');
+			fs::create_directories(directory);
+			const auto iso = directory/"theme-fixture.iso";
+			writeFile(iso, "appearance fixture");
+			fs::create_directories(config.parent_path()); fs::create_directories(db.parent_path());
+			writeFile(config, "base = white\nskin = white\ntheme = original\nauto_update = off\nfilenames_only = off\ncp_mv_rm_list = full\n");
+			writeFile(db, iso.string()+"\n");
+			runMenuWorkflow(binary, [&](TerminalSession& term) {
+
+				checkAppearance(term, originalAppearance);
+				enterAppearanceSettings(term, originalAppearance);
+				setAppearanceValue(term, config, "1", "base", "steel");
+				setAppearanceValue(term, config, "2", "skin", "cyan");
+				setAppearanceValue(term, config, "3", "theme", "dracula");
+				step(term, "\x1b", mainPrompt);
+				checkAppearance(term, draculaAppearance);
+				enterAppearanceSettings(term, draculaAppearance);
+				setAppearanceValue(term, config, "3", "theme", "ocean");
+				step(term, "\x1b", mainPrompt);
+				checkAppearance(term, oceanAppearance);
+
+			});
+			// A fresh process must reproduce the selected palette before any edit.
+			runMenuWorkflow(binary, [&](TerminalSession& term) {
+
+				checkAppearance(term, oceanAppearance);
+				enterAppearanceSettings(term, oceanAppearance);
+				step(term, "r", "Reset all settings to default? (y/n): ");
+				expectStep(term, "y\n", continuePrompt, "Defaults applied");
+				const auto saved = readFile(config);
+				CHECK(has(saved, "base = white\n") && has(saved, "skin = white\n") && has(saved, "theme = original\n"));
+				step(term, "\n", selectionPrompt);
+				step(term, "\x1b", mainPrompt);
+				checkAppearance(term, originalAppearance);
+
+			});
+			CHECK(readFile(iso) == "appearance fixture");
+			std::cout << "PASS: interactive theme, skin and base switching, ANSI palette, resize, persistence and reset\n";
+			return 0;
+		} catch (const std::exception& e) {
+			std::cerr << "FAIL: interactive appearance: " << e.what() << '\n'; return 1;
+		}
+
+	}
+
 	int importWorkflowTest(const char* binary) {
 
 		try {
@@ -676,6 +876,95 @@ namespace isocmd_tests {
 
 	}
 
+	namespace {
+		void discoverConversionImages(TerminalSession& term, const fs::path& source) {
+
+			expectStep(term, "2\n", mainPrompt, "Convert2ISO");
+			step(term, "1\n", "? for help:");
+			expectStep(term, "ls\n", continuePrompt, "entries to display.");
+			step(term, "\n", "? for help:");
+			auto frame = step(term, source.string()+"\n", continuePrompt);
+			CHECK(has(frame, "3 {.bin/.img} files found"));
+			frame = step(term, "\n", selectionPrompt);
+			CHECK(has(frame, "alpha.img") && has(frame, "beta.img") && has(frame, "broken.img"));
+
+		}
+
+		void stageFilteredConversion(TerminalSession& term) {
+
+			expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
+			auto frame = step(term, "clr\n", selectionPrompt);
+			CHECK(!has(frame, "Pending Indices"));
+			expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
+			step(term, "/", "Filter: ");
+			const auto start = term.output.size(); term.send("beta");
+			frame = queryFrame(term, start, "beta");
+			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
+			frame = step(term, "\n", selectionPrompt);
+			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
+
+		}
+
+		void checkSuccessfulConversions(TerminalSession& term, const fs::path& source, const std::string& alpha, const std::string& beta) {
+
+			// Execute the staged source index while another image is visible.
+			expectStep(term, "P", "verbose output? (y/n): ", "COMPLETED");
+			auto frame = step(term, "y\n", continuePrompt);
+			CHECK(has(frame, "Convert2ISO:") && has(frame, "alpha.iso") && has(frame, "→ ISO."));
+			CHECK(!has(frame, "beta.iso") && !has(frame, "Failed."));
+			frame = step(term, "\n", selectionPrompt);
+			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img") && !has(frame, "→ ISO."));
+			CHECK(readFile(source/"alpha.iso") == alpha);
+			CHECK(!fs::exists(source/"beta.iso") && !fs::exists(source/"broken.iso"));
+			expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
+			frame = step(term, "n\n", selectionPrompt);
+			CHECK(!has(frame, "→ ISO."));
+			CHECK(readFile(source/"beta.iso") == beta);
+			step(term, "\x1b", selectionPrompt);
+
+		}
+
+		void checkFailedConversion(TerminalSession& term, const fs::path& source, const fs::path& db) {
+
+			expectStep(term, "3\n", "verbose output? (y/n): ", "FAILED");
+			const auto frame = step(term, "Y\n", continuePrompt);
+			CHECK(has(frame, "broken.img") && has(frame, "Failed.") && !has(frame, "→ ISO."));
+			step(term, "\x1b", selectionPrompt);
+			CHECK(!fs::exists(source/"broken.iso"));
+			CHECK(fileLines(db) == (std::vector<std::string>{(source/"alpha.iso").string(), (source/"beta.iso").string()}));
+
+		}
+
+		void checkSkippedConversion(TerminalSession& term, const fs::path& source) {
+
+			// Existing output is a skip and must never be overwritten.
+			writeFile(source/"alpha.iso", "keep existing ISO");
+			expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
+			const auto frame = step(term, "y\n", continuePrompt);
+			CHECK(has(frame, "alpha.img") && has(frame, "ISOalrExists → Skipped."));
+			CHECK(!has(frame, "Failed.") && !has(frame, "→ ISO."));
+			step(term, "\x04", selectionPrompt);
+			CHECK(readFile(source/"alpha.iso") == "keep existing ISO");
+
+		}
+
+		void checkConversionCache(TerminalSession& term) {
+
+			step(term, "\x1b", "? for help:");
+			const auto frame = step(term, "ls\n", selectionPrompt);
+			CHECK(has(frame, "alpha.img") && has(frame, "beta.img"));
+			step(term, "\x1b", "? for help:");
+			expectStep(term, "!clr\n", continuePrompt, "BIN/IMG cache cleared.");
+			step(term, "\n", "? for help:");
+			expectStep(term, "ls\n", continuePrompt, "entries to display.");
+			step(term, "\n", "? for help:");
+			step(term, "\x1b", mainPrompt); // Convert2ISO submenu
+			step(term, "\x1b", mainPrompt); // main menu
+
+		}
+
+	}
+
 	int conversionWorkflowTest(const char* binary) {
 
 		try {
@@ -696,53 +985,12 @@ namespace isocmd_tests {
 			writeFile(source/"broken.img", rawSector(alpha, 3));
 			runMenuWorkflow(binary, [&](TerminalSession& term) {
 
-				expectStep(term, "2\n", mainPrompt, "Convert2ISO");
-				step(term, "1\n", "? for help:");
-				expectStep(term, "ls\n", continuePrompt, "entries to display.");
-				step(term, "\n", "? for help:");
-				auto frame = step(term, source.string()+"\n", continuePrompt);
-				CHECK(has(frame, "3 {.bin/.img} files found"));
-				frame = step(term, "\n", selectionPrompt);
-				CHECK(has(frame, "alpha.img") && has(frame, "beta.img") && has(frame, "broken.img"));
-				expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
-				frame = step(term, "clr\n", selectionPrompt);
-				CHECK(!has(frame, "Pending Indices"));
-				expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
-				step(term, "/", "Filter: ");
-				const auto start = term.output.size(); term.send("beta");
-				frame = queryFrame(term, start, "beta");
-				CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
-				frame = step(term, "\n", selectionPrompt);
-				CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
-				// Execute the staged source index while another image is visible.
-				expectStep(term, "P", "verbose output? (y/n): ", "COMPLETED");
-				frame = step(term, "n\n", selectionPrompt);
-				CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
-				CHECK(readFile(source/"alpha.iso") == alpha);
-				CHECK(!fs::exists(source/"beta.iso") && !fs::exists(source/"broken.iso"));
-				expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
-				step(term, "n\n", selectionPrompt);
-				CHECK(readFile(source/"beta.iso") == beta);
-				step(term, "\x1b", selectionPrompt);
-				expectStep(term, "3\n", "verbose output? (y/n): ", "FAILED");
-				step(term, "n\n", selectionPrompt);
-				CHECK(!fs::exists(source/"broken.iso"));
-				CHECK(fileLines(db) == (std::vector<std::string>{(source/"alpha.iso").string(), (source/"beta.iso").string()}));
-				// Existing output is a skip and must never be overwritten.
-				writeFile(source/"alpha.iso", "keep existing ISO");
-				expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
-				step(term, "n\n", selectionPrompt);
-				CHECK(readFile(source/"alpha.iso") == "keep existing ISO");
-				step(term, "\x1b", "? for help:");
-				frame = step(term, "ls\n", selectionPrompt);
-				CHECK(has(frame, "alpha.img") && has(frame, "beta.img"));
-				step(term, "\x1b", "? for help:");
-				expectStep(term, "!clr\n", continuePrompt, "BIN/IMG cache cleared.");
-				step(term, "\n", "? for help:");
-				expectStep(term, "ls\n", continuePrompt, "entries to display.");
-				step(term, "\n", "? for help:");
-				step(term, "\x1b", mainPrompt); // Convert2ISO submenu
-				step(term, "\x1b", mainPrompt); // main menu
+				discoverConversionImages(term, source);
+				stageFilteredConversion(term);
+				checkSuccessfulConversions(term, source, alpha, beta);
+				checkFailedConversion(term, source, db);
+				checkSkippedConversion(term, source);
+				checkConversionCache(term);
 
 			});
 			CHECK(readFile(source/"alpha.img") == rawSector(alpha, 1));

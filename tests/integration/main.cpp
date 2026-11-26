@@ -3,7 +3,7 @@
 #include "../common/testHarness.h"
 
 namespace isocmd_tests {
-	void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsDoubleBuffering(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsDirectRecovery(); void windowsFilesystemWriteModes(); void windowsBufferedWrites(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int settingsWorkflowTest(const char* binary); int importWorkflowTest(const char* binary); int conversionWorkflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
+	void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsDoubleBuffering(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsDirectRecovery(); void windowsFilesystemWriteModes(); void windowsBufferedWrites(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int settingsWorkflowTest(const char* binary); int themeWorkflowTest(const char* binary); int importWorkflowTest(const char* binary); int conversionWorkflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
 }
 
 int main(int argc,char** argv) {
@@ -27,6 +27,7 @@ int main(int argc,char** argv) {
 		{"--menu-test", menuTest},
 		{"--workflow-test", workflowTest},
 		{"--settings-workflow-test", settingsWorkflowTest},
+		{"--theme-workflow-test", themeWorkflowTest},
 		{"--import-workflow-test", importWorkflowTest},
 		{"--conversion-workflow-test", conversionWorkflowTest},
 	};
