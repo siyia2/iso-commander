@@ -116,6 +116,7 @@ const ConfigEntry* findConfigEntry(const std::string& key);
 
 // Reads the live settings cache; defaults to disabled when absent.
 bool write2usbChecksumEnabled();
+// Defaults to enabled unless explicitly disabled.
 bool write2usbBufferedEnabled();
 
 /**

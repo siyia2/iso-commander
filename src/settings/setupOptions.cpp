@@ -128,7 +128,7 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 	          "Verify data integrity after writing to USB (CRC-64)",
 	          "Write2USB Settings",
 	          ConfigValues::onOff),
-	enumEntry("buffered_writes", "off",
+	enumEntry("buffered_writes", "on",
 	          "Use buffered USB writes for Windows ISO",
 	          "",
 	          ConfigValues::onOff),
@@ -358,12 +358,12 @@ bool write2usbChecksumEnabled() {
 }
 
 /**
- * @brief Returns whether Windows USB writes should use the kernel page cache.
+ * @brief Returns whether Windows USB writes should use the kernel page cache (default: on).
  */
 bool write2usbBufferedEnabled() {
 
 	const auto it = ConfigCaches::g_configCache.find("buffered_writes");
-	return it != ConfigCaches::g_configCache.end() && it->second == "on";
+	return it == ConfigCaches::g_configCache.end() || it->second != "off";
 
 }
 

@@ -25,7 +25,7 @@ namespace isocmd_tests {
 		CHECK(checksum->validate("on") && checksum->validate("off"));
 		CHECK(!checksum->validate("yes") && !checksum->validate(""));
 		const auto* buffered = findConfigEntry("buffered_writes");
-		CHECK(buffered && buffered->defaultValue == "off");
+		CHECK(buffered && buffered->defaultValue == "on");
 		CHECK(buffered->validate("on") && buffered->validate("off"));
 		CHECK(!buffered->validate("yes") && !buffered->validate(""));
 
@@ -53,7 +53,8 @@ namespace isocmd_tests {
 		CHECK(ConfigCaches::g_configCache.at("theme") == "original");
 		CHECK(ConfigCaches::g_configCache.at("verify_checksum") == "off");
 		CHECK(!write2usbChecksumEnabled());
-		CHECK(!write2usbBufferedEnabled());
+		CHECK(ConfigCaches::g_configCache.at("buffered_writes") == "on");
+		CHECK(write2usbBufferedEnabled());
 		for (const auto& e : CONFIG_ORDERED_DEFAULTS) CHECK(e.validate(ConfigCaches::g_configCache.at(e.key)));
 		CHECK(paginationSet(file));
 		CHECK(GlobalState::ITEMS_PER_PAGE == 25);
@@ -78,14 +79,15 @@ namespace isocmd_tests {
 	static void verifyUsbSettingsPersistence(const std::string& file) {
 
 		ConfigCaches::g_configCache["verify_checksum"] = "on";
-		ConfigCaches::g_configCache["buffered_writes"] = "on";
+		ConfigCaches::g_configCache["buffered_writes"] = "off";
 		CHECK(write2usbChecksumEnabled());
-		CHECK(write2usbBufferedEnabled());
+		CHECK(!write2usbBufferedEnabled());
 		CHECK(writeConfig(file, ConfigCaches::g_configCache));
 		ConfigCaches::g_configCache.clear();
 		syncCache(file);
 		CHECK(write2usbChecksumEnabled());
-		CHECK(write2usbBufferedEnabled());
+		CHECK(ConfigCaches::g_configCache.at("buffered_writes") == "off");
+		CHECK(!write2usbBufferedEnabled());
 		ConfigCaches::g_configCache["verify_checksum"] = "off";
 		CHECK(!write2usbChecksumEnabled());
 		ConfigCaches::g_configCache["verify_checksum"] = "invalid";
@@ -95,12 +97,12 @@ namespace isocmd_tests {
 		syncCache(file);
 		CHECK(ConfigCaches::g_configCache.at("verify_checksum") == "off");
 		CHECK(!write2usbChecksumEnabled());
-		CHECK(ConfigCaches::g_configCache.at("buffered_writes") == "off");
-		CHECK(!write2usbBufferedEnabled());
+		CHECK(ConfigCaches::g_configCache.at("buffered_writes") == "on");
+		CHECK(write2usbBufferedEnabled());
 		ConfigCaches::g_configCache.clear();
 		ConfigCaches::g_cachedPath.clear();
 		CHECK(!write2usbChecksumEnabled());
-		CHECK(!write2usbBufferedEnabled());
+		CHECK(write2usbBufferedEnabled());
 
 	}
 

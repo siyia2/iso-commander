@@ -44,15 +44,16 @@ namespace windowsWriter_engine::copy {
 	/**
 	 * @brief Iterates one entry list, creating directories and copying files.
 	 *
-	 * NTFS-bound files use aligned O_DIRECT with best-effort preallocation;
-	 * FAT32-bound files use aligned O_DIRECT with bounded chunk initialization.
-	 * Optional buffered writes bypass direct I/O alignment and preallocation,
-	 * and use rolling 4 MiB sync_file_range writeback pacing.
+	 * Buffered writes are the default, bypassing direct I/O alignment and
+	 * preallocation, with rolling 4 MiB sync_file_range writeback pacing.
+	 * In direct mode, NTFS-bound files use aligned O_DIRECT with best-effort
+	 * preallocation; FAT32-bound files use aligned O_DIRECT with bounded
+	 * chunk initialization.
 	 * Multi-chunk files overlap source reads and checksumming with ordered writes
 	 * using two aligned buffers; single-chunk files remain synchronous.
 	 *
 	 * @param checksums Optional output of CRC-64 values, one per file in entry order.
-	 * @param buffered Use ordinary buffered writes instead of O_DIRECT.
+	 * @param buffered Use buffered writes (default); false selects O_DIRECT.
 	 * @return false on the first copy failure or cancellation; true otherwise.
 	 */
 	bool processEntries(const std::vector<write2usb_detail::IsoCopyEntry>& entries,
@@ -62,7 +63,7 @@ namespace windowsWriter_engine::copy {
 	                    char* buf,
 	                    std::atomic<std::uint64_t>& totalAccumulator,
 	                    std::vector<std::uint64_t>* checksums = nullptr,
-	                    bool buffered = false,
+	                    bool buffered = true,
 	                    const std::stop_token& cancelToken = {});
 
 } // namespace windowsWriter_engine::copy

@@ -283,11 +283,10 @@ operation; a fresh copy must replace it. Transient truncate and final fsync
 EINTR must be retried, but permanent sync errors must not report completion.
 The raw writer restarts an unaligned write chunk at most eight times and
 counts replayed bytes only once. Tests also verify restart exhaustion, final
-fsync EINTR retries, and Windows cleanup ftruncate EINTR retries. By default, Windows FAT32 and NTFS use aligned O_DIRECT payload writes with bounded chunk replay
+fsync EINTR retries, and Windows cleanup ftruncate EINTR retries. By default, Windows FAT32 and NTFS use buffered writes with rolling 4 MiB sync_file_range writeback pacing, writing exact logical bytes without direct-I/O padding, preallocation or chunk initialization. Optional direct mode uses aligned O_DIRECT payload writes with bounded chunk replay
 and exact final truncation. NTFS retains best-effort preallocation; FAT32 initializes
-one chunk at a time and drains any dirty final page after truncation. No asynchronous
-range pacing remains in the Windows copy engine;
-the final syncfs still covers filesystem metadata and device-cache flushing. Optional buffered mode writes exact logical bytes without direct-I/O padding, preallocation or chunk initialization; final syncfs still flushes the data before successful completion.
+one chunk at a time and drains any dirty final page after truncation.
+In both modes, the final syncfs covers filesystem metadata and device-cache flushing before successful completion.
 The suite does not yet simulate all cleanup syscalls (e.g. unmount/rmdir),
 full Windows filesystem syncfs/remount fault injection, Windows end-to-end CLI or corruption/cancellation cases on real FAT32/NTFS volumes, all converters, successful physical-device flashing through either CLI or UI, every interactive operation or all possible thread
 interleavings. The unprivileged Windows copy-engine tests use regular filesystem paths; the optional privileged Windows tests exercise actual FAT32/NTFS volumes. The privileged Linux writer fixture has a synthetic

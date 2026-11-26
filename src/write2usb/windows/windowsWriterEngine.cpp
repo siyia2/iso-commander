@@ -520,9 +520,9 @@ namespace windowsWriter_engine::copy {
 		}
 
 		/**
-		 * @brief Direct mode uses O_DIRECT on both filesystems, with NTFS preallocation
-		 *        and incremental FAT32 growth. Buffered mode writes exact logical bytes
-		 *        with rolling 4 MiB writeback pacing.
+		 * @brief Buffered mode (default) writes exact logical bytes with rolling 4 MiB
+		 *        writeback pacing. Direct mode uses O_DIRECT on both filesystems,
+		 *        with NTFS preallocation and incremental FAT32 growth.
 		 *        The caller's final syncfs flushes data and metadata in both modes.
 		 */
 		bool copyFileWithProgress(const IsoCopyEntry& entry, bool toNtfs, BufferedWriteback* writeback,

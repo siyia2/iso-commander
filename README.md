@@ -57,6 +57,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 - Automatic ISO detection — custom write method for Windows vs. others
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
+- Buffered Windows/WinPE writes by default; set `buffered_writes = off` for direct I/O
 
 ## USB Boot Mode Support
 

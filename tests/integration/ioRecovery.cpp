@@ -424,9 +424,9 @@ namespace isocmd_tests {
 			Scope scope(p);
 			CHECK(processEntries({{f.src, f.dst, f.data.size(), false},
 			    {f.src, second, f.data.size(), false}}, IsoType::FatOnly, "",
-			    f.buffer.size(), f.buffer.data(), total, nullptr, true));
+			    f.buffer.size(), f.buffer.data(), total));
 		}
-		// The first small file is submitted and waited on by the second file.
+		// Default buffered mode: the first small file is submitted and waited on by the second file.
 		CHECK(p[Call::SyncRange].calls.load() == 2);
 		CHECK(total == 2 * f.data.size());
 		CHECK(readFile(f.dst) == f.data && readFile(second) == f.data);
