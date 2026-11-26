@@ -68,8 +68,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Linux/BSD        | Raw Sector Copy   | ✓ *  | ✓ *  |
 
 > \* Boot support depends on what the source ISO supports
-
-**Verification:** Optional CRC-64 readback verification is available.
+> \ Optional CRC-64 readback verification is available.
 
 ## 🏆 Credits
 
