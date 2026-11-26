@@ -284,6 +284,20 @@ namespace isocmd_tests {
 
 		}
 
+		void checkOverflowSpace(TerminalSession& term, std::size_t start) {
+
+			// The previous test leaves a 120-column terminal. With this 31-cell
+			// prompt, the viewport starts on the space 85 cells from the end.
+			const auto prompt = term.waitFor("Display verbose output? (y/n): ", start);
+			term.send("\033[200~" + std::string(160, 'a') + " " + std::string(84, 'b') + "\033[201~");
+			const auto tail = term.waitFor(std::string(84, 'b'), prompt);
+			const auto frame = plain(std::string_view(term.output).substr(prompt, tail - prompt));
+			CHECK(has(frame, "Display verbose output? (y/n): <" + std::string(84, 'b')));
+			term.send("\x01X\x05\n");
+			term.waitFor("TEST-OVERFLOW-SPACE-PASS", tail);
+
+		}
+
 	} // namespace
 
 	int terminalTest(const char* binary) {
@@ -304,6 +318,7 @@ namespace isocmd_tests {
 				terminal.send("\x02X\x06" "def\n");
 				const auto passed = terminal.waitFor("TEST-TERMINAL-PASS");
 				checkLongInput(terminal, passed);
+				checkOverflowSpace(terminal, passed);
 				terminal.waitForExit();
 			} catch (...) {
 				printOutput(terminal.output);

@@ -34,6 +34,16 @@ namespace isocmd_tests {
 
 		}
 
+		void overflowSpacePrompt() {
+
+			const std::string prompt = "\001\033[32m\002Display verbose output? (y/n): \001\033[0m\002";
+			auto line = readlineWithResize(prompt);
+			const std::string expected = "X" + std::string(160, 'a') + " " + std::string(84, 'b');
+			CHECK(line && std::string_view(line.get()) == expected);
+			std::cout << "TEST-OVERFLOW-SPACE-PASS\n" << std::flush;
+
+		}
+
 	}
 
 	int terminalChild() {
@@ -55,6 +65,7 @@ namespace isocmd_tests {
 			CHECK(sigaction(SIGWINCH,nullptr,&after)==0 && after.sa_handler==oldWinch.sa_handler);
 			std::cout << "TEST-TERMINAL-PASS\n" << std::flush;
 			longInputPrompt();
+			overflowSpacePrompt();
 			CHECK(rl_redisplay_function==oldRedisplay);
 			return 0;
 		} catch(const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }

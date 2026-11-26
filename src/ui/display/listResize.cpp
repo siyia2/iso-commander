@@ -98,6 +98,18 @@ namespace {
 
 	struct InputWindow { std::size_t first, last; bool left, right; };
 
+	// Avoid a visually empty edge after the overflow marker when clipping
+	// starts on a space. Never skip the cursor or change the Readline buffer.
+	std::size_t skipClippedSpaces(const InputLayout& layout, std::size_t first) {
+
+		if (!first) return first;
+		auto next = first;
+		while (next < layout.cursor && layout.cells[next].text == " ") ++next;
+		if (next < layout.cells.size() && layout.cells[next].text != " ") return next;
+		return first;
+
+	}
+
 	InputWindow inputWindow(const InputLayout& layout, std::size_t budget, std::size_t previous) {
 
 		if (layout.width < budget) return {0, layout.cells.size(), false, false};
@@ -109,6 +121,7 @@ namespace {
 		// Recover more of the prefix when widening or returning towards the start.
 		while (first && layout.width - columnAt(layout, first - 1) + 2 < budget)
 			--first;
+		first = skipClippedSpaces(layout, first);
 		const bool left = first != 0;
 		const auto room = budget - static_cast<std::size_t>(left);
 		std::size_t last = first;
