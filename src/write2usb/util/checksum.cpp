@@ -41,7 +41,7 @@ export extern "C++" {
     	}();
 
     	struct Checksum64 {
-    		std::uint64_t value = 0;
+            std::uint64_t value = 0;
 
     		void update(const char* data, std::size_t size) noexcept {
 
@@ -61,7 +61,6 @@ export extern "C++" {
     			}
     			for (std::size_t i = 0; i < size; ++i)
     			    value = (value << 8) ^ crcSlices[0][(value >> 56) ^ bytes[i]];
-
     		}
     	};
 
