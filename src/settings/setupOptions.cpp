@@ -129,7 +129,7 @@ extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS = {
 	          "Write2USB Settings",
 	          ConfigValues::onOff),
 	enumEntry("buffered_writes", "off",
-	          "Use buffered USB writes for Windows ISOs",
+	          "Use buffered USB writes for Windows ISO",
 	          "",
 	          ConfigValues::onOff),
 
