@@ -328,9 +328,14 @@ void ConfirmResizeWatcher::stop() {
  * @endcode
  * Device path, drive name and speed are padded to the widest value across
  * rows so the bars line up. Drive names are always shown in full. The bar
- * has 5 cells and 10 steps of 10% (empty ░, half ▄, full ▇), floored from
- * the percentage, so it is full only at 100%. The status column shows the
- * live percentage (writing or verification), DONE or PASS (speed shown
+ * has 5 cells, with 10% steps while writing (empty ░, half ▄, full ▇)
+ * and 10% steps during active verification (empty ░, half ⡇, full ⣿). Both are
+ * floored from the percentage, so the bar is full only at 100%. Terminal
+ * states restore the regular bar. Failure or cancellation after a completed
+ * write shows the full write bar rather than the interrupted verification
+ * percentage.
+ * The status column shows the live percentage (writing or verification),
+ * DONE or PASS (speed shown
  * as the write-only " (avg)"), FAIL or CXL
  * (cancelled).
  *
@@ -823,19 +828,25 @@ private:
 		const std::string& name = rowShortNames_[i];
 		const std::string namePad(maxNameWidth_ - utf8Width(name), ' ');
 
-		// Half-block bar: BAR_WIDTH cells, BAR_STEPS steps (10% each).
-		// Each cell is empty (░), half (▄) or full (▇). Both filled glyphs
-		// are bottom-aligned and stop short of the cell top, so bars on
-		// consecutive rows never touch.
-		int pct = std::clamp(prog.progress.load(), 0, 100);
+		// Writing uses half blocks; active verification uses Braille
+		// patterns with half-cell glyphs. Both advance in 10% steps.
+		const bool failed = prog.failed.load();
+		const bool cancelled = isUsbWriteCancelled(prog.cancelToken);
+		const bool verificationActive = phase_ == Phase::Running &&
+		    prog.verifying.load() && !speed.completed && !failed && !cancelled;
+		// Verification reuses the progress counter. On failure or cancellation
+		// after a completed write, restore the write percentage instead.
+		const bool restoreWriteProgress = !speed.completed &&
+		    (failed || cancelled) && prog.writeCompleted.load();
+		int pct = restoreWriteProgress ? 100 : std::clamp(prog.progress.load(), 0, 100);
 		int steps = (pct * BAR_STEPS) / 100;
 		int full  = steps / 2;
 		bool half = (steps % 2) != 0;
 
 		std::string bar, empty;
-		for (int j = 0; j < full; ++j) bar += "▇";
-		if (half)                      bar += "▄";
-		for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += "░";
+		for (int j = 0; j < full; ++j) bar += (verificationActive ? "⣶" : "▇");
+		if (half)                      bar += (verificationActive ? "⡆" : "▄");
+		for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += (verificationActive ? " " : "░");
 
 		std::ostringstream row;
 		row << wt_.fileCol << paddedFilename
@@ -849,8 +860,8 @@ private:
 		const auto& speedStr = speed.text;
 
 		if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
-		else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
-		else if (isUsbWriteCancelled(prog.cancelToken))      row << wt_.colorWarning << "CXL  ";
+		else if (failed)                                   row << wt_.colorFailure << "FAIL ";
+		else if (cancelled)                                row << wt_.colorWarning << "CXL  ";
 		else {
 			std::string pctStr = std::to_string(pct) + "%";
 			pctStr.resize(5, ' ');
