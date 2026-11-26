@@ -14,10 +14,14 @@ namespace isocmd_tests {
 	void conversion();
 	void progressAndBuffer();
 	void checksumVerification();
+	void latchedReadbackCancellation();
 	void threadPool();
 	void taskLifetime();
 	void database();
 	void deviceDiscovery();
+	void usbBusyIndicators();
+	void usbBusyValidation();
+	void usbInflightParsing();
 	void historyPersistence();
 	void writeTelemetry();
 	void usbMappingValidation();
@@ -33,10 +37,14 @@ int main() {
 		{"ISO signature detection", isoDetection}, {"CCD and NRG conversion", conversion},
 		{"progress state and aligned buffers", progressAndBuffer},
 		{"CRC-64 and readback verification", checksumVerification},
+		{"latched readback cancellation and progress moves", latchedReadbackCancellation},
 		{"thread pool stress and shutdown", threadPool},
 		{"move-only task ownership and lifetime", taskLifetime},
 		{"database persistence and concurrent updates", database},
 		{"USB discovery and mount classification", deviceDiscovery},
+		{"USB mounted and busy indicators", usbBusyIndicators},
+		{"USB busy rejection in interactive and CLI modes", usbBusyValidation},
+		{"USB in-flight counter parsing", usbInflightParsing},
 		{"Readline history persistence and limits", historyPersistence},
 		{"list rendering, pagination and pending indices", listRendering},
 		{"pagination command boundaries and jumps", paginationCommands},

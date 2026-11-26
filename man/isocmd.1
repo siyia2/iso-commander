@@ -32,7 +32,9 @@ All arguments are validated before any device is touched. Only raw devices are a
 Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
 .TP 16
 .B \-\-verify
-Verify USB writes by reading back CRC-64 checksums after writing (\fBw2usb\fR only). Failure or cancellation returns a nonzero exit status.
+Verify USB writes using CRC-64 checksum readback after writing (\fBw2usb\fR only). This flag enables verification independently of
+.br
+the interactive \fBverify_checksum\fR setting. Failure or cancellation returns a nonzero exit status.
 .TP 16
 .B \-d\fIN\fR
 Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
@@ -70,7 +72,7 @@ isocmd w2usb \-\-verify file.iso /dev/sdc@Write an ISO and verify the result
 .SH UI INTERACTIVE OPTIONS AND FEATURES
 .TP
 .B ManageISO
-Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb. Enable checksum readback for interactive USB writes with \fBverify_checksum\fR in Settings.
+Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb.
 
 .TP
 .B Convert2ISO
@@ -131,9 +133,9 @@ containing at least one uppercase letter is case-sensitive. This applies to nega
 With \fBfilenames_only\fR enabled, only filenames are searched. In the umount
 list, the mount-point names are searched (without its trailing \fB~hash\fR suffix) unless the full
 list is displayed.
-.SS Nested filters
-Applying a filter while one is already active narrows the current results further. Filters are
-re-applied automatically when the list refreshes.
+.SS Filter scope
+Each query searches the full, unfiltered list rather than the current results. On list refresh, existing matches are retained, and
+new entries are tested against the active filter.
 
 .SH CONFIGURATION
 The configuration file is located at \fI~/.config/isocmd/config\fR and uses a \fIkey = value\fR format.
@@ -152,10 +154,14 @@ tab(@);
 lb l l.
 auto_update@Enable background metadata updates on startup@on|off (Default: off)
 filenames_only@Show filenames instead of full paths; global override except unmount list@on|off (Default: off)
-verify_checksum@Verify interactive USB writes using CRC-64 readback@on|off (Default: off)
-buffered_writes@Use buffered writes for Windows/WinPE USB images (including CLI)@on|off (Default: off)
-live_filter_limit@Max list items for live filtering to remain active (0 to disable)@integer >= 0 (Default: 10000)
 pagination@Items per page (0 to disable)@integer >= 0 (Default: 25)
+.TE
+.SS WRITE2USB SETTINGS
+.TS
+tab(@);
+lb l l.
+verify_checksum@Verify USB write integrity using CRC-64 (interactive mode)@on|off (Default: off)
+buffered_writes@Enable buffered USB writes for Windows and WinPE ISOs@on|off (Default: off)
 .TE
 .SS HISTORY
 .TS

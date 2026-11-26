@@ -31,6 +31,23 @@ bool isWindowsIso(const std::string& isoPath);
 
 namespace fs = std::filesystem;
 
+namespace {
+	// The orchestration and its mount cleanup run on the same worker. Restore
+	// the previous token on exit, since thread-pool workers are reused.
+	thread_local std::stop_token windowsCancelToken;
+
+	struct WindowsCancelScope {
+		std::stop_token previous;
+		explicit WindowsCancelScope(const std::stop_token& token)
+		    : previous(std::exchange(windowsCancelToken, token)) {}
+		~WindowsCancelScope() { windowsCancelToken = std::move(previous); }
+	};
+
+	bool windowsCancelled() noexcept {
+		return isUsbWriteCancelled(windowsCancelToken);
+	}
+} // namespace
+
 // ---------------------------------------------------------------------------
 // Global scope: device readiness
 // ---------------------------------------------------------------------------
@@ -56,7 +73,7 @@ bool waitForDevice(const std::string& path, int timeout_seconds = 30) {
 
 	while (std::chrono::steady_clock::now() - start <
 	       std::chrono::seconds(timeout_seconds)) {
-		if (GlobalState::g_operationCancelled.load()) return false;
+		if (windowsCancelled()) return false;
 
 		if (fs::exists(path) && fs::is_block_file(path)) {
 			if (isDeviceReady(path)) return true;
@@ -95,7 +112,7 @@ namespace {
 			    std::chrono::milliseconds(total);
 
 			while (std::chrono::steady_clock::now() < end) {
-				if (GlobalState::g_operationCancelled.load()) return;
+				if (windowsCancelled()) return;
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 			}
 
@@ -110,7 +127,7 @@ namespace {
 			int rc = -1;
 
 			for (int i = 0; i < attempts; ++i) {
-				if (GlobalState::g_operationCancelled.load()) return -1;
+				if (windowsCancelled()) return -1;
 
 				rc = fn();
 				if (rc == 0) return 0;
@@ -136,7 +153,7 @@ namespace {
 		 */
 		int runCommand(const std::vector<std::string>& args) {
 
-			if (args.empty()) return -1;
+			if (args.empty() || windowsCancelled()) return -1;
 
 			std::vector<char*> argv;
 			argv.reserve(args.size() + 1);
@@ -192,7 +209,7 @@ namespace {
 					return -1;
 				}
 
-				if (!terminated && GlobalState::g_operationCancelled.load()) {
+				if (!terminated && windowsCancelled()) {
 					kill(pid, SIGTERM);
 					terminated = true;
 				}
@@ -293,7 +310,7 @@ namespace {
 
 			};
 
-			const bool cancelled = GlobalState::g_operationCancelled.load();
+			const bool cancelled = windowsCancelled();
 
 			if (cancelled) {
 				// Cancelled: don't wait for the flush, detach immediately.
@@ -454,6 +471,7 @@ namespace {
 			try {
 				for (const auto& entry :
 				     fs::recursive_directory_iterator(isoMnt)) {
+					if (windowsCancelled()) return false;
 					// Reject symlinks outright — a malicious ISO (Rock Ridge/UDF)
 					// could embed a symlink pointing at an arbitrary host path.
 					if (fs::is_symlink(entry.symlink_status()))
@@ -525,6 +543,7 @@ namespace {
 		 */
 		bool wipeDeviceSignatures(const std::string& device) {
 
+			if (windowsCancelled()) return false;
 			blkid_probe pr =
 			    blkid_new_probe_from_filename(device.c_str());
 			if (!pr) return false;
@@ -537,11 +556,13 @@ namespace {
 			blkid_probe_set_partitions_flags(pr, BLKID_PARTS_MAGIC);
 
 			// Loop until no more signatures are found.
-			while (blkid_do_probe(pr) == 0)
-			    blkid_do_wipe(pr, false /* not dry-run */);
+			while (!windowsCancelled() && blkid_do_probe(pr) == 0) {
+				if (windowsCancelled()) break;
+				blkid_do_wipe(pr, false /* not dry-run */);
+			}
 
 			blkid_free_probe(pr);
-			return true;
+			return !windowsCancelled();
 
 		}
 
@@ -725,7 +746,7 @@ namespace {
 
 		bool isCancelled() {
 
-			return GlobalState::g_operationCancelled.load();
+			return windowsCancelled();
 
 		}
 
@@ -921,6 +942,37 @@ namespace {
 
 		}
 
+		// Non-owning references to the prepared target filesystems. The writer
+		// retains ownership of both mount scopes throughout copying and readback.
+		struct MountedTargets {
+			IsoType isoType;
+			const std::string& fatPart;
+			const std::string& ntfsPart;
+			const std::string& fatMnt;
+			const std::string& ntfsMnt;
+			mnt::ScopedMount& fatScope;
+			mnt::ScopedMount& ntfsScope;
+			const std::string& ntfsDriver;
+		};
+
+		bool verifyCopiedEntries(const MountedTargets& targets,
+		                         const EntryVec& ntfsEntries, const EntryVec& espEntries,
+		                         const std::vector<std::uint64_t>& ntfsChecksums,
+		                         const std::vector<std::uint64_t>& espChecksums,
+		                         const AlignedBuffer& ioBuf,
+		                         usb_verify::ReadbackProgress& readback) {
+
+			if (targets.isoType == IsoType::WindowsInstall &&
+			    !reopenReadOnly(targets.ntfsPart, targets.ntfsScope, targets.ntfsDriver.c_str()))
+			    return false;
+
+			return reopenReadOnly(targets.fatPart, targets.fatScope, "vfat") &&
+			       verifyEntries(ntfsEntries, ntfsChecksums, ioBuf.data, ioBuf.size, readback) &&
+			       verifyEntries(espEntries, espChecksums, ioBuf.data, ioBuf.size, readback) &&
+			       readback.finish();
+
+		}
+
 		double averageSpeedMBps(std::uint64_t totalBytes, double seconds) {
 
 			if (seconds <= 0.0) return 0.0;
@@ -986,14 +1038,7 @@ bool isWindowsIso(const std::string& isoPath) {
  */
 static bool copyAndVerifyWindowsIso(
         const std::string& isoMnt,
-        IsoType isoType,
-        const std::string& fatPart,
-        const std::string& ntfsPart,
-        const std::string& fatMnt,
-        const std::string& ntfsMnt,
-        mnt::ScopedMount& fatScope,
-        mnt::ScopedMount& ntfsScope,
-        const std::string& ntfsDriver,
+        const win_iso_steps::MountedTargets& targets,
         ProgressInfo& slot) {
 
 	namespace steps = win_iso_steps;
@@ -1004,7 +1049,7 @@ static bool copyAndVerifyWindowsIso(
 	std::uint64_t totalBytes = 0;
 
 	if (!steps::enumerateNonEmpty(
-	        isoMnt, isoType, fatMnt, ntfsMnt,
+	        isoMnt, targets.isoType, targets.fatMnt, targets.ntfsMnt,
 	        ntfsEntries, espEntries, totalBytes))
 	    return report.failUnlessCancelled();
 
@@ -1031,7 +1076,7 @@ static bool copyAndVerifyWindowsIso(
 	    return report.failUnlessCancelled();
 
 	std::vector<std::uint64_t> ntfsChecksums, espChecksums;
-	const bool buffered = write2usbBufferedEnabled();
+	const bool buffered = slot.bufferedWrites ? *slot.bufferedWrites : write2usbBufferedEnabled();
 
 	auto runPass = [&](std::vector<iso::IsoCopyEntry>& entries) {
 
@@ -1040,14 +1085,14 @@ static bool copyAndVerifyWindowsIso(
 		    : nullptr;
 
 		return copy::processEntries(
-		    entries, isoType, ntfsMnt,
+		    entries, targets.isoType, targets.ntfsMnt,
 		    &entries == &ntfsEntries ? copy::kBufferSize : copy::kFatBufferSize, ioBuf.data,
-		    totalBytesWrittenAccumulator, checksums, buffered);
+		    totalBytesWrittenAccumulator, checksums, buffered, slot.cancelToken);
 
 	};
 
 	if (!steps::runCopyPasses(
-	        runPass, isoType, ntfsMnt, fatMnt,
+	        runPass, targets.isoType, targets.ntfsMnt, targets.fatMnt,
 	        ntfsEntries, espEntries))
 	    return report.failUnlessCancelled();
 
@@ -1069,19 +1114,9 @@ static bool copyAndVerifyWindowsIso(
 	if (slot.verifyRequested) {
 		usb_verify::ReadbackProgress readback(slot, totalBytes);
 
-		if ((isoType == IsoType::WindowsInstall &&
-		     !steps::reopenReadOnly(
-		         ntfsPart, ntfsScope, ntfsDriver.c_str())) ||
-		    !steps::reopenReadOnly(fatPart, fatScope, "vfat") ||
-		    !steps::verifyEntries(
-		        ntfsEntries, ntfsChecksums,
-		        ioBuf.data, bufferSize, readback) ||
-		    !steps::verifyEntries(
-		        espEntries, espChecksums,
-		        ioBuf.data, bufferSize, readback))
-		    return report.failUnlessCancelled();
-
-		if (!readback.finish())
+		if (!steps::verifyCopiedEntries(
+		        targets, ntfsEntries, espEntries,
+		        ntfsChecksums, espChecksums, ioBuf, readback))
 		    return report.failUnlessCancelled();
 
 		return true;
@@ -1113,6 +1148,8 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 	namespace steps = win_iso_steps;
 
 	ProgressInfo& slot = progressData[progressIndex];
+	const WindowsCancelScope cancelScope(slot.cancelToken);
+	if (windowsCancelled()) return false;
 	const steps::FailureReporter report{slot};
 
 	char isoMntBuf[] = "/tmp/win_iso_XXXXXX";
@@ -1159,11 +1196,10 @@ bool writeWindowsIsoToDevice(const std::string& isoPath,
 
 	// Mount scopes remain alive throughout copying and verification,
 	// then clean up in reverse order: NTFS -> FAT32 -> ISO.
-	return copyAndVerifyWindowsIso(
-	    isoMnt, isoType,
-	    fatPart, ntfsPart,
-	    fatMnt, ntfsMnt,
-	    fatScope, ntfsScope,
-	    ntfsDriver, slot);
+	const steps::MountedTargets targets{
+	    isoType, fatPart, ntfsPart, fatMnt, ntfsMnt,
+	    fatScope, ntfsScope, ntfsDriver};
+
+	return copyAndVerifyWindowsIso(isoMnt, targets, slot);
 
 }

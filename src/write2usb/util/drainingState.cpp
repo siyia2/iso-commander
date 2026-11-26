@@ -24,3 +24,27 @@ void DrainingThreadManager::joinAll() {
 	threads.clear();
 
 }
+
+void DrainingThreadManager::reserveDevice(const std::string& device) {
+
+	std::lock_guard lock(devicesMutex);
+	drainingDevices.insert(device);
+	g_drainingCancelled.store(true, std::memory_order_release);
+
+}
+
+void DrainingThreadManager::releaseDevice(const std::string& device) {
+
+	std::lock_guard lock(devicesMutex);
+	const auto it = drainingDevices.find(device);
+	if (it != drainingDevices.end()) drainingDevices.erase(it);
+	g_drainingCancelled.store(!drainingDevices.empty(), std::memory_order_release);
+
+}
+
+bool DrainingThreadManager::isDeviceDraining(const std::string& device) {
+
+	std::lock_guard lock(devicesMutex);
+	return drainingDevices.contains(device);
+
+}

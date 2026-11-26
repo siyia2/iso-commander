@@ -1065,6 +1065,7 @@ namespace isocmd_tests {
 					checkWriteResult(frame, i);
 					term.send("\n");
 				}
+				end=term.waitFor("TEST-ASYNC-CANCELLATION-PASS",end);
 				end=term.waitFor("TEST-VERIFY-OFF",end);
 				end=term.waitFor("? for help: ",end);
 				term.send("1>/dev/zero;2>/dev/null\n"); end=term.waitFor("Proceed? (y/n): ",end);

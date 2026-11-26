@@ -46,7 +46,7 @@ namespace MappingPrompt {
 		std::uint64_t size;        ///< Total storage capacity in bytes.
 		std::string driveName;///< Vendor or model drive name.
 		std::string sizeStr;  ///< Human-readable formatted file size string.
-		bool mounted;         ///< True if the device currently has active mounts.
+		std::string_view status; ///< Static status label, if mounted or busy.
 		bool error;           ///< True if an error occurred while probing the device.
 	};
 
@@ -129,10 +129,10 @@ namespace MappingPrompt {
 				std::string driveName = getDriveName(device);
 				std::uint64_t deviceSize = getBlockDeviceSize(device);
 				std::string sizeStr = formatFileSize(deviceSize);
-				bool mounted = isDeviceMounted(device);
-				deviceInfos.push_back({device, deviceSize, driveName, sizeStr, mounted, false});
+				const auto status = WriteValidation::deviceStatusLabel(device);
+				deviceInfos.push_back({device, deviceSize, driveName, sizeStr, status, false});
 			} catch (...) {
-				deviceInfos.push_back({device, 0, "", "", false, true});
+				deviceInfos.push_back({device, 0, "", "", {}, true});
 			}
 		}
 
@@ -197,14 +197,10 @@ namespace MappingPrompt {
 					stream << wt.deviceCol << " " << dev.path
 					       << wt.infoLabel << " <" << dev.driveName
 					       << "> " << UI::Palette::DimGray << "(" << wt.sizeCol << dev.sizeStr
-					       << UI::Palette::DimGray << ")"
-					       << ([&]() -> std::string {
-
-							   if (dev.mounted) return wt.colorFailure + " [MOUNTED]" + wt.rl_resetCol;
-							   return "";
-
-						   }())
-					       << "\n";
+					       << UI::Palette::DimGray << ")";
+					if (!dev.status.empty())
+					    stream << wt.colorFailure << " " << dev.status << wt.rl_resetCol;
+					stream << "\n";
 				}
 			}
 		}

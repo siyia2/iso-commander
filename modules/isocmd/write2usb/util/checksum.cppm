@@ -70,6 +70,7 @@ namespace usb_verify {
 		ReadbackProgress(ProgressInfo& slot, std::uint64_t total);
 		void record(std::size_t bytes);
 		bool finish();
+		bool cancelled() const noexcept { return isUsbWriteCancelled(slot_.cancelToken); }
 	private:
 		ProgressInfo& slot_;
 		std::uint64_t total_;

@@ -13,6 +13,7 @@ import isocmd.settings.settings;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
+import isocmd.write2usb.util.drainingState;
 
 namespace isocmd_tests {
 	namespace {
@@ -68,6 +69,52 @@ namespace isocmd_tests {
 			if (mode==1 && device=="/dev/zero") return false;
 			return true;
 
+		}
+
+		std::binary_semaphore resumeCancelledWriter{0};
+		std::atomic<bool> cancelledAfterReset{false}, bufferedSnapshot{false};
+
+		bool blockedWriter(const std::string&, const std::string&, std::size_t index,
+		                   std::vector<ProgressInfo>& progress) {
+			auto& row = progress.at(index);
+			raise(SIGINT);
+			resumeCancelledWriter.acquire();
+			cancelledAfterReset = isUsbWriteCancelled(row.cancelToken);
+			bufferedSnapshot = row.bufferedWrites == true;
+			return false;
+		}
+
+		bool freshWriter(const std::string&, const std::string&, std::size_t index,
+		                 std::vector<ProgressInfo>& progress) {
+			const auto& row = progress.at(index);
+			return !isUsbWriteCancelled(row.cancelToken) && row.bufferedWrites == false;
+		}
+
+		void checkAsyncCancellation(const Pairs& mappings) {
+			setupSignalHandlerCancellations();
+			GlobalState::g_operationCancelled = false;
+			ConfigCaches::g_configCache["buffered_writes"] = "on";
+			bool succeeded = true;
+			const Pairs single{mappings.front()};
+			auto screen = WriteExecution::performWithWriter(single, blockedWriter, &succeeded, false);
+			const bool reserved = g_drainingManager.isDeviceDraining(single.front().second);
+			stopWriteScreen(*screen);
+			GlobalState::g_operationCancelled = false;
+			ConfigCaches::g_configCache["buffered_writes"] = "off";
+			// Another device can finish before the old writer is released.
+			setupSignalHandlerCancellations();
+			bool nextSucceeded = false;
+			const Pairs next{mappings.at(1)};
+			auto nextScreen = WriteExecution::performWithWriter(next, freshWriter, &nextSucceeded, false);
+			stopWriteScreen(*nextScreen);
+			const bool stillReserved = g_drainingManager.isDeviceDraining(single.front().second);
+			resumeCancelledWriter.release();
+			g_drainingManager.joinAll();
+			CHECK(!succeeded && reserved && stillReserved && nextSucceeded);
+			CHECK(cancelledAfterReset && bufferedSnapshot);
+			CHECK(!g_drainingManager.isDeviceDraining(single.front().second));
+			CHECK(!g_drainingCancelled.load());
+			std::cout << "TEST-ASYNC-CANCELLATION-PASS\n" << std::flush;
 		}
 
 		void waitInput() {
@@ -137,6 +184,7 @@ namespace isocmd_tests {
 				std::cout<<"TEST-WRITE-RESULT-"<<result<<'\n'<<std::flush;
 				waitInput();
 			}
+			checkAsyncCancellation(mappings);
 			std::cout<<"TEST-VERIFY-OFF\n"<<std::flush;
 			auto skipped=WriteMapping::collectWithDevices(isos,fakeDevices,fakeValidate,false);
 			CHECK(skipped.size()==2 && !write2usbChecksumEnabled());

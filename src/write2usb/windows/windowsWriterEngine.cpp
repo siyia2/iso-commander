@@ -11,6 +11,7 @@ import std;
 import isocmd.core.cancellation;
 import isocmd.write2usb.windows.windowsWriterEngine;
 import isocmd.write2usb.util.checksum;
+import isocmd.write2usb.util.writeTypes;
 import isocmd.write2usb.util.alignedBuffer;
 
 namespace fs = std::filesystem;
@@ -67,12 +68,12 @@ namespace windowsWriter_engine::copy {
 		 *
 		 * @return Bytes filled (0 = EOF), or -1 on error / cancellation.
 		 */
-		ssize_t fillChunk(int fd_in, char* buf, std::size_t bufferSize) {
+		ssize_t fillChunk(int fd_in, char* buf, std::size_t bufferSize, const std::stop_token& cancelToken) {
 
 			std::size_t total = 0;
 
 			while (total < bufferSize) {
-				if (GlobalState::g_operationCancelled.load())
+				if (isUsbWriteCancelled(cancelToken))
 				    return -1;
 
 				const ssize_t n = read(
@@ -106,14 +107,15 @@ namespace windowsWriter_engine::copy {
 		                   std::size_t writeLen, std::uint64_t chunkOff,
 		                   std::size_t alignment,
 		                   std::uint64_t& bytesCopiedTotal,
-		                   std::atomic<std::uint64_t>& totalAccumulator) {
+		                   std::atomic<std::uint64_t>& totalAccumulator,
+		                   const std::stop_token& cancelToken) {
 
 			std::size_t done = 0;
 			std::size_t highWater = 0;
 			unsigned restarts = 0;
 
 			while (done < writeLen) {
-				if (GlobalState::g_operationCancelled.load())
+				if (isUsbWriteCancelled(cancelToken))
 				    return false;
 
 				const ssize_t written = pwrite(fd, buf + done, writeLen - done,
@@ -176,20 +178,21 @@ namespace windowsWriter_engine::copy {
 		}
 
 		/** Remove final padding and drain any dirty FAT32 tail page. */
-		bool finishDirectFile(int fd, std::uint64_t fileSize, std::size_t alignment, bool toNtfs) {
+		bool finishDirectFile(int fd, std::uint64_t fileSize, std::size_t alignment, bool toNtfs,
+		                      const std::stop_token& cancelToken) {
 
 			const auto tail = fileSize % alignment;
 			if (!tail) return true;
 			if (!truncateFile(fd, fileSize)) return false;
 			if (toNtfs) return true;
-			if (GlobalState::g_operationCancelled.load()) return false;
+			if (isUsbWriteCancelled(cancelToken)) return false;
 
 			int result;
 			do {
 				result = sync_file_range(fd, static_cast<off_t>(fileSize - tail),
 				    static_cast<off_t>(tail),
 				    SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER);
-			} while (result < 0 && errno == EINTR && !GlobalState::g_operationCancelled.load());
+			} while (result < 0 && errno == EINTR && !isUsbWriteCancelled(cancelToken));
 			return result == 0;
 
 		}
@@ -197,7 +200,7 @@ namespace windowsWriter_engine::copy {
 		/** A rolling 4 MiB writeback window shared across buffered files. */
 		class BufferedWriteback {
 		public:
-			BufferedWriteback() = default;
+			explicit BufferedWriteback(const std::stop_token& token) : cancelToken(token) {}
 			BufferedWriteback(const BufferedWriteback&) = delete;
 			BufferedWriteback& operator=(const BufferedWriteback&) = delete;
 
@@ -224,10 +227,10 @@ namespace windowsWriter_engine::copy {
 			static constexpr unsigned waitFlags = SYNC_FILE_RANGE_WAIT_BEFORE |
 			    SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER;
 
-			static bool syncRange(int fd, std::uint64_t off, std::uint64_t len, unsigned flags) {
+			bool syncRange(int fd, std::uint64_t off, std::uint64_t len, unsigned flags) {
 
 				for (;;) {
-					if (GlobalState::g_operationCancelled.load()) {
+					if (isUsbWriteCancelled(cancelToken)) {
 						errno = ECANCELED;
 						return false;
 					}
@@ -263,6 +266,7 @@ namespace windowsWriter_engine::copy {
 
 			}
 
+			const std::stop_token& cancelToken;
 			int fd_ = -1;
 			std::uint64_t off_ = 0, len_ = 0;
 		};
@@ -277,6 +281,7 @@ namespace windowsWriter_engine::copy {
 			std::atomic<std::uint64_t>& totalAccumulator;
 			usb_verify::Checksum64* checksum;
 			BufferedWriteback* writeback; // Null for direct I/O.
+			const std::stop_token& cancelToken;
 		};
 
 		struct CopyBuffers {
@@ -300,7 +305,7 @@ namespace windowsWriter_engine::copy {
 			chunk.exactTail = !ctx.toNtfs && chunk.offset + chunk.logicalLen >
 			    (kFatMaxFileSize & ~static_cast<std::uint64_t>(ctx.alignment - 1));
 
-			const ssize_t n = fillChunk(ctx.fd_in, chunk.buf, chunk.logicalLen);
+			const ssize_t n = fillChunk(ctx.fd_in, chunk.buf, chunk.logicalLen, ctx.cancelToken);
 			if (n < 0) return false;
 			if (static_cast<std::size_t>(n) != chunk.logicalLen) {
 				errno = EIO;
@@ -375,13 +380,13 @@ namespace windowsWriter_engine::copy {
 		bool writePreparedChunk(const CopyContext& ctx, const CopyChunk& chunk,
 		                        std::uint64_t& bytesCopiedTotal) {
 
-			if (GlobalState::g_operationCancelled.load()) return false;
+			if (isUsbWriteCancelled(ctx.cancelToken)) return false;
 			if (ctx.alignment > 1 && !ctx.toNtfs && !chunk.exactTail &&
 			    !truncateFile(ctx.fd_out, chunk.offset + chunk.writeLen))
 			    return false;
 
 			return writeOneChunk(ctx.fd_out, chunk.buf, chunk.logicalLen, chunk.writeLen,
-			    chunk.offset, ctx.alignment, bytesCopiedTotal, ctx.totalAccumulator);
+			    chunk.offset, ctx.alignment, bytesCopiedTotal, ctx.totalAccumulator, ctx.cancelToken);
 
 		}
 
@@ -391,7 +396,7 @@ namespace windowsWriter_engine::copy {
 
 			std::uint64_t rangeOffset = 0;
 			for (;;) {
-				if (GlobalState::g_operationCancelled.load()) return false;
+				if (isUsbWriteCancelled(ctx.cancelToken)) return false;
 				const auto nextOffset = current.offset + current.logicalLen;
 				const bool hasNext = nextOffset < ctx.fileSize;
 				if (hasNext) {
@@ -412,7 +417,7 @@ namespace windowsWriter_engine::copy {
 		/** Prepare the first chunk and start a worker only for multi-chunk files. */
 		bool copyFileChunks(const CopyContext& ctx, const CopyBuffers& buffers) {
 
-			if (GlobalState::g_operationCancelled.load()) return false;
+			if (isUsbWriteCancelled(ctx.cancelToken)) return false;
 			if (ctx.fileSize == 0) return true;
 
 			std::uint64_t bytesCopiedTotal = 0;
@@ -433,11 +438,11 @@ namespace windowsWriter_engine::copy {
 			    return false;
 
 			reader.reset();
-			if (GlobalState::g_operationCancelled.load() || bytesCopiedTotal != ctx.fileSize)
+			if (isUsbWriteCancelled(ctx.cancelToken) || bytesCopiedTotal != ctx.fileSize)
 			    return false;
 
 			return ctx.alignment == 1 ||
-			       finishDirectFile(ctx.fd_out, ctx.fileSize, ctx.alignment, ctx.toNtfs);
+			       finishDirectFile(ctx.fd_out, ctx.fileSize, ctx.alignment, ctx.toNtfs, ctx.cancelToken);
 
 		}
 
@@ -503,9 +508,9 @@ namespace windowsWriter_engine::copy {
 			CopyBuffers buffers{buf};
 			std::optional<AlignedBuffer> scratch;
 			if (!preparePrimaryBuffer(ctx, buffers, scratch)) return false;
-			if (GlobalState::g_operationCancelled.load()) return false;
+			if (isUsbWriteCancelled(ctx.cancelToken)) return false;
 			if (!prepareSpareBuffer(ctx, buffers, spareStorage)) return false;
-			if (GlobalState::g_operationCancelled.load()) return false;
+			if (isUsbWriteCancelled(ctx.cancelToken)) return false;
 
 			if (ctx.alignment > 1 && ctx.toNtfs && ctx.fileSize > 0)
 			    posix_fallocate(ctx.fd_out, 0, static_cast<off_t>(ctx.fileSize + padding));
@@ -524,12 +529,16 @@ namespace windowsWriter_engine::copy {
 		                          std::size_t bufferSize, char* buf,
 		                          std::optional<AlignedBuffer>& spareStorage,
 		                          std::atomic<std::uint64_t>& totalAccumulator,
-		                          std::uint64_t* expectedChecksum) {
+		                          std::uint64_t* expectedChecksum,
+		                          const std::stop_token& cancelToken) {
+
+			if (isUsbWriteCancelled(cancelToken)) return false;
 
 			const int fd_in = open(entry.src.c_str(), O_RDONLY | O_CLOEXEC);
 			if (fd_in < 0) return false;
 
 			posix_fadvise(fd_in, 0, 0, POSIX_FADV_SEQUENTIAL);
+			if (isUsbWriteCancelled(cancelToken)) { close(fd_in); return false; }
 
 			const int fd_out = open(entry.dst.c_str(),
 			    O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | (writeback ? 0 : O_DIRECT), 0644);
@@ -542,10 +551,10 @@ namespace windowsWriter_engine::copy {
 			usb_verify::Checksum64 checksum;
 			const CopyContext ctx{fd_in, fd_out, entry.size, toNtfs, bufferSize,
 			    writeback ? 1 : directAlignment(fd_out), totalAccumulator,
-			    expectedChecksum ? &checksum : nullptr, writeback};
+			    expectedChecksum ? &checksum : nullptr, writeback, cancelToken};
 			bool success = copyOpenedFile(ctx, buf, spareStorage);
 
-			if (!success || GlobalState::g_operationCancelled.load()) {
+			if (!success || isUsbWriteCancelled(cancelToken)) {
 				// Discard incomplete file data and release preallocation.
 				// A cleanup error must not turn a failed copy into success.
 				static_cast<void>(truncateFile(fd_out, 0));
@@ -557,12 +566,12 @@ namespace windowsWriter_engine::copy {
 			if (close(fd_out) != 0) success = false;
 
 			if (success && expectedChecksum) *expectedChecksum = checksum.value;
-			return success && !GlobalState::g_operationCancelled.load();
+			return success && !isUsbWriteCancelled(cancelToken);
 
 		}
 
 		/** Collect, deduplicate and create all required directories before copying. */
-		bool prepareDirectories(const std::vector<IsoCopyEntry>& entries) {
+		bool prepareDirectories(const std::vector<IsoCopyEntry>& entries, const std::stop_token& cancelToken) {
 
 			// Collect every directory that needs to exist.
 			std::vector<fs::path> directories;
@@ -585,7 +594,7 @@ namespace windowsWriter_engine::copy {
 
 			// Create each required directory only once.
 			for (const auto& dir : directories) {
-				if (GlobalState::g_operationCancelled.load())
+				if (isUsbWriteCancelled(cancelToken))
 				    return false;
 
 				fs::create_directories(dir);
@@ -613,21 +622,22 @@ namespace windowsWriter_engine::copy {
 	                    char* buf,
 	                    std::atomic<std::uint64_t>& totalAccumulator,
 	                    std::vector<std::uint64_t>* checksums,
-	                    bool buffered) {
+	                    bool buffered,
+	                    const std::stop_token& cancelToken) {
 
 		if (checksums) {
 			checksums->clear();
 			checksums->reserve(entries.size());
 		}
 
-		if (!prepareDirectories(entries)) return false;
+		if (isUsbWriteCancelled(cancelToken) || !prepareDirectories(entries, cancelToken)) return false;
 
 		// All parent directories now exist. Copy files only.
 		const auto ntfsPrefix = ntfsMnt + "/";
 		std::optional<AlignedBuffer> spareStorage;
-		BufferedWriteback writeback;
+		BufferedWriteback writeback(cancelToken);
 		for (const auto& e : entries) {
-			if (GlobalState::g_operationCancelled.load())
+			if (isUsbWriteCancelled(cancelToken))
 			    return false;
 
 			if (e.isDir)
@@ -641,7 +651,7 @@ namespace windowsWriter_engine::copy {
 			if (!copyFileWithProgress(
 			        e, toNtfs, buffered ? &writeback : nullptr,
 			        bufferSize, buf, spareStorage, totalAccumulator,
-			        checksums ? &checksum : nullptr)) {
+			        checksums ? &checksum : nullptr, cancelToken)) {
 				return false;
 			}
 			if (checksums) checksums->push_back(checksum);

@@ -268,17 +268,17 @@ namespace {
 			};
 
 			/**
-			 * @brief Reads the global cancellation flag.
+			 * @brief Checks the latched batch cancellation and global UI flag.
 			 *
 			 * @par Utility
 			 * The user can press cancel at any moment. This is the one way every part of
 			 * the copy asks "should I stop?".
 			 *
-			 * @return true if the user requested cancellation globally.
+			 * @return true if cancellation has been requested for this write.
 			 */
-			static bool isCancelled() {
+			bool isCancelled() const {
 
-				return GlobalState::g_operationCancelled.load();
+				return isUsbWriteCancelled(progressData_[progressIndex_].cancelToken);
 
 			}
 
@@ -542,6 +542,7 @@ namespace {
 				got = 0;
 				reachedEof = false;
 				while (got < toRead) {
+					if (isCancelled()) return false;
 					ssize_t r = read(isoFd_, buf + got, toRead - got);
 					if (r < 0) {
 						if (errno == EINTR) continue;
@@ -584,7 +585,7 @@ namespace {
 					bool reachedEof = false;
 
 					if (!readFully(c.buf, toRead, got, reachedEof)) {
-						pushSentinel(true);
+						pushSentinel(!isCancelled());
 						return;
 					}
 
@@ -870,7 +871,7 @@ namespace {
  * through stalls and resets to 0 after 60 s without progress.
  *
  * @par Cancellation
- * Both reader and writer check GlobalState::g_operationCancelled. On abort
+ * Both reader and writer check the per-batch cancellation token and UI flag. On abort
  * they stop promptly and skip the final fsync.
  *
  * @param isoPath       Path to the source ISO.
@@ -889,6 +890,8 @@ namespace {
 bool writeIsoToDevice(const std::string& isoPath, const std::string& device, std::size_t progressIndex, std::vector<ProgressInfo>& progressData) {
 
 	const auto fail = [&] { return progress::markFailed(progressData, progressIndex); };
+	const auto& token = progressData[progressIndex].cancelToken;
+	if (isUsbWriteCancelled(token)) return false;
 
 	io::FdGuard iso(open(isoPath.c_str(), O_RDONLY));
 	if (iso.fd == -1) return fail();
@@ -902,6 +905,7 @@ bool writeIsoToDevice(const std::string& isoPath, const std::string& device, std
 	if (lseek(iso.fd, 0, SEEK_SET) == -1) return fail();
 	posix_fadvise(iso.fd, 0, 0, POSIX_FADV_SEQUENTIAL);
 
+	if (isUsbWriteCancelled(token)) return false;
 	io::FdGuard dev(open(device.c_str(),
 	    (progressData[progressIndex].verifyRequested ? O_RDWR : O_WRONLY) | O_DIRECT));
 	if (dev.fd == -1) return fail();

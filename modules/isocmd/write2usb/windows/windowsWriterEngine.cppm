@@ -62,7 +62,8 @@ namespace windowsWriter_engine::copy {
 	                    char* buf,
 	                    std::atomic<std::uint64_t>& totalAccumulator,
 	                    std::vector<std::uint64_t>* checksums = nullptr,
-	                    bool buffered = false);
+	                    bool buffered = false,
+	                    const std::stop_token& cancelToken = {});
 
 } // namespace windowsWriter_engine::copy
 

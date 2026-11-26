@@ -3,7 +3,7 @@
 #include "../common/testHarness.h"
 
 namespace isocmd_tests {
-	void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsDoubleBuffering(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsDirectRecovery(); void windowsFilesystemWriteModes(); void windowsBufferedWrites(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int settingsWorkflowTest(const char* binary); int themeWorkflowTest(const char* binary); int importWorkflowTest(const char* binary); int conversionWorkflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
+	void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsDoubleBuffering(); void windowsLatchedCancellation(); void readbackLatchedDuringIo(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsDirectRecovery(); void windowsFilesystemWriteModes(); void windowsBufferedWrites(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int settingsWorkflowTest(const char* binary); int themeWorkflowTest(const char* binary); int importWorkflowTest(const char* binary); int conversionWorkflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
 }
 
 int main(int argc,char** argv) {
@@ -44,6 +44,8 @@ int main(int argc,char** argv) {
 		{"USB writer validation and Windows copy engine",usbWriter},
 		{"Windows copy I/O retries and short transfers",windowsIoRecovery},
 		{"Windows double-buffered read/write overlap",windowsDoubleBuffering},
+		{"Windows cancellation survives UI reset",windowsLatchedCancellation},
+		{"readback cancellation survives UI reset during I/O",readbackLatchedDuringIo},
 		{"Windows copy I/O failures, cancellation and recovery",windowsIoFailures},
 		{"Windows copy cleanup syscall failures",windowsCleanupFailures},
 		{"Windows FAT32 and NTFS direct writes",windowsFilesystemWriteModes},

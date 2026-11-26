@@ -5,9 +5,7 @@ import isocmd.core.uiState;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
-
-// Internal device-discovery helper defined in write2usbDeviceDiscovery.cpp.
-bool isFlashDrive(const std::string&);
+import isocmd.write2usb.util.drainingState;
 
 namespace fs = std::filesystem;
 
@@ -78,16 +76,25 @@ namespace WriteValidation {
 	 * by another process. Returns false if the counters cannot be read.
 	 *
 	 * @param device Whole-disk path (e.g. "/dev/sdb").
+	 * @param paths Filesystem roots for the in-flight counters.
 	 * @return true if one or more write requests are still pending.
 	 */
-	bool isDeviceBusy(const std::string& device) {
+	bool isDeviceBusy(const std::string& device, const DeviceDiscoveryPaths& paths) {
 
 		const std::string name = std::filesystem::path(device).filename().string();
-		std::ifstream in("/sys/block/" + name + "/inflight");
+		std::ifstream in(paths.sysBlock / name / "inflight");
 		unsigned long reads = 0, writes = 0;
 		if (!(in >> reads >> writes))
 		    return false;
 		return writes > 0;
+
+	}
+
+	std::string_view deviceStatusLabel(const std::string& device, const DeviceDiscoveryPaths& paths) {
+
+		if (isDeviceMounted(device, paths)) return "[MOUNTED]";
+		if (g_drainingManager.isDeviceDraining(device) || isDeviceBusy(device, paths)) return "[BUSY]";
+		return {};
 
 	}
 
@@ -96,10 +103,10 @@ namespace WriteValidation {
 	 *
 	 * Checks, in order:
 	 * -# The device is a removable USB flash drive (isFlashDrive).
-	 * -# The device and its partitions are not mounted (isDeviceMounted).
-	 * -# The device is not in @c g_drainingDevices, which tracks writes still
+	 * -# The device is not reserved by the drain manager, which tracks writes still
 	 *    being drained by this process after cancellation.
-	 * -# In non-interactive mode, the device has no write I/O in flight
+	 * -# The device and its partitions are not mounted (isDeviceMounted).
+	 * -# The device has no write I/O in flight (interactive and non-interactive modes)
 	 *    (@ref isDeviceBusy). This also catches pending writes from another
 	 *    process, which the in-process set cannot track.
 	 * -# The device size can be determined (getBlockDeviceSize).
@@ -108,22 +115,27 @@ namespace WriteValidation {
 	 * @param device Path used for the checks (canonical /dev/sdX).
 	 * @param shown  Path displayed in error messages (what the user typed).
 	 * @param[out] size Device size in bytes; only valid when no error is returned.
+	 * @param paths Filesystem roots for device discovery and validation.
 	 * @return An error message for the first failed check, or std::nullopt if the
 	 *         device is ready for writing.
 	 */
 	std::optional<std::string> checkDevice(const WriteTheme& wt, const std::string& device,
-	                                       const std::string& shown, std::uint64_t& size) {
+	                                       const std::string& shown, std::uint64_t& size,
+	                                       const DeviceDiscoveryPaths& paths) {
 
-		if (!isFlashDrive(device))
+		if (!isFlashDrive(device, paths))
 		    return pathErr(wt, shown, " is not a removable USB flash device");
 
-		if (isDeviceMounted(device))
+		if (g_drainingManager.isDeviceDraining(device))
+		    return pathErr(wt, shown, " is still draining a cancelled write");
+
+		if (isDeviceMounted(device, paths))
 		    return pathErr(wt, shown, " or its partitions are mounted");
 
-		if (GlobalState::isNonInteractive.load() && isDeviceBusy(device))
+		if (isDeviceBusy(device, paths))
 		    return pathErr(wt, shown, " has pending kernel-level tasks");
 
-		size = getBlockDeviceSize(device);
+		size = getBlockDeviceSize(device, paths);
 		if (size == 0) {
 			std::string e;
 			e.append(wt.errLabel).append("Failed to get size for ")

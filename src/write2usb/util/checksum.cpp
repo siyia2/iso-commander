@@ -35,7 +35,7 @@ namespace usb_verify {
 
 	bool ReadbackProgress::finish() {
 
-		if (done_ != total_ || GlobalState::g_operationCancelled.load()) return false;
+		if (done_ != total_ || cancelled()) return false;
 		slot_.progress.store(100);
 		slot_.completed.store(true);
 		return true;
@@ -52,7 +52,7 @@ namespace usb_verify {
 		Checksum64 checksum;
 		std::uint64_t done = 0;
 		while (done < size) {
-			if (GlobalState::g_operationCancelled.load()) return false;
+			if (progress.cancelled()) return false;
 			const std::size_t count = static_cast<std::size_t>(std::min<std::uint64_t>(size - done, bufferSize));
 			const ssize_t n = read(fd, buffer, count);
 			if (n < 0 && errno == EINTR) continue;
@@ -63,13 +63,14 @@ namespace usb_verify {
 			progress.record(static_cast<std::size_t>(n));
 		}
 		result = checksum.value;
-		return !GlobalState::g_operationCancelled.load();
+		return !progress.cancelled();
 
 	}
 
 	bool verifyFile(const std::filesystem::path& path, std::uint64_t size, std::uint64_t expected,
 	                char* buffer, std::size_t bufferSize, ReadbackProgress& progress) {
 
+		if (progress.cancelled()) return false;
 		const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
 		if (fd < 0) return false;
 		struct stat st{};

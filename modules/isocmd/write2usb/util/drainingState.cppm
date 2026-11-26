@@ -37,6 +37,16 @@ struct DrainingThreadManager {
 	 * upon completion to prevent duplicate joins.
 	 */
 	void joinAll();
+
+	// The registry lock is separate from the thread-list lock: joinAll() may
+	// wait for a drain which must be able to release its reservation.
+	void reserveDevice(const std::string& device);
+	void releaseDevice(const std::string& device);
+	bool isDeviceDraining(const std::string& device);
+
+private:
+	std::mutex devicesMutex;
+	std::multiset<std::string> drainingDevices;
 };
 
 // Global instances

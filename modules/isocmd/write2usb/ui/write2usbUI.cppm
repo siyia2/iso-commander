@@ -200,6 +200,7 @@ std::string formatSpeed(double mbPerSec);
  * @return Size in bytes.
  */
 std::uint64_t getBlockDeviceSize(const std::string& device);
+std::uint64_t getBlockDeviceSize(const std::string& device, const DeviceDiscoveryPaths& paths);
 
 // --- Shared validation helpers (defined in the same .cpp as validateDevices) ---
 
@@ -240,12 +241,18 @@ namespace WriteValidation {
 	 */
 	void printValidationErrors(const UI::WriteTheme& wt, const std::vector<std::string>& errs);
 
+	/** @brief Returns true if the device has write I/O in flight. */
+	bool isDeviceBusy(const std::string& device, const DeviceDiscoveryPaths& paths = {});
+
+	/** @brief Selection-list status; mounted takes priority over pending writes. */
+	std::string_view deviceStatusLabel(const std::string& device, const DeviceDiscoveryPaths& paths = {});
+
 	/**
 	 * @brief Runs the device-level checks, independent of which ISO is paired with it.
 	 *
 	 * Verifies that the device is a removable USB flash drive, is not mounted,
 	 * is not in the draining set (pending kernel-level tasks), has no write I/O
-	 * still in flight (non-interactive mode only), and has a determinable size.
+	 * still in flight (interactive and non-interactive modes), and has a determinable size.
 	 *
 	 * @param wt     Active write theme.
 	 * @param device Path used for the checks (canonical /dev/sdX).
@@ -255,7 +262,8 @@ namespace WriteValidation {
 	 *         the device is usable.
 	 */
 	std::optional<std::string> checkDevice(const UI::WriteTheme& wt, const std::string& device,
-	                                       const std::string& shown, std::uint64_t& size);
+	                                       const std::string& shown, std::uint64_t& size,
+	                                       const DeviceDiscoveryPaths& paths = {});
 
 	/**
 	 * @brief Checks that an ISO fits on a device.

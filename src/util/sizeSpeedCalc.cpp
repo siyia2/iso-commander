@@ -10,6 +10,7 @@ import std;
 import isocmd.converters.ccd2iso;
 import isocmd.converters.daa2iso;
 import isocmd.converters.mdf2iso;
+import isocmd.write2usb.ui.write2usbUI;
 
 // Declarations used only by this file (moved out of the module interface).
 std::size_t getTotalFileSize(const std::vector<std::string>& files);
@@ -26,12 +27,13 @@ std::size_t getTotalFileSize(const std::vector<std::string>& files);
  * directly, preventing thread blocking during active kernel I/O flushes.
  *
  * @param device Absolute path to the block device (e.g. @c /dev/sdb).
+ * @param paths Filesystem roots (defaults used by the one-argument overload).
  * @return Size in bytes, or @c 0 on failure or if the sysfs entry is absent.
  */
-std::uint64_t getBlockDeviceSize(const std::string& device) {
+std::uint64_t getBlockDeviceSize(const std::string& device, const DeviceDiscoveryPaths& paths) {
 
 	std::string deviceName = device.substr(device.find_last_of('/') + 1);
-	std::ifstream sizeFile("/sys/block/" + deviceName + "/size");
+	std::ifstream sizeFile(paths.sysBlock / deviceName / "size");
 
 	std::uint64_t sectors = 0;
 	if (!(sizeFile >> sectors)) {
@@ -41,6 +43,12 @@ std::uint64_t getBlockDeviceSize(const std::string& device) {
 	// sysfs /size is always in 512-byte logical sectors regardless of
 	// the drive's physical sector size
 	return sectors * 512ULL;
+
+}
+
+std::uint64_t getBlockDeviceSize(const std::string& device) {
+
+	return getBlockDeviceSize(device, {});
 
 }
 

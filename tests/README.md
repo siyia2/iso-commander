@@ -24,6 +24,23 @@ integration executable links the system `libutil` for PTY support. Runners
 use GNU coreutils `timeout`, `realpath` and `mktemp`. Do not run separate make
 invocations concurrently in the same build variant.
 
+### Asynchronous USB cancellation regression coverage
+
+The unit and integration suites check that cancellation remains latched after
+resetting the global UI flag, including direct and buffered Windows copy paths,
+CRC-64 readback, and the lifetime of moved progress records. The PTY test holds
+an injected writer in flight while the UI returns, checks that its device stays
+reserved, edits the buffered-write setting, then releases the writer and checks
+that cancellation and its original settings snapshot are preserved. The
+privileged loop-device suite also checks the raw writer after a short write with
+latched cancellation and a reset UI flag. No additional dependencies are needed.
+
+Unprivileged unit tests use synthetic sysfs and mount-table fixtures to exercise
+the production busy check, device validation in both modes, and status labels.
+They cover pending writes, read-only I/O, missing or malformed counters, mounted
+status priority, drain reservations and acceptance after the device becomes idle.
+No actual block device is opened or modified.
+
 ### Privileged tests (optional)
 
 ```sh

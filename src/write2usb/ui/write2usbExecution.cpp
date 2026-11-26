@@ -29,6 +29,8 @@ ProgressInfo::ProgressInfo(ProgressInfo&& other) noexcept
       device(std::move(other.device)),
       totalSize(std::move(other.totalSize)),
       sourcePath(std::move(other.sourcePath)),
+      cancelToken(std::move(other.cancelToken)),
+      bufferedWrites(other.bufferedWrites),
       verifyRequested(other.verifyRequested),
       verifying(other.verifying.load()),
       bytesVerified(other.bytesVerified.load()),
@@ -48,6 +50,8 @@ ProgressInfo& ProgressInfo::operator=(ProgressInfo&& other) noexcept {
 		device = std::move(other.device);
 		totalSize = std::move(other.totalSize);
 		sourcePath = std::move(other.sourcePath);
+		cancelToken = std::move(other.cancelToken);
+		bufferedWrites = other.bufferedWrites;
 		verifyRequested = other.verifyRequested;
 		verifying.store(other.verifying.load());
 		bytesVerified.store(other.bytesVerified.load());
@@ -141,18 +145,17 @@ namespace WriteExecution {
  * threads after cancellation.
  *
  * Called by performWriteOperation() after Ctrl+C
- * (@c GlobalState::g_operationCancelled). Transfers the outstanding futures
+ * (the batch cancellation token has already been latched). Transfers the outstanding futures
  * to background drain threads managed by @c g_drainingManager, allowing
  * writes and pending cache flushes to finish after the operation returns to
  * the prompt.
  *
- * One managed background thread is started per future. Each waits on its
- * future and decrements the active drain count on completion. When the last
+ * One managed background thread is started per pending future. Each waits
+ * on its future and releases the device reservation on completion. When the last
  * active drain thread finishes, @c g_drainingCancelled is cleared.
  *
- * Only devices whose tasks had neither completed nor failed when
- * cancellation was handled are counted as active drains. Tasks that have
- * already returned from writeIsoToDevice() need no further draining.
+ * Only devices whose futures are not ready are reserved. A task may publish
+ * a completion or failure flag before its mount cleanup has finished.
  *
  * The progress vector is shared rather than copied or moved. Each drain
  * thread captures the shared pointer to keep the per-operation records alive
@@ -160,9 +163,7 @@ namespace WriteExecution {
  *
  * @param futures        Per-task futures, taken by value and moved into the
  *                       background drain threads.
- * @param progressData   Per-task progress records. Read only: .completed /
- *                       .failed are inspected to decide which tasks still
- *                       need draining.
+ * @param progressData   Per-task progress records, used to identify the reserved device.
  * @param progressDataPtr Shared ownership of the progress records; captured
  *                       by each thread to keep the operation data alive until
  *                       that task's drain completes.
@@ -188,49 +189,100 @@ void drainManagerForWrite2UsbUI(
     std::shared_ptr<std::vector<ProgressInfo>> progressDataPtr)
 {
 
-	static std::atomic<std::size_t> activeDrains{0};
-
-	std::vector<bool> needsDrain;
-	needsDrain.reserve(progressData.size());
-
-	std::size_t newlyDraining = 0;
-	for (std::size_t i = 0; i < progressData.size(); ++i) {
-		const bool pending =
-		    !progressData[i].completed.load() && !progressData[i].failed.load();
-		needsDrain.push_back(pending);
-		if (pending) {
-			++newlyDraining;
-		}
-	}
-
-	if (newlyDraining > 0) {
-		activeDrains.fetch_add(newlyDraining, std::memory_order_relaxed);
-		g_drainingCancelled.store(true, std::memory_order_release);
-	}
-
+	// Progress flags may be set before the writer's RAII cleanup completes.
+	// Future readiness, not those flags, determines whether a device is safe
+	// to reuse. Register pending devices before returning to the UI.
 	for (std::size_t i = 0; i < futures.size(); ++i) {
+		if (!futures[i].valid() ||
+		    futures[i].wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+		    continue;
+
+		const auto& device = progressData[i].device;
+		g_drainingManager.reserveDevice(device);
 		g_drainingManager.add(std::thread([
-		    f = std::move(futures[i]),
-		    tracked = needsDrain[i],
-		    progressDataPtr
+		    f = std::move(futures[i]), i, progressDataPtr
 		]() mutable {
 
-			(void)progressDataPtr;
-
-			if (f.valid()) {
-				f.wait();
-			}
-
-			if (tracked) {
-				if (activeDrains.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-					g_drainingCancelled.store(false, std::memory_order_release);
-				}
-			}
+			f.wait();
+			g_drainingManager.releaseDevice((*progressDataPtr)[i].device);
 
 		}));
 	}
 
 }
+
+namespace {
+
+	void submitWriteTasks(ThreadPool& pool,
+	                      const std::shared_ptr<std::vector<ProgressInfo>>& progressDataPtr,
+	                      const std::shared_ptr<WriteSync>& syncPtr,
+	                      WriteExecution::Writer writer,
+	                      std::vector<std::future<void>>& futures) {
+
+		for (std::size_t i = 0; i < progressDataPtr->size(); ++i) {
+			futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
+
+				auto& progress = (*progressDataPtr)[i];
+				bool success = false;
+				try {
+					if (!isUsbWriteCancelled(progress.cancelToken))
+					    success = writer(progress.sourcePath, progress.device, i, *progressDataPtr);
+				} catch (...) {
+					// A throwing writer must still publish task completion and wake waiters.
+				}
+
+				if (success) {
+					progress.writeCompleted.store(true);
+					progress.completed.store(true);
+					syncPtr->completedTasks.fetch_add(1);
+				} else if (!isUsbWriteCancelled(progress.cancelToken)) {
+					progress.failed.store(true);
+				}
+
+				syncPtr->finishedTasks.fetch_add(1);
+
+				{
+					std::lock_guard<std::mutex> lock(syncPtr->mutex);
+				}
+				// notify_all: the screen's keeper thread and the main thread wait
+				// on this same condition variable, and notify_one could wake the
+				// wrong one.
+				syncPtr->cv.notify_all();
+
+			}));
+		}
+
+	}
+
+	// Wait for all tasks to finish. Each task's notify_all() wakes this
+	// thread on completion. Ctrl+C is also a wakeup: a SIGINT handler cannot
+	// notify a condition variable itself, but WriteScreen chains into it and
+	// relays the signal through its self-pipe, so its relay thread notifies
+	// this same condition variable after g_operationCancelled is set. The
+	// wait is therefore unbounded, with no periodic recheck.
+	//
+	// Only if that relay could not be set up (pipe/handler failure) do we
+	// fall back to a 500 ms recheck so cancellation still works.
+	void waitForWriteTasks(WriteSync& sync, const WriteScreen& screen, std::size_t totalTasks) {
+
+		std::unique_lock<std::mutex> lock(sync.mutex);
+		const auto done = [&] {
+
+			return sync.finishedTasks.load() == totalTasks ||
+			       GlobalState::g_operationCancelled.load();
+
+		};
+
+		if (writeScreenCancelWakeable(screen)) {
+			sync.cv.wait(lock, done);
+		} else {
+			while (!done())
+			    sync.cv.wait_for(lock, std::chrono::milliseconds(500), done);
+		}
+
+	}
+
+} // namespace
 
 /**
  * @brief Executes validated ISO-to-device writes and manages the progress
@@ -261,13 +313,14 @@ void drainManagerForWrite2UsbUI(
  * Only if that relay could not be installed does the wait fall back to
  * rechecking every 500 ms.
  *
- * When cancellation is detected, the result screen is painted and terminal
+ * When cancellation is detected, the batch stop state is latched permanently
+ * before the result screen is painted and terminal
  * input state is restored. Any tasks still running are transferred to
  * drainManagerForWrite2UsbUI, which keeps their futures alive while they
  * finish in the background.
  *
  * The result screen reflects task states at the time it is painted; tasks
- * that continue running after cancellation may finish later. The successful
+ * that are completing in-flight I/O and cleanup may return later. The successful
  * count in the summary is the count recorded at that time.
  *
  * @par Lifetime and ownership
@@ -301,14 +354,16 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
 	// materialised, so only one shared pointer travels through the tasks and drain.
 	auto progressDataPtr = WriteExecution::prepareWriteData(validPairsIn);
 	auto& progressData   = *progressDataPtr;
-	for (auto& row : progressData) row.verifyRequested = verify;
 
 	const std::size_t totalTasks = progressData.size();
 
 	auto syncPtr = std::make_shared<WriteSync>();
-	auto& finishedTasks   = syncPtr->finishedTasks;
-	auto& progressCvMutex = syncPtr->mutex;
-	auto& progressCv      = syncPtr->cv;
+	const bool buffered = write2usbBufferedEnabled();
+	for (auto& row : progressData) {
+		row.verifyRequested = verify;
+		row.bufferedWrites = buffered;
+		row.cancelToken = syncPtr->cancellation.get_token();
+	}
 
 	ThreadPool& pool = getStaticThreadPool();
 
@@ -321,75 +376,22 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
 	std::vector<std::future<void>> futures;
 	futures.reserve(totalTasks);
 	const auto batchStart = std::chrono::steady_clock::now();
-	for (std::size_t i = 0; i < totalTasks; ++i) {
-		futures.push_back(pool.enqueue([progressDataPtr, syncPtr, i, writer]() {
-
-			auto& progress = (*progressDataPtr)[i];
-			bool success = false;
-			try {
-				success = writer(progress.sourcePath, progress.device, i, *progressDataPtr);
-			} catch (...) {
-				// A throwing writer must still publish task completion and wake waiters.
-			}
-
-			if (success) {
-				progress.writeCompleted.store(true);
-				progress.completed.store(true);
-				syncPtr->completedTasks.fetch_add(1);
-			} else if (!GlobalState::g_operationCancelled.load()) {
-				progress.failed.store(true);
-			}
-
-			syncPtr->finishedTasks.fetch_add(1);
-
-			{
-				std::lock_guard<std::mutex> lock(syncPtr->mutex);
-			}
-			// notify_all: the screen's keeper thread and the main thread wait
-			// on this same condition variable, and notify_one could wake the
-			// wrong one.
-			syncPtr->cv.notify_all();
-
-		}));
-	}
-
-	// Wait for all tasks to finish. Each task's notify_all() wakes this
-	// thread on completion. Ctrl+C is also a wakeup: a SIGINT handler cannot
-	// notify a condition variable itself, but WriteScreen chains into it and
-	// relays the signal through its self-pipe, so its relay thread notifies
-	// this same condition variable after g_operationCancelled is set. The
-	// wait is therefore unbounded, with no periodic recheck.
-	//
-	// Only if that relay could not be set up (pipe/handler failure) do we
-	// fall back to a 500 ms recheck so cancellation still works.
-	{
-		std::unique_lock<std::mutex> lock(progressCvMutex);
-		const auto done = [&] {
-
-			return finishedTasks.load() == totalTasks ||
-			       GlobalState::g_operationCancelled.load();
-
-		};
-
-		if (writeScreenCancelWakeable(*screen)) {
-			progressCv.wait(lock, done);
-		} else {
-			while (!done())
-			    progressCv.wait_for(lock, std::chrono::milliseconds(500), done);
-		}
-	}
+	submitWriteTasks(pool, progressDataPtr, syncPtr, writer, futures);
+	waitForWriteTasks(*syncPtr, *screen, totalTasks);
 
 	// Each writer returns only after its write and optional verification.
 	// Freeze the batch wall-clock time before rendering or cancellation draining.
 	const auto batchElapsed = std::chrono::steady_clock::now() - batchStart;
 	signal(SIGINT, SIG_IGN);
+	const bool cancelled = GlobalState::g_operationCancelled.load();
+	if (cancelled) syncPtr->cancellation.request_stop();
 
 	finishWriteScreen(*screen, batchElapsed);
 
 	flushStdin();
 	restoreInput();
 
-	if (GlobalState::g_operationCancelled.load()) {
+	if (cancelled) {
 		drainManagerForWrite2UsbUI(
 		    std::move(futures),
 		    progressData,
@@ -403,7 +405,7 @@ std::shared_ptr<WriteScreen> WriteExecution::performWithWriter(
 	}
 
 	if (allSucceeded) {
-		*allSucceeded = !GlobalState::g_operationCancelled.load() &&
+		*allSucceeded = !cancelled &&
 		                syncPtr->completedTasks.load() == totalTasks;
 	}
 

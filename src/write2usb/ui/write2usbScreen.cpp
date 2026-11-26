@@ -425,7 +425,7 @@ public:
 		}
 
 		const std::size_t completed = syncPtr_->completedTasks.load();
-		const bool   cancelled = GlobalState::g_operationCancelled.load();
+		const bool   cancelled = isUsbWriteCancelled(syncPtr_->cancellation.get_token());
 
 		const std::string operation =
 		    std::string(UI::Palette::Yellow) + "write2usb" + wt_.rl_resetCol;
@@ -854,7 +854,7 @@ private:
 
 		if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
 		else if (prog.failed.load())                        row << wt_.colorFailure << "FAIL ";
-		else if (GlobalState::g_operationCancelled.load())  row << wt_.colorWarning << "CXL  ";
+		else if (isUsbWriteCancelled(prog.cancelToken))      row << wt_.colorWarning << "CXL  ";
 		else {
 			std::string pctStr = std::to_string(pct) + "%";
 			pctStr.resize(5, ' ');

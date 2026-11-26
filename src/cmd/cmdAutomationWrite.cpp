@@ -6,6 +6,7 @@ import std;
 import isocmd.cmd.cmdAutomation;
 import isocmd.core.cancellation;
 import isocmd.input.inputHandling;
+import isocmd.settings.settings;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.util.drainingState;
@@ -373,7 +374,11 @@ int handleWriteUsb(const ParsedArgs& args) {
 	}
 
 	auto progressDataPtr = buildProgressData(*pairsPtr);
-	for (auto& row : *progressDataPtr) row.verifyRequested = args.verifyUsb;
+	const bool buffered = write2usbBufferedEnabled();
+	for (auto& row : *progressDataPtr) {
+		row.verifyRequested = args.verifyUsb;
+		row.bufferedWrites = buffered;
+	}
 	executeSilentWriteOperations(pairsPtr, progressDataPtr, pool);
 	g_drainingManager.joinAll();
 	return evaluateWriteResult(*progressDataPtr);

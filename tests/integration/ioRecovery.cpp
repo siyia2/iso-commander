@@ -4,6 +4,7 @@
 import isocmd.core.cancellation;
 import isocmd.write2usb.windows.windowsWriterEngine;
 import isocmd.write2usb.util.checksum;
+import isocmd.write2usb.util.writeTypes;
 
 namespace isocmd_tests {
 	namespace {
@@ -126,6 +127,87 @@ namespace isocmd_tests {
 			}
 		}
 
+	}
+
+	// Stall a write, latch cancellation and reset the UI flag before it returns.
+	namespace {
+		std::binary_semaphore blockedWrite{0}, resumeWrite{0};
+
+		void blockWrite() {
+			blockedWrite.release();
+			resumeWrite.acquire();
+		}
+
+		void checkLatchedWindowsCancellation(bool buffered) {
+			CopyFixture f;
+			const auto second = f.tmp.path / "second";
+			ReadFd target(f.dst);
+			Plan plan;
+			plan[Call::Pwrite].set(Identity(target.fd), {observeBefore(blockWrite)});
+			std::atomic<std::uint64_t> total{0};
+			std::stop_source cancellation;
+			const auto token = cancellation.get_token();
+			const std::vector<IsoCopyEntry> entries{
+			    {f.src, f.dst, 4096, false}, {f.src, second, 4096, false}};
+			writeFile(f.src, f.data.substr(0, 4096));
+			GlobalState::g_operationCancelled = false;
+			{
+				Scope scope(plan);
+				auto task = std::async(std::launch::async, [&] {
+					return processEntries(entries, IsoType::FatOnly, "", f.buffer.size(),
+					    f.buffer.data(), total, nullptr, buffered, token);
+				});
+				const bool entered = blockedWrite.try_acquire_for(std::chrono::seconds(5));
+				GlobalState::g_operationCancelled = true;
+				cancellation.request_stop();
+				GlobalState::g_operationCancelled = false;
+				resumeWrite.release();
+				const bool success = task.get();
+				CHECK(entered && !success);
+			}
+			CHECK(total == 4096 && !fs::exists(second));
+			CHECK(plan[Call::Pwrite].calls.load() == 1);
+			std::stop_source nextBatch;
+			total = 0;
+			CHECK(processEntries(entries, IsoType::FatOnly, "", f.buffer.size(),
+			    f.buffer.data(), total, nullptr, buffered, nextBatch.get_token()));
+			CHECK(total == 8192 && readFile(second) == readFile(f.src));
+		}
+	}
+
+	void windowsLatchedCancellation() {
+		for (bool buffered : {false, true}) checkLatchedWindowsCancellation(buffered);
+	}
+
+	void readbackLatchedDuringIo() {
+		TempDir tmp;
+		const auto path = tmp.path / "payload";
+		writeFile(path, "123456789");
+		ReadFd target(path);
+		Plan plan;
+		plan[Call::Read].set(Identity(target.fd), {observeBefore(blockWrite)});
+		std::stop_source cancellation;
+		ProgressInfo row("test", "fixture", "9 B", "source");
+		row.cancelToken = cancellation.get_token();
+		usb_verify::ReadbackProgress readback(row, 9);
+		char buffer[4];
+		GlobalState::g_operationCancelled = false;
+		{
+			Scope scope(plan);
+			auto task = std::async(std::launch::async, [&] {
+				return usb_verify::verifyFile(path, 9, 0x6C40DF5F0B497347ULL,
+				    buffer, sizeof buffer, readback);
+			});
+			const bool entered = blockedWrite.try_acquire_for(std::chrono::seconds(5));
+			GlobalState::g_operationCancelled = true;
+			cancellation.request_stop();
+			GlobalState::g_operationCancelled = false;
+			resumeWrite.release();
+			const bool success = task.get();
+			CHECK(entered && !success);
+		}
+		CHECK(plan[Call::Read].calls.load() == 1 && row.bytesVerified == sizeof buffer);
+		CHECK(!readback.finish() && !row.completed);
 	}
 
 	void windowsIoRecovery() {

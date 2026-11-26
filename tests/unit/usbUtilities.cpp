@@ -108,6 +108,33 @@ namespace isocmd_tests {
 
 	}
 
+	void latchedReadbackCancellation() {
+		using namespace usb_verify;
+		TempDir tmp;
+		const auto path = tmp.path / "payload";
+		writeFile(path, "123456789");
+		ProgressInfo row("test", "fixture", "9 B", "source");
+		std::stop_source stop;
+		row.cancelToken = stop.get_token();
+		row.bufferedWrites = true;
+		ProgressInfo moved(std::move(row));
+		row = std::move(moved);
+		CHECK(row.cancelToken.stop_possible() && row.bufferedWrites == true);
+		GlobalState::g_operationCancelled = true;
+		stop.request_stop();
+		GlobalState::g_operationCancelled = false;
+		CHECK(row.cancelToken.stop_requested());
+		ReadbackProgress cancelled(row, 9);
+		char buffer[4];
+		CHECK(!verifyFile(path, 9, 0x6C40DF5F0B497347ULL, buffer, sizeof buffer, cancelled));
+		CHECK(!cancelled.finish() && row.bytesVerified == 0 && !row.completed);
+		std::stop_source fresh;
+		row.cancelToken = fresh.get_token();
+		ReadbackProgress active(row, 9);
+		CHECK(verifyFile(path, 9, 0x6C40DF5F0B497347ULL, buffer, sizeof buffer, active));
+		CHECK(active.finish() && row.completed);
+	}
+
 	static void checkProgressRows(const std::vector<ProgressInfo>& progress) {
 
 		for (int i = 0; i < 4096; ++i) {

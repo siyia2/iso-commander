@@ -26,6 +26,16 @@ namespace {
 
 	}
 
+	// The raw writer must stop even if the UI flag is reset inside an I/O
+	// callback, before the next write or verification read can be issued.
+	std::stop_source rawBatchCancellation;
+
+	void cancelRawBatchAndReset() {
+		GlobalState::g_operationCancelled = true;
+		rawBatchCancellation.request_stop();
+		GlobalState::g_operationCancelled = false;
+	}
+
 	static void checkRawTransfers(const auto& run, const Identity& input, const Identity& output, std::size_t sector, std::size_t chunk, const std::string& paddedImage) {
 
 		{
@@ -171,6 +181,29 @@ namespace {
 
 	}
 
+	void checkRawLatchedCancellation(const fs::path& src, const std::string& device,
+	                                const Identity& output, std::size_t sector,
+	                                const auto& resetDevice, const auto& checkDevice) {
+		rawBatchCancellation = std::stop_source{};
+		GlobalState::g_operationCancelled = false;
+		resetDevice();
+		std::vector<ProgressInfo> progress;
+		progress.emplace_back("source.iso", device, "test", src.string());
+		progress[0].cancelToken = rawBatchCancellation.get_token();
+		Plan plan;
+		plan[Call::Write].set(output, {cancelAfterShort(sector, cancelRawBatchAndReset)});
+		plan[Call::Fsync].set(output, {});
+		{
+			Scope scope(plan);
+			CHECK(!writeIsoToDevice(src.string(), device, 0, progress));
+		}
+		CHECK(!GlobalState::g_operationCancelled && progress[0].cancelToken.stop_requested());
+		CHECK(!progress[0].completed && !progress[0].failed);
+		CHECK(plan[Call::Write].calls.load() == 1 && plan[Call::Fsync].calls.load() == 0);
+		checkDevice(sector);
+		std::cout << "PASS: raw I/O: latched cancellation survives UI reset\n";
+	}
+
 	// Called only after the existing privileged fixture has pinned the loop device
 	// and verified its exact root-owned disposable backing inode and capacity.
 	void rawIoFaults(const fs::path& src, const std::string& device, int pinned,
@@ -260,6 +293,7 @@ namespace {
 		checkDirectWriteRestarts(run, output, sector, paddedImage);
 		checkRawCleanup(run, output, sector, paddedImage);
 		checkRawVerification(run, output, sector, paddedImage);
+		checkRawLatchedCancellation(src, device, output, sector, resetDevice, checkDevice);
 		CHECK(failures == 0);
 
 	}

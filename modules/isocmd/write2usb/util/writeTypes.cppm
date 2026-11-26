@@ -3,12 +3,21 @@
 export module isocmd.write2usb.util.writeTypes;
 
 import std;
+import isocmd.core.cancellation;
 
 // extern "C++" keeps these declarations attached to the global module, so the
 // existing .cpp files keep defining them unchanged and symbol names stay the same.
 export extern "C++" {
 
 // ---- write2usb/util/writeTypes ----
+
+// The global flag is the signal-safe front end. The UI latches the batch's
+// stop state before allowing the global flag to be reset.
+inline bool isUsbWriteCancelled(const std::stop_token& token = {}) noexcept {
+	// Read the UI flag first: observing its reset must not be followed by
+	// a stale pre-latch token check.
+	return GlobalState::g_operationCancelled.load() || token.stop_requested();
+}
 
 // --- Data Structures ---
 
@@ -34,6 +43,8 @@ struct ProgressInfo {
 	std::string totalSize;
 	std::string sourcePath;
 
+	std::stop_token cancelToken; // Shared by the batch; never reset after dispatch.
+	std::optional<bool> bufferedWrites; // Snapshot before dispatch; unset for standalone callers.
 	bool verifyRequested = false; // Set before dispatch; immutable while running.
 	std::atomic<bool> verifying{false};
 	std::atomic<std::uint64_t> bytesVerified{0};
@@ -74,6 +85,7 @@ struct ProgressInfo {
  * condition variable.
  */
 struct WriteSync {
+	std::stop_source cancellation;
 	std::atomic<std::size_t>     completedTasks{0};
 	std::atomic<std::size_t>     finishedTasks{0};   // success OR failure
 	std::mutex              mutex;
