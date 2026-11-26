@@ -62,7 +62,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 
 | ISO Type           | Write Method       | BIOS | UEFI | Verification      |
 |--------------------|--------------------|------|------|------------------ |
-| Windows < 10       | Unsupported        | ✗    | ✗    | ✗                 |
+| Windows < 10       | Unsupported        | ✗    | ✗    | Unsupported       |
 | Windows 10/11      | GPT + FAT32 + NTFS | ✗    | ✓    | CRC-64 (Optional) |
 | Windows 10/11 PE   | GPT + FAT32        | ✗    | ✓    | CRC-64 (Optional) |
 | Linux/BSD          | Raw Sector Copy    | ✓ *  | ✓ *  | CRC-64 (Optional) |
