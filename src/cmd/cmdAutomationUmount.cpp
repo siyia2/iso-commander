@@ -124,8 +124,12 @@ static void collectFromMnt(const fs::path& mntPath,
 			    res.mountPoints.insert(fs::canonical(entry.path()).string());
 		}
 	} catch (const fs::filesystem_error& e) {
-		if (e.code() != std::errc::no_such_file_or_directory)
-		    res.hasErrors = true;
+		if (e.code() != std::errc::no_such_file_or_directory) {
+			warnMsg(args.silentMode,
+			        std::string("Error scanning directory: ") + e.what(),
+			        mntPath.string());
+			res.hasErrors = true;
+		}
 	}
 
 }

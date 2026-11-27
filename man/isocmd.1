@@ -35,7 +35,10 @@ ISO mount points are located under
 .IR /mnt/ISOs/ .
 .SH NON-INTERACTIVE COMMANDS
 The action must come first, followed by options and then paths.
-Options cannot follow positional paths.
+Options cannot follow positional paths. Unknown actions and options are rejected.
+Use a directory prefix (for example,
+.IR ./\-image.iso )
+for filenames beginning with a hyphen.
 .TP
 .BR \-v ", " \-\-version
 Show the program version and exit.
@@ -70,7 +73,8 @@ for requirements and limitations.
 .TP
 .B \-\-silent
 Suppress informational messages, warnings and progress output.
-Critical errors are still displayed.
+Critical errors are still displayed. The order of options does not affect
+silent mode.
 .TP
 .B \-\-verify
 Enable CRC-64 checksum readback verification for
@@ -85,7 +89,7 @@ Maximum recursion depth for directory scans by
 and
 .BR c2iso .
 Depth 0 scans only the specified directories. The default is unlimited;
-negative values also select unlimited depth. Ignored by
+negative values also select unlimited depth. Rejected by
 .BR umount ", " unmount " and " w2usb .
 .SH EXIT STATUS
 Non-interactive commands return 0 on success and 1 on error or

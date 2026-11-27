@@ -51,9 +51,7 @@ namespace {
 			printVersionNumber("8.0.3");
 			return 0;
 		}
-		if (argc >= 3 || (argc == 2 && (arg1 == "umount" || arg1 == "unmount" ||
-		                                arg1 == "mount"  || arg1 == "c2iso" ||
-		                                arg1 == "w2usb"))) {
+		if (argc >= 2) {
 			return handleMountUmountConvertWriteCommands(argc, argv);
 		}
 		return std::nullopt; // interactive mode

@@ -43,6 +43,18 @@ static bool isFlag(const std::string& arg) {
 }
 
 /**
+ * @brief Identifies option-like arguments, including unknown options.
+ *
+ * A lone hyphen remains a positional path; other dash-prefixed filenames
+ * must be supplied with a directory prefix (e.g. "./-image.iso").
+ */
+static bool isOptionLike(std::string_view arg) {
+
+	return arg.size() > 1 && arg.front() == '-';
+
+}
+
+/**
  * @brief Determines whether a path identifies a device under /dev.
  *
  * @param path Path to inspect.
@@ -102,9 +114,9 @@ static void applyAction(const std::string& action, ParsedArgs& out) {
 /**
  * @brief Parses and applies a depth option.
  *
- * Depth options are ignored for w2usb and umount actions without
- * parsing or validating their values. For other actions, the numeric
- * suffix is parsed as an integer and assigned to @c maxDepth.
+ * Depth options are supported only by mount and c2iso. For these
+ * actions, the numeric suffix is parsed as an integer and assigned
+ * to @c maxDepth. Other actions reject the option before parsing.
  *
  * Negative values produce a warning and select unlimited depth.
  * Invalid or partially parsed values produce an error.
@@ -112,8 +124,8 @@ static void applyAction(const std::string& action, ParsedArgs& out) {
  * @param arg Complete depth option, including its "-d" prefix.
  * @param out Parsed argument structure to update.
  * @param captureWarn Deferred warning-formatting state.
- * @return true if the option is accepted or ignored; false if its
- *         depth value is invalid.
+ * @return true if the option is accepted; false if it is unsupported
+ *         by the action or its depth value is invalid.
  */
 static bool parseDepthOption(
     const std::string& arg,
@@ -121,8 +133,11 @@ static bool parseDepthOption(
     bool& captureWarn
 ) {
 
-	if (out.writeUsb || out.action == "umount")
-	    return true;
+	if (out.writeUsb || out.action == "umount") {
+		flushDeferredWarn(captureWarn);
+		errMsg("Option '" + arg + "' is only supported by mount and c2iso.");
+		return false;
+	}
 
 	const std::string depthStr = arg.substr(2);
 
@@ -154,14 +169,14 @@ static bool parseDepthOption(
 /**
  * @brief Processes a recognized command-line option.
  *
- * Enables silent mode for "--silent" or delegates depth-option
- * processing to @ref parseDepthOption.
+ * Enables silent mode for "--silent", validates "--verify" for
+ * w2usb, or delegates depth-option processing to @ref parseDepthOption.
  *
  * @param arg Option to process.
  * @param out Parsed argument structure to update.
  * @param captureWarn Deferred warning-formatting state.
  * @return true if the option was processed successfully; false if
- *         depth-option validation failed.
+ *         the option is unsupported by the action or its depth is invalid.
  */
 static bool handleFlag(
     const std::string& arg,
@@ -251,6 +266,11 @@ static bool parseInitialAction(
 		return false;
 	}
 
+	if (isOptionLike(arg)) {
+		errMsg("Unknown option '" + arg + "'.");
+		return false;
+	}
+
 	if (!isActionKeyword(arg)) {
 		flushDeferredWarn(captureWarn);
 		errMsg("Unknown action: '" + arg + "'.");
@@ -274,6 +294,8 @@ static bool parseInitialAction(
  * The action keyword must be the first argument. Recognized options
  * may appear after the action but before the first positional path.
  * Once positional arguments begin, subsequent options are rejected.
+ * Unknown options are rejected, and silent mode applies to the entire
+ * option prefix regardless of flag order.
  *
  * Supported actions:
  * - @c mount
@@ -288,8 +310,8 @@ static bool parseInitialAction(
  *   and c2iso operations.
  *
  * Negative depth values produce a warning and select unlimited depth.
- * Invalid depth values produce an error. Depth options are ignored
- * entirely for umount and w2usb operations.
+ * Invalid depth values produce an error. Depth options are rejected
+ * for umount and w2usb operations.
  *
  * For w2usb operations, ISO paths must precede device paths. Once a
  * device path is encountered, subsequent non-device paths are rejected.
@@ -299,14 +321,21 @@ static bool parseInitialAction(
  * @param out Parsed argument structure to populate.
  *
  * @return true if parsing succeeds; false if the action is missing
- *         or invalid, an option is misplaced, a depth value is invalid,
- *         or w2usb path ordering is violated.
+ *         or invalid, an option is misplaced or unsupported by the action,
+ *         a depth value is invalid, or w2usb path ordering is violated.
  */
 static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 
 	bool captureWarn  = false;
 	bool actionSeen   = false;
 	bool pathsStarted = false;
+
+	// Discover silent mode before processing the option prefix, so warnings
+	// do not depend on flag ordering. Options after paths remain invalid.
+	for (int i = 2; i < argc && isOptionLike(argv[i]); ++i) {
+		if (std::string_view(argv[i]) == "--silent")
+		    out.silentMode = true;
+	}
 
 	for (int i = 1; i < argc; ++i) {
 		const std::string arg = argv[i];
@@ -335,7 +364,14 @@ static bool parseArgs(int argc, char* argv[], ParsedArgs& out) {
 			continue;
 		}
 
-		// 3. Everything else is a path.
+		// 3. Reject unknown options rather than treating them as paths.
+		if (isOptionLike(arg)) {
+			flushDeferredWarn(captureWarn);
+			errMsg("Unknown option '" + arg + "'.");
+			return false;
+		}
+
+		// 4. Everything else is a path.
 		if (!appendPath(arg, out, pathsStarted, captureWarn))
 		    return false;
 	}
@@ -395,7 +431,7 @@ int handleMountUmountConvertWriteCommands(int argc, char* argv[]) {
 	if (args.action == "umount" || args.action == "unmount")
 	    return handleUmount(args);
 
-	errMsg(std::string("Unknown action '") + args.action + "'");
+	errMsg("Unknown action: '" + args.action + "'.");
 	return 1;
 
 }

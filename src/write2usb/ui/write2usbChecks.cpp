@@ -56,7 +56,9 @@ namespace WriteValidation {
 	 * @brief Prints a themed "Validation errors:" block to stderr.
 	 *
 	 * Each entry is printed as an indented bullet. Entries are expected to be
-	 * already themed (see plainErr and pathErr).
+	 * already themed (see plainErr and pathErr). Single-line CLI diagnostics
+	 * receive a terminating period; interactive messages and multiline
+	 * capacity details retain their original presentation.
 	 *
 	 * @param wt   Active write theme.
 	 * @param errs Pre-formatted error messages.
@@ -64,9 +66,24 @@ namespace WriteValidation {
 	void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>& errs) {
 
 		std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.editorResetCol << wt.bold << "\n";
-		for (const auto& e : errs)
-		    std::cerr << " \u2022 " << e << wt.bold << "\n";
-		std::cerr << wt.editorResetCol << (GlobalState::isNonInteractive ? "\n" : "");
+		const bool nonInteractive = GlobalState::isNonInteractive.load();
+		for (const auto& e : errs) {
+			std::cerr << " \u2022 ";
+			// Insert punctuation before the trailing palette reset, not after it.
+			std::string_view message = e;
+			if (nonInteractive && message.find('\n') == std::string_view::npos &&
+			    message.ends_with(wt.editorResetCol)) {
+				message.remove_suffix(wt.editorResetCol.size());
+				std::cerr << message;
+				if (!message.empty() && message.back() != '.')
+				    std::cerr << '.';
+				std::cerr << wt.editorResetCol;
+			} else {
+				std::cerr << e;
+			}
+			std::cerr << wt.bold << "\n";
+		}
+		std::cerr << wt.editorResetCol << (nonInteractive ? "\n" : "");
 
 	}
 

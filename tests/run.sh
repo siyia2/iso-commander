@@ -22,6 +22,7 @@ expect_error() {
     cli_run "CLI parser: $*" 1 "$@"
     cli_has stderr 'Error:'
     cli_has stderr "$expected_text"
+    cli_lacks stderr 'Warning:'
     cli_empty stdout
     cli_pass
 }
@@ -31,7 +32,22 @@ for flag in --version -v; do
     cli_empty stderr
     cli_pass
 done
+expect_error "Unknown action: 'not-an-action'." not-an-action
 expect_error "Unknown action: 'not-an-action'." not-an-action dummy
+expect_error "Unknown option '--invalid'." --invalid
+expect_error "Option '--silent' must follow the action keyword." --silent
+for action in mount umount unmount c2iso w2usb; do
+    for flag in --invalid -x --; do
+        expect_error "Unknown option '$flag'." "$action" "$flag"
+        expect_error "Unknown option '$flag'." "$action" --silent "$flag" dummy
+        expect_error "Unknown option '$flag'." "$action" dummy "$flag"
+    done
+done
+# Parser failures remain visible even when --silent follows a negative depth.
+for action in mount c2iso; do
+    expect_error "Invalid depth option: '-dinvalid'." "$action" -d-1 -dinvalid --silent
+    expect_error "Unknown option '--invalid'." "$action" -d-1 --invalid --silent
+done
 expect_error "Option '--silent' must follow the action keyword." --silent mount
 expect_error "Invalid depth option: '-dinvalid'." mount -dinvalid dummy
 expect_error "Invalid depth option: '-d9999999999999999999'." c2iso -d9999999999999999999 dummy
@@ -42,7 +58,17 @@ expect_error "Option '-d0' must precede all paths." c2iso dummy -d0
 expect_error 'ISO paths must precede device paths' w2usb /dev/isocmd-test-does-not-exist dummy.iso
 expect_error "Option '--silent' must precede all paths." w2usb dummy.iso --silent
 expect_error "Option '--verify' must precede all paths." w2usb dummy.iso --verify
-expect_error "Option '--verify' is only supported by w2usb." c2iso --verify dummy
+for action in mount umount unmount c2iso; do
+    expect_error "Option '--verify' is only supported by w2usb." "$action" --verify dummy
+    expect_error "Option '--verify' is only supported by w2usb." "$action" --silent --verify dummy
+done
+# Depth options must be rejected before dispatch, even in silent mode.
+for action in w2usb umount unmount; do
+    for depth in -d1 -d0 -d-1 -dinvalid -d; do
+        expect_error "Option '$depth' is only supported by mount and c2iso." "$action" "$depth" dummy
+        expect_error "Option '$depth' is only supported by mount and c2iso." "$action" --silent "$depth" dummy
+    done
+done
 
 # Real CLI dispatch with deterministic raw sectors, no device writes.
 mkdir -p images/nested empty
@@ -126,6 +152,9 @@ cli_quiet; cmp expected.iso "$output" || cli_fail 'incorrect ISO bytes'; cli_pas
 rm "$output"
 cli_run 'c2iso: silent negative depth and success' 0 c2iso --silent -d-1 "$PWD/images"
 cli_quiet; cmp expected.iso "$output" || cli_fail 'incorrect ISO bytes'; cli_pass
+rm "$output"
+cli_run 'c2iso: negative depth before silent and success' 0 c2iso -d-1 --silent "$PWD/images"
+cli_quiet; cmp expected.iso "$output" || cli_fail 'incorrect ISO bytes'; cli_pass
 printf 'keep-existing-output' > "$output"
 cli_run 'c2iso: silent existing output' 0 c2iso --silent "$sample"
 cli_quiet; [ "$(cat "$output")" = 'keep-existing-output' ] || cli_fail 'existing ISO overwritten'; cli_pass
@@ -143,11 +172,11 @@ if [ "$(id -u)" -ne 0 ]; then
         cli_run "mount: $mode permission rejection" 1 mount "$@" "$PWD/empty"
         cli_has stderr 'Error: Root privileges required for mounting ISOs.'; cli_empty stdout; cli_pass
         for action in umount unmount; do
-            cli_run "$action: $mode permission rejection" 1 "$action" "$@" -dinvalid "$PWD/empty"
+            cli_run "$action: $mode permission rejection" 1 "$action" "$@" "$PWD/empty"
             cli_has stderr 'Error: Root privileges required for unmounting ISOs.'; cli_empty stdout; cli_pass
         done
-        cli_run "w2usb: $mode permission rejection" 1 w2usb "$@" -dinvalid "$PWD/expected.iso" /dev/isocmd-test-does-not-exist
-        cli_has stderr 'Validation errors:'; cli_has stderr 'Root privileges are required'; cli_empty stdout; cli_pass
+        cli_run "w2usb: $mode permission rejection" 1 w2usb "$@" "$PWD/expected.iso" /dev/isocmd-test-does-not-exist
+        cli_line stderr 'Error: Root privileges required for writing ISOs to USB devices.'; cli_lacks stderr 'Validation errors:'; cli_empty stdout; cli_pass
     done
 else
     printf '%s\n' 'SKIP: unprivileged CLI permission checks (root)'

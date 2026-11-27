@@ -38,7 +38,7 @@ static bool validatePrerequisitesAndArgs(const ParsedArgs& args, const WriteThem
 	using namespace WriteValidation;
 
 	if (geteuid() != 0) {
-		printValidationErrors(wt, {plainErr(wt, "Root privileges are required")});
+		IsoCli::errMsg("Root privileges required for writing ISOs to USB devices.");
 		return false;
 	}
 

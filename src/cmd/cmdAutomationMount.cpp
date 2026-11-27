@@ -48,6 +48,7 @@ void IsoCli::verboseWarn(bool silentMode, const std::string& msg) {
  *
  * Formats as: Warning: '<red>path</red>' reason
  * Pass an empty @p path to omit the quoted-path segment entirely.
+ * Adds a terminating period if the reason does not already have one.
  */
 void IsoCli::warnMsg(bool silentMode,
                      std::string_view reason,
@@ -59,7 +60,10 @@ void IsoCli::warnMsg(bool silentMode,
 	if (!path.empty())
 	    std::cerr << "'" << c.indexA << path
 	              << c.num << "' ";
-	std::cerr << reason << UI::Palette::Reset;
+	std::cerr << reason;
+	if (!reason.empty() && reason.back() != '.')
+	    std::cerr << '.';
+	std::cerr << UI::Palette::Reset;
 
 }
 
