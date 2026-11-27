@@ -35,19 +35,16 @@ namespace {
 
 			auto appendError = [&](std::string_view tag) {
 
-				buf.append(tc.error).append("Failed to unmount: ")
-				   .append(tc.warning).append("'").append(path).append(tc.warning).append("'")
-				   .append(tc.error).append(". ")
-				   .append(tc.label).append("{").append(tag).append("}")
+				buf.append(tc.error).append("✗ ")
+				   .append(tc.warning).append(path)
+				   .append(tc.label).append("  {").append(tag).append("}")
 				   .append(tc.reset);
 
 			};
 
 			// Compare mount paths without allocating strings.
 			if (messageType == "success") {
-				buf.append(tc.label).append("Unmounted: ")
-				   .append(tc.path).append("'").append(path).append(tc.path).append("'")
-				   .append(tc.label).append(".")
+				buf.append(tc.path).append("✓ ").append(path)
 				   .append(tc.reset);
 			}
 			else if (messageType == "root_error") appendError("needsRoot");
@@ -252,7 +249,7 @@ namespace {
 	}
 
 	struct UmountLineRef {
-		std::string key;   // displayed directory text + the bytes that follow it in the line
+		std::string key;   // displayed directory text
 		std::size_t      index; // position in verboseSets.umountRecords
 	};
 
@@ -271,17 +268,10 @@ void forEachUmountLine(bool completed, const std::function<void(std::string_view
 	const std::vector<UmountRecord>& records = verboseSets.umountRecords;
 	VerboseMessageFormatter formatter;
 
-	// In a printed line the directory text is followed by a fixed colour code and a
-	// quote (different for success and failure lines). Comparing directory + that
-	// suffix orders lines like comparing the full lines would, up to the final tag.
-	std::string suffix(completed ? std::string_view(formatter.tc.path)
-	                             : std::string_view(formatter.tc.warning));
-	suffix.push_back('\'');
-
 	std::vector<UmountLineRef> refs;
 	for (std::size_t i = 0; i < records.size(); ++i)
 	    if (records[i].completed == completed)
-	        refs.push_back({formatDirText(records[i].mountPoint) + suffix, i});
+	        refs.push_back({formatDirText(records[i].mountPoint), i});
 	if (refs.empty()) return;
 
 	auto line = [&](std::size_t i) {

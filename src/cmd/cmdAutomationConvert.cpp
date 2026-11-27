@@ -443,13 +443,13 @@ static void displayConversionResults(
 	std::cout << "\n";
 
 	for (const auto& msg : verboseSets.operationCompleted)
-	    std::cout << msg << UI::Palette::BoldReset << "\n";
+	    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
 
 	for (const auto& msg : verboseSets.operationSkipped)
-	    std::cout << msg << UI::Palette::BoldReset << "\n";
+	    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
 
 	for (const auto& msg : verboseSets.operationFailed)
-	    std::cout << msg << UI::Palette::BoldReset << "\n";
+	    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
 
 	std::cout << "\nConversion summary:\n"
 	          << " Successful: " << completedTasks.load() << "\n"

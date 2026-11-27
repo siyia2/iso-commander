@@ -99,11 +99,15 @@ void clearGlobalVerboseSets();
 
 // --- Output & Logging Functions ---
 
+/// Inserts the fixed IDX operation label and themed colon after a result status.
+/// Adds a failure status to input-validation messages that have none.
+std::string formatVerboseLine(std::string_view operation, std::string_view line);
+
 /**
- * Prints set contents based on the provided verbosity level.
+ * Prints categorized results with a status symbol and inline operation label on each entry.
  */
 void verbosePrint(std::unordered_set<std::string>& primarySet, std::unordered_set<std::string>& secondarySet,
-std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType);
+std::unordered_set<std::string>& tertiarySet, std::unordered_set<std::string>& errorSet, int printType, std::string_view operation);
 
 /**
  * Outputs a list of unique error messages collected during execution.

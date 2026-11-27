@@ -303,7 +303,7 @@ static void printVerboseUnmountSummary(
 
 	auto printUmountLine = [](std::string_view msg) {
 
-		std::cout << msg << UI::Palette::BoldReset << "\n";
+		std::cout << formatVerboseLine("umount", msg) << UI::Palette::BoldReset << "\n";
 
 	};
 	for (const auto& msg : verboseSets.operationCompleted) printUmountLine(msg);

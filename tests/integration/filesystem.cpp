@@ -48,7 +48,7 @@ namespace isocmd_tests {
 		std::atomic<std::size_t> done{0}, failed{0}, bytes{0}; std::atomic<bool> ok{true};
 		int ownershipCalls = 0;
 		OperationContext ctx{reporter, &done, &failed, ok, [&](const fs::path&) {++ownershipCalls;}, &bytes};
-		CHECK(performBufferedCopyOperation(ctx, {src, dst, "test", "source.iso", "test/", "copy.iso"}, "copying"));
+		CHECK(performBufferedCopyOperation(ctx, {src, dst, "test", "source.iso", "test/", "copy.iso"}));
 		CHECK(readFile(src) == payload && readFile(dst) == payload && !fs::exists(dst.string()+".part"));
 		CHECK(done == 1 && failed == 0 && bytes == payload.size() && ownershipCalls == 1 && ok);
 		checkMoveAndDelete(ctx, dst, moved, payload, done, failed, bytes, ok);

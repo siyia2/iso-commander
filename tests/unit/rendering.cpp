@@ -8,6 +8,7 @@
 #include "../common/testHarness.h"
 
 import isocmd.ui.display.themes;
+import isocmd.ui.info.verbose;
 import isocmd.settings.settings;
 import isocmd.write2usb.ui.textWidth;
 import isocmd.core.uiState;
@@ -19,6 +20,36 @@ import isocmd.select.select;
 
 namespace isocmd_tests {
 
+	/// Checks fixed IDX inline labels, themed colon colors and original body colors.
+	static void checkOperationColors() {
+
+		using namespace UI::Palette;
+		constexpr std::pair<std::string_view, std::string_view> expected[] = {
+			{"mount", Green}, {"cp", Green}, {"umount", Yellow}, {"mv", Yellow},
+			{"rm", Red}, {"write2usb", Yellow}, {"w2usb", Yellow}, {"c2iso", Orange},
+			{"ccd2iso", Orange}, {"mdf2iso", Orange}, {"nrg2iso", Orange},
+			{"chd2iso", Orange}, {"daa2iso", Orange}
+		};
+		for (const auto& [operation, color] : expected) {
+			CHECK(getOperationColor(operation) == color);
+			const auto theme = resolveVerboseTheme();
+			const auto label = std::string(color) + std::string(operation) + std::string(theme.label) + ": ";
+			for (const auto& [status, statusColor] : std::initializer_list<std::pair<std::string_view, std::string_view>>{
+			         {"✓ ", theme.path}, {"– ", theme.warning}, {"✗ ", theme.error}}) {
+				const auto prefix = std::string(statusColor) + std::string(status);
+				const auto body = std::string(theme.highlight) + "image.iso\n  Diagnostic" + std::string(theme.reset);
+				CHECK(formatVerboseLine(operation, prefix + body) ==
+				      prefix + label + std::string(statusColor) + body);
+			}
+			const auto diagnostic = std::string(theme.error) + "Invalid index: '9'" + std::string(theme.reset);
+			CHECK(formatVerboseLine(operation, diagnostic) ==
+			      std::string(theme.error) + "✗ " + label + std::string(theme.error) + diagnostic);
+		}
+		CHECK(getOperationColor("unknown") == BoldReset);
+		CHECK(formatVerboseLine("mount", "").empty());
+
+	}
+
 	void themeAndWidth() {
 
 		using namespace UI::Palette;
@@ -28,6 +59,7 @@ namespace isocmd_tests {
 			CHECK(PromptBoldAlt == "\001" + BoldReset + "\002");
 			for (const auto& theme : ConfigValues::theme) {
 				globalTheme = theme;
+				checkOperationColors();
 				const auto p = getPromptTheme();
 				CHECK(p.reset == PromptBoldAlt);
 				CHECK(p.primary.front() == '\001' && p.primary.back() == '\002');

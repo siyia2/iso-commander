@@ -323,16 +323,17 @@ namespace {
 		std::string msg;
 		if (valRes == ValidationResult::Missing) {
 			msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 32);
-			msg.append(themes.missingLabel).append("Convert2ISO: ")
-			   .append(themes.errPath).append("'").append(file.displayPath).append("'")
-			   .append(themes.missingLabel).append(": Failed → MissingFile.");
+			msg.append(themes.errLabel).append("✗ ")
+			   .append(themes.errPath).append(file.displayPath)
+			   .append(themes.missingLabel).append("  MissingFile");
 			removeFromCache(file.inputPath, ctx);
 		} else {
 			msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 48);
-			msg.append(themes.errLabel).append("Convert2ISO: ")
-			   .append(themes.errPath).append("'").append(file.displayPath).append("'")
-			   .append(themes.errLabel).append(": Failed → NoAccess.");
+			msg.append(themes.errLabel).append("✗ ")
+			   .append(themes.errPath).append(file.displayPath)
+			   .append(themes.errLabel).append("  NoAccess");
 		}
+		msg.append(UI::Palette::BoldReset);
 		ctx.localFailedMsgs.push_back(std::move(msg));
 		ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);
 		ctx.flushIfFull(ctx.localFailedMsgs);
@@ -354,9 +355,10 @@ namespace {
 		const auto& themes = ctx.themes;
 		std::string msg;
 		msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() + file.displayPath.size() + 32);
-		msg.append(themes.skipLabel).append("Convert2ISO: ")
-		   .append(themes.skipPath).append("'").append(file.displayPath).append("'")
-		   .append(themes.skipLabel).append(": ISOalrExists → Skipped.");
+		msg.append(themes.skipLabel).append("– ")
+		   .append(themes.skipPath).append(file.displayPath)
+		   .append(themes.skipLabel).append("  ISOalrExists");
+		msg.append(UI::Palette::BoldReset);
 		ctx.localSkippedMsgs.push_back(std::move(msg));
 		ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
 		ctx.flushIfFull(ctx.localSkippedMsgs);
@@ -390,9 +392,10 @@ namespace {
 		std::string_view fileType = getFileType(file.fileNameOnly);
 		std::string msg;
 		msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() + file.outputPath.size() + fileType.size() + 16);
-		msg.append(themes.okLabel).append("Convert2ISO: ")
-		   .append(themes.okPath).append("'").append(file.outputPath).append("'")
-		   .append(themes.okLabel).append(": ").append(fileType).append(" → ISO.");
+		msg.append(themes.okPath).append("✓ ")
+		   .append(themes.okPath).append(file.outputPath)
+		   .append(themes.okLabel).append("  ").append(fileType).append(" → ISO");
+		msg.append(UI::Palette::BoldReset);
 		ctx.localSuccessMsgs.push_back(std::move(msg));
 
 		ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -420,9 +423,10 @@ namespace {
 		const auto& themes = ctx.themes;
 		std::string msg;
 		msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 24);
-		msg.append(themes.errLabel).append("Convert2ISO: ")
-		   .append(themes.errPath).append("'").append(file.displayPath).append("'")
-		   .append(themes.errLabel).append(": ").append(isCancelled ? "Cancelled." : "Failed.");
+		msg.append(themes.errLabel).append("✗ ")
+		   .append(themes.errPath).append(file.displayPath)
+		   .append(themes.errLabel).append("  ").append(isCancelled ? "Cancelled" : "Failed");
+		msg.append(UI::Palette::BoldReset);
 		ctx.localFailedMsgs.push_back(std::move(msg));
 
 		ctx.failedTasks->fetch_add(1, std::memory_order_acq_rel);

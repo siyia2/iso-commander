@@ -212,7 +212,7 @@ namespace {
 			      isoDirs(dirs),
 			      keybindingGuard(guard),
 			      isUnmount(op == "umount"),
-			      operationColor(pickOperationColor(op)),
+			      operationColor(getOperationColor(op)),
 			      filteredFiles(refreshState->filteredFiles),
 			      pendingIndices(refreshState->pendingIndices),
 			      isFiltered(refreshState->isFiltered),
@@ -236,27 +236,6 @@ namespace {
 				listSubtype = (op == "mount")     ? "mount"
 				            : (op == "write2usb") ? "write2usb"
 				                                  : "cp_mv_rm";
-
-			}
-
-			/**
-			 * @brief Maps the operation name to its ANSI color code.
-			 *
-			 * @param op Operation name ("rm", "cp", "mv", "mount", "write2usb",
-			 *           "umount", or anything else).
-			 * @return ANSI color code string for the operation, defaulting to
-			 *         @c UI::Palette::PromptBoldAlt for unknown operations.
-			 */
-			static std::string pickOperationColor(const std::string& op) {
-
-				return std::string(
-				    op == "rm"        ? UI::Palette::Red    :
-				    op == "cp"        ? UI::Palette::Green  :
-				    op == "mv"        ? UI::Palette::Yellow :
-				    op == "mount"     ? UI::Palette::Green  :
-				    op == "write2usb" ? UI::Palette::Yellow :
-				    op == "umount"    ? UI::Palette::Yellow : UI::Palette::PromptBoldAlt
-				);
 
 			}
 

@@ -60,11 +60,12 @@ cli_has stderr "'$PWD/missing.iso' does not exist, skipping."
 cli_has stderr "'$PWD/wrong-mount.txt' is not an ISO file, skipping."
 cli_has stdout 'No ISO files to mount.'; cli_pass
 cli_run 'mount: invalid image failure' 1 mount "$PWD/bad.iso"
-cli_record stdout 'Failed to mnt:' 'bad.iso' '{badFS}'
+cli_record stdout '✗ mount: ' 'bad.iso' '{badFS}'
 cli_summary Mount 0 1; [ -z "$(ls -A /mnt/ISOs)" ] || cli_fail 'unexpected mount'; cli_pass
 cli_run 'mount: mixed success and invalid image' 1 mount "$PWD/mount.iso" "$PWD/bad.iso"
-cli_has stdout 'Located 2 ISO files; Attempting to mount...'; cli_record stdout 'ISO:' 'mount.iso' ' mnt@: '
-cli_record stdout 'Failed to mnt:' 'bad.iso' '{badFS}'; cli_summary Mount 1 1
+cli_has stdout 'Located 2 ISO files; Attempting to mount...'; cli_record stdout '✓ mount: ' 'mount.iso' ' → '
+cli_record stdout '✓ mount: ' 'mount.iso' '{iso9660}'
+cli_record stdout '✗ mount: ' 'bad.iso' '{badFS}'; cli_summary Mount 1 1
 # Verify the sole mount is actually our fixture, not just a success message.
 set -- /mnt/ISOs/*
 [ "$#" -eq 1 ] && [ -d "$1" ] || cli_fail 'expected one mounted image'
@@ -72,10 +73,10 @@ mount_point=$1
 [ "$(cat "$mount_point/marker.txt")" = 'isocmd mount test' ] || cli_fail 'incorrect mounted contents'
 cli_pass
 cli_run 'mount: already mounted skip' 0 mount "$PWD/mount.iso"
-cli_record stdout 'ISO:' 'mount.iso' ' alr mnt@: '; cli_summary Mount 1 0; cli_pass
+cli_record stdout '– mount: ' 'mount.iso' ' → '; cli_summary Mount 1 0; cli_pass
 cli_run 'umount: verbose success' 0 umount "$mount_point"
 cli_has stdout 'Located 1 mount point; Attempting to unmount...'
-cli_has stdout "Unmounted: '$mount_point'."; cli_summary Unmount 1 0
+cli_has stdout "✓ umount: $mount_point"; cli_summary Unmount 1 0
 [ ! -e "$mount_point" ] || cli_fail 'mount directory retained'; cli_pass
 
 cli_run 'unmount: invalid path and disallowed directory' 1 unmount "$PWD/missing-mount" "$PWD/empty-mount-input"
@@ -91,7 +92,7 @@ cli_has stdout 'No ISO mount points found to unmount.'; cli_empty stderr; cli_pa
 mkdir -p /mnt/ISOs/not-mounted
 printf 'keep' > /mnt/ISOs/not-mounted/marker
 cli_run 'umount: operation failure' 1 umount /mnt/ISOs/not-mounted
-cli_record stdout 'Failed to unmount:' 'not-mounted' '{notAnISO}'; cli_summary Unmount 0 1
+cli_record stdout '✗ umount: ' 'not-mounted' '{notAnISO}'; cli_summary Unmount 0 1
 [ "$(cat /mnt/ISOs/not-mounted/marker)" = keep ] || cli_fail 'ordinary directory modified'; cli_pass
 rm /mnt/ISOs/not-mounted/marker; rmdir /mnt/ISOs/not-mounted
 

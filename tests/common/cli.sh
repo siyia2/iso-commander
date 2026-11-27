@@ -68,6 +68,9 @@ cli_summary() {
     elif [ "$2" -eq 0 ]; then status=FAILED
     else status=PARTIAL; fi
     cli_has stdout "Status: $operation → $status"
+    if grep -Fxq -- "$operation:" cli.stdout; then
+        cli_fail "unexpected standalone operation heading: $operation:"
+    fi
     cli_lacks stdout 'Display verbose output?'
     cli_lacks stdout 'Verbose? (y/n):'
 }

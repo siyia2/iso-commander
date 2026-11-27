@@ -657,15 +657,15 @@ namespace isocmd_tests {
 			end = waitForRepaintedInput(term, begin);
 			CHECK(has(plain(std::string_view(term.output).substr(begin, end-begin)), "COMPLETED"));
 			auto frame = workflowStep(term, "y\n", pausePrompt);
-			CHECK(has(frame, "Copied:") && has(frame, "groupalpha1.iso"));
+			CHECK(has(frame, "✓ cp: ") && has(frame, "groupalpha1.iso") && has(frame, " → "));
 			CHECK(!has(frame, "groupalpha2.iso"));
 			begin = term.output.size(); term.resize(24, 120);
 			end = term.waitFor(terminal_sync::pause, begin);
 			frame = listFrame(term, begin, end);
-			CHECK(has(frame, "Copied:") && has(frame, "groupalpha1.iso"));
+			CHECK(has(frame, "✓ cp: ") && has(frame, "groupalpha1.iso") && has(frame, " → "));
 			CHECK(readFile(dest/"groupalpha1.iso") == readFile(source/"groupalpha1.iso"));
 			frame = workflowStep(term, "\n", selectPrompt);
-			CHECK(!has(frame, "Copied:"));
+			CHECK(!has(frame, "✓ cp: "));
 
 		}
 
@@ -679,9 +679,9 @@ namespace isocmd_tests {
 			workflowStep(term, "1\n", inputPrompt);
 			const auto begin = term.output.size(); term.send("y\n"); waitForNewInput(term, begin);
 			auto frame = workflowStep(term, "Y\n", pausePrompt);
-			CHECK(has(frame, "Deleted:") && has(frame, "groupalpha1.iso") && !has(frame, "Copied:"));
+			CHECK(has(frame, "✓ rm: ") && has(frame, "groupalpha1.iso") && !has(frame, "✓ cp: "));
 			frame = workflowStep(term, "\x1b", selectPrompt);
-			CHECK(!has(frame, "Deleted:") && !fs::exists(source/"groupalpha1.iso"));
+			CHECK(!has(frame, "✓ rm: ") && !fs::exists(source/"groupalpha1.iso"));
 			CHECK(fs::exists(source/"groupalpha2.iso"));
 
 		}
@@ -696,9 +696,9 @@ namespace isocmd_tests {
 			const auto begin = term.output.size(); term.send(dest.string()+"\n");
 			waitForNewInput(term, begin);
 			frame = workflowStep(term, "y\n", pausePrompt);
-			CHECK(has(frame, "Moved:") && has(frame, "groupalpha2.iso") && !has(frame, "Deleted:") && !has(frame, "Copied:"));
+			CHECK(has(frame, "✓ mv: ") && has(frame, "groupalpha2.iso") && has(frame, " → ") && !has(frame, "✓ rm: ") && !has(frame, "✓ cp: "));
 			frame = workflowStep(term, "\x04", selectPrompt);
-			CHECK(!has(frame, "Moved:") && !fs::exists(source/"groupalpha2.iso"));
+			CHECK(!has(frame, "✓ mv: ") && !fs::exists(source/"groupalpha2.iso"));
 			CHECK(readFile(dest/"groupalpha2.iso") == "fixture payload: groupalpha2.iso");
 			CHECK(fs::exists(source/"groupalpha3.iso"));
 
@@ -1150,16 +1150,18 @@ namespace isocmd_tests {
 
 			// Execute the staged source index while another image is visible.
 			expectStep(term, "P", inputPrompt, "COMPLETED");
-			auto frame = step(term, "y\n", continuePrompt);
-			CHECK(has(frame, "Convert2ISO:") && has(frame, "alpha.iso") && has(frame, "→ ISO."));
-			CHECK(!has(frame, "beta.iso") && !has(frame, "Failed."));
+			const auto raw = rawStep(term, "y\n", continuePrompt);
+			CHECK(has(raw, "\033[1;38;2;235;120;20mc2iso\033[1;38;2;222;222;222m:"));
+			auto frame = plain(raw);
+			CHECK(has(frame, "✓ c2iso: ") && has(frame, "alpha.iso") && has(frame, "→ ISO"));
+			CHECK(!has(frame, "beta.iso") && !has(frame, "  Failed"));
 			frame = step(term, "\n", selectionPrompt);
-			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img") && !has(frame, "→ ISO."));
+			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img") && !has(frame, "→ ISO"));
 			CHECK(readFile(source/"alpha.iso") == alpha);
 			CHECK(!fs::exists(source/"beta.iso") && !fs::exists(source/"broken.iso"));
 			expectStep(term, "1\n", inputPrompt, "COMPLETED");
 			frame = step(term, "n\n", selectionPrompt);
-			CHECK(!has(frame, "→ ISO."));
+			CHECK(!has(frame, "→ ISO"));
 			CHECK(readFile(source/"beta.iso") == beta);
 			step(term, "\x1b", selectionPrompt);
 
@@ -1169,7 +1171,7 @@ namespace isocmd_tests {
 
 			expectStep(term, "3\n", inputPrompt, "FAILED");
 			const auto frame = step(term, "Y\n", continuePrompt);
-			CHECK(has(frame, "broken.img") && has(frame, "Failed.") && !has(frame, "→ ISO."));
+			CHECK(has(frame, "✗ c2iso: ") && has(frame, "broken.img") && has(frame, "  Failed") && !has(frame, "→ ISO"));
 			step(term, "\x1b", selectionPrompt);
 			CHECK(!fs::exists(source/"broken.iso"));
 			CHECK(fileLines(db) == (std::vector<std::string>{(source/"alpha.iso").string(), (source/"beta.iso").string()}));
@@ -1182,8 +1184,8 @@ namespace isocmd_tests {
 			writeFile(source/"alpha.iso", "keep existing ISO");
 			expectStep(term, "1\n", inputPrompt, "COMPLETED");
 			const auto frame = step(term, "y\n", continuePrompt);
-			CHECK(has(frame, "alpha.img") && has(frame, "ISOalrExists → Skipped."));
-			CHECK(!has(frame, "Failed.") && !has(frame, "→ ISO."));
+			CHECK(has(frame, "– c2iso: ") && has(frame, "alpha.img") && has(frame, "ISOalrExists"));
+			CHECK(!has(frame, "  Failed") && !has(frame, "→ ISO"));
 			step(term, "\x04", selectionPrompt);
 			CHECK(readFile(source/"alpha.iso") == "keep existing ISO");
 

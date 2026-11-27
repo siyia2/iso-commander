@@ -108,6 +108,9 @@ std::string_view getskin();
 
 // --- FUNCTION DECLARATIONS ---
 
+/// Returns the fixed IDX operation color, independent of the active theme.
+std::string_view getOperationColor(std::string_view operation);
+
 WriteTheme getWriteTheme();
 PrintListTheme getListColors();
 CpMvRmColors getCpMvRmColors();

@@ -148,15 +148,10 @@ void performDeleteOperation(
 		std::string msg;
 		msg.reserve(128 + displaySrc.size());
 
-		msg.append(colors.error_label)
-		   .append("Error deleting: ")
-		   .append(colors.error_path)
-		   .append("'")
-		   .append(displaySrc)
-		   .append("'")
-		   .append(UI::Palette::BoldReset)
-		   .append(colors.error_label)
-		   .append(": Cancelled.")
+		msg.append(colors.error_label).append("✗ ")
+		   .append(colors.error_path).append(displaySrc)
+		   .append(colors.error_label).append("  ")
+		   .append("Cancelled")
 		   .append(UI::Palette::BoldReset);
 
 		ctx.reporter.addError(std::move(msg));
@@ -188,15 +183,7 @@ void performDeleteOperation(
 		    16
 		);
 
-		msg.append(colors.success_label)
-		   .append("Deleted: ")
-		   .append(colors.success_path)
-		   .append("'")
-		   .append(displaySrc)
-		   .append("'")
-		   .append(UI::Palette::BoldReset)
-		   .append(colors.success_label)
-		   .append(".")
+		msg.append(colors.success_path).append("✓ ").append(displaySrc)
 		   .append(UI::Palette::BoldReset);
 
 		ctx.reporter.addSuccess(std::move(msg));
@@ -211,17 +198,10 @@ void performDeleteOperation(
 		    (ec ? ec.message().size() : 20)
 		);
 
-		msg.append(colors.error_label)
-		   .append("Error deleting: ")
-		   .append(colors.error_path)
-		   .append("'")
-		   .append(displaySrc)
-		   .append("'")
-		   .append(UI::Palette::BoldReset)
-		   .append(colors.error_label)
-		   .append(": ")
+		msg.append(colors.error_label).append("✗ ")
+		   .append(colors.error_path).append(displaySrc)
+		   .append(colors.error_label).append("  ")
 		   .append(ec ? ec.message() : "File not found")
-		   .append(".")
 		   .append(UI::Palette::BoldReset);
 
 		ctx.reporter.addError(std::move(msg));

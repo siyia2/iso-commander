@@ -266,13 +266,11 @@ bool bufferedCopyWithProgress(
  *
  * @param ctx  Operation context for reporting, counters, and ownership.
  * @param paths Source/destination paths and display strings.
- * @param verb Present-tense verb used in log messages ("copying" or "moving").
  * @return True if the copy succeeded, false otherwise.
  */
 bool performBufferedCopyOperation(
     OperationContext& ctx,
-    const TransferPaths& paths,
-    std::string_view verb
+    const TransferPaths& paths
 )
 {
 
@@ -294,7 +292,6 @@ bool performBufferedCopyOperation(
 	    success,
 	    GlobalState::g_operationCancelled.load(),
 	    ec,
-	    verb,
 	    paths.srcDir,
 	    paths.srcFile,
 	    paths.destDirProcessed,

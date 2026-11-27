@@ -511,104 +511,32 @@ void reportErrorCpMvRm(
 	std::string errorMsg;
 	errorMsg.reserve(256 + displaySrc.size() + errorDetail.size());
 
+	errorMsg.append(vt.red).append("✗ ");
 	if (errorType == "same_file") {
-		errorMsg.append(vt.red)
-		        .append("Cannot ")
-		        .append(operation)
-		        .append(" file to itself: ")
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.yellow)
-		        .append(srcDir)
-		        .append("/")
-		        .append(srcFile)
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.reset)
-		        .append(vt.red)
-		        .append(".")
-		        .append(vt.reset);
+		errorMsg.append(vt.yellow).append(srcDir).append("/").append(srcFile)
+		        .append(vt.red).append("  Cannot ").append(operation).append(" file to itself");
 	} else if (errorType == "source_missing") {
-		errorMsg.append(vt.red)
-		        .append("Source file no longer exists: ")
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.yellow)
-		        .append(displaySrc)
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.reset)
-		        .append(vt.red)
-		        .append(".")
-		        .append(vt.reset);
+		errorMsg.append(vt.yellow).append(displaySrc)
+		        .append(vt.red).append("  Source file no longer exists");
 	} else if (errorType == "overwrite_failed") {
-		errorMsg.append(vt.red)
-		        .append("Failed to overwrite: ")
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.yellow)
-		        .append(destDir)
-		        .append(srcFile)
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.reset)
-		        .append(vt.red)
-		        .append(" - ")
-		        .append(errorDetail)
-		        .append(".")
-		        .append(vt.reset);
+		errorMsg.append(vt.yellow).append(destDir).append(srcFile)
+		        .append(vt.red).append("\n  Failed to overwrite: ").append(errorDetail);
 	} else if (errorType == "file_exists") {
-		errorMsg.append(vt.red)
-		        .append("Error ")
-		        .append(operation)
-		        .append(": '")
-		        .append(vt.red)
-		        .append(vt.yellow)
-		        .append(displaySrc)
-		        .append(vt.red)
-		        .append(vt.reset)
-		        .append(vt.red)
-		        .append(" → ")
-		        .append(vt.yellow)
-		        .append(destDir)
-		        .append(srcFile)
-		        .append(vt.red)
-		        .append("': File exists ")
-		        .append("(overwrite with -o")
-		        .append(vt.reset)
-		        .append(vt.red)
-		        .append(").")
-		        .append(vt.reset);
+		errorMsg.append(vt.yellow).append(displaySrc)
+		        .append(vt.reset).append(" → ")
+		        .append(vt.yellow).append(destDir).append(srcFile)
+		        .append(vt.red).append("\n  File exists (overwrite with -o)");
 	} else if (errorType == "remove_after_move") {
-		errorMsg.append(vt.red)
-		        .append("Move completed but failed to remove source file: ")
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.yellow)
-		        .append(displaySrc)
-		        .append(vt.red)
-		        .append("'")
-		        .append(vt.reset)
-		        .append(vt.red)
-		        .append(" - ")
-		        .append(errorDetail)
-		        .append(".")
-		        .append(vt.reset);
+		errorMsg.append(vt.yellow).append(displaySrc)
+		        .append(vt.red).append("\n  Move completed but failed to remove source file: ")
+		        .append(errorDetail);
 	} else if (errorType == "missing_file") {
-		errorMsg.append(vt.purple)
-		        .append("Missing: ")
-		        .append(vt.purple)
-		        .append("'")
-		        .append(vt.yellow)
-		        .append(displaySrc)
-		        .append(vt.purple)
-		        .append("'.");
+		errorMsg.append(vt.yellow).append(displaySrc)
+		        .append(vt.purple).append("  Missing");
 	} else {
-		errorMsg.append(vt.red)
-		        .append("Error: ")
-		        .append(errorDetail)
-		        .append(vt.reset);
+		errorMsg.append(errorDetail);
 	}
+	errorMsg.append(vt.reset);
 
 	ctx.reporter.addError(std::move(errorMsg));
 
@@ -630,7 +558,6 @@ void logOperationResult(
     bool success,
     bool cancelled,
     const std::error_code& ec,
-    std::string_view verb,
     std::string_view srcDir,
     std::string_view srcFile,
     std::string_view destDirProcessed,
@@ -652,22 +579,11 @@ void logOperationResult(
 		    errorDetail.size()
 		);
 
-		msg.append(colors.error_label)
-		   .append("Error ")
-		   .append(verb)
-		   .append(": '")
-		   .append(colors.error_path)
-		   .append(displaySrc)
-		   .append(UI::Palette::BoldReset)
-		   .append(colors.error_label)
-		   .append(" → ")
-		   .append(colors.error_path)
-		   .append(destDirProcessed)
-		   .append(destFile)
-		   .append(colors.error_label)
-		   .append("': ")
-		   .append(errorDetail)
-		   .append(".")
+		msg.append(colors.error_label).append("✗ ")
+		   .append(colors.error_path).append(displaySrc)
+		   .append(colors.arrow).append(" → ")
+		   .append(colors.error_path).append(destDirProcessed).append(destFile)
+		   .append(colors.error_label).append("\n  ").append(errorDetail)
 		   .append(UI::Palette::BoldReset);
 
 		ctx.reporter.addError(std::move(msg));
@@ -678,36 +594,13 @@ void logOperationResult(
 
 		ctx.operationSuccessful.store(false, std::memory_order_release);
 	} else {
-		const std::string_view pastVerb =
-		    (verb == "moving") ? "Moved" : "Copied";
-
 		std::string msg;
+		msg.reserve(128 + displaySrc.size() + destDirProcessed.size() + destFile.size());
 
-		msg.reserve(
-		    3 * colors.success_label.size() +
-		    pastVerb.size() +
-		    colors.success_path.size() +
-		    displaySrc.size() +
-		    UI::Palette::BoldReset.size() +
-		    colors.dest_path.size() +
-		    destDirProcessed.size() +
-		    destFile.size() +
-		    16
-		);
-
-		msg.append(colors.success_label)
-		   .append(pastVerb)
-		   .append(": '")
-		   .append(colors.success_path)
-		   .append(displaySrc)
-		   .append(UI::Palette::BoldReset)
-		   .append(colors.success_label)
-		   .append(" → ")
-		   .append(colors.dest_path)
-		   .append(destDirProcessed)
-		   .append(destFile)
-		   .append(colors.success_label)
-		   .append("'.");
+		msg.append(colors.success_path).append("✓ ").append(displaySrc)
+		   .append(colors.success_label).append(" → ")
+		   .append(colors.dest_path).append(destDirProcessed).append(destFile)
+		   .append(UI::Palette::BoldReset);
 
 		ctx.reporter.addSuccess(std::move(msg));
 
@@ -836,7 +729,7 @@ namespace {
 		bool success = false;
 
 		if (params.op == TransferOp::Move && params.destDirCount > 1) {
-			success = performBufferedCopyOperation(ctx, paths, "moving");
+			success = performBufferedCopyOperation(ctx, paths);
 
 			if (success) {
 				params.state.atLeastOneCopySucceeded = true;
@@ -844,7 +737,7 @@ namespace {
 		} else if (params.op == TransferOp::Move) {
 			success = performMoveOperation(ctx, paths, params.fileSize);
 		} else {
-			success = performBufferedCopyOperation(ctx, paths, "copying");
+			success = performBufferedCopyOperation(ctx, paths);
 		}
 
 		if (success && params.successfulDestPaths && params.destPathsMutex) {

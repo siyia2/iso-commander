@@ -12,6 +12,7 @@ namespace isocmd_tests {
 	void filterGrammar();
 	void filterRandom();
 	void selection();
+	void compactVerboseResults();
 	void sortingAndViews();
 	void configuration();
 	void themeAndWidth();
@@ -42,7 +43,8 @@ int main() {
 	using namespace isocmd_tests;
 	return runTests("unit", {
 		{"filter grammar", filterGrammar}, {"randomized filter oracle", filterRandom},
-		{"selection parsing", selection}, {"natural sorting and views", sortingAndViews},
+		{"selection parsing", selection},
+		{"compact mount and unmount results", compactVerboseResults}, {"natural sorting and views", sortingAndViews},
 		{"configuration and self-repair", configuration}, {"themes and text width", themeAndWidth},
 		{"ISO signature detection", isoDetection}, {"CCD and NRG conversion", conversion},
 		{"progress state and aligned buffers", progressAndBuffer},

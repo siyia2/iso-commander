@@ -120,6 +120,19 @@ const UI::MainTheme* getActiveTheme() {
 //  Interactive Prompts & Input
 // ============================================================
 
+std::string_view getOperationColor(std::string_view operation) {
+
+	using namespace UI::Palette;
+
+	if (operation == "mount" || operation == "cp") return Green;
+	if (operation == "umount" || operation == "mv" || operation == "write2usb" || operation == "w2usb") return Yellow;
+	if (operation == "rm") return Red;
+	if (operation == "c2iso" || operation == "ccd2iso" || operation == "mdf2iso" ||
+	    operation == "nrg2iso" || operation == "chd2iso" || operation == "daa2iso") return Orange;
+	return BoldReset;
+
+}
+
 LineEditorAndPromptTheme getPromptTheme() {
 
 	const MainTheme* t = getActiveTheme();

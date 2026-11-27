@@ -73,14 +73,14 @@ cli_has stdout '(surface scan)...'; cli_has stdout 'No convertible image files f
 cli_empty stderr; [ ! -e "$output" ] || cli_fail 'unexpected nested output'; cli_pass
 cli_run 'c2iso: verbose success and depth 1' 0 c2iso -d1 "$PWD/images"
 cli_has stdout '(max depth: 1)...'; cli_has stdout 'Located 1 image file; Attempting to convert...'
-cli_has stdout "Convert2ISO: '$output': IMG → ISO."
+cli_has stdout "✓ c2iso: $output  IMG → ISO"
 cli_summary Conversion 1 0; cli_empty stderr
 cmp expected.iso "$output" || cli_fail 'incorrect ISO bytes'; cli_pass
 
 printf 'keep-existing-output' > "$output"
 cli_run 'c2iso: verbose existing output skip' 0 c2iso "$sample"
-cli_record stdout 'Convert2ISO:' 'sample.img' 'ISOalrExists → Skipped.'
-cli_lacks stdout 'IMG → ISO.'; cli_summary Conversion 1 0; cli_empty stderr
+cli_record stdout '– c2iso: ' 'sample.img' 'ISOalrExists'
+cli_lacks stdout 'IMG → ISO'; cli_summary Conversion 1 0; cli_empty stderr
 [ "$(cat "$output")" = 'keep-existing-output' ] || cli_fail 'existing ISO overwritten'; cli_pass
 rm "$output"
 
@@ -91,19 +91,19 @@ cli_has stderr "Warning: '$PWD/not-image' is not a valid file or directory, skip
 cli_has stdout 'No convertible image files found.'; cli_lacks stdout 'Conversion summary:'; cli_pass
 
 cli_run 'c2iso: backend failure and partial-output cleanup' 1 c2iso "$PWD/broken.img"
-cli_record stdout 'Convert2ISO:' 'broken.img' ': Failed.'
+cli_record stdout '✗ c2iso: ' 'broken.img' '  Failed'
 cli_summary Conversion 0 1; cli_empty stderr
 [ ! -e broken.iso ] || cli_fail 'partial ISO retained'; cli_pass
 
 cli_run 'c2iso: mixed backend success and failure' 1 c2iso "$sample" "$PWD/broken.img"
 cli_has stdout 'Located 2 image files; Attempting to convert...'
-cli_has stdout "Convert2ISO: '$output': IMG → ISO."; cli_record stdout 'Convert2ISO:' 'broken.img' ': Failed.'
+cli_has stdout "✓ c2iso: $output  IMG → ISO"; cli_record stdout '✗ c2iso: ' 'broken.img' '  Failed'
 cli_summary Conversion 1 1; cli_empty stderr
 cmp expected.iso "$output" || cli_fail 'valid job failed'; [ ! -e broken.iso ] || cli_fail 'partial ISO retained'; cli_pass
 rm "$output"
 
 cli_run 'c2iso: mixed validation error and success' 1 c2iso "$PWD/missing.img" "$sample"
-cli_has stderr 'does not exist, skipping.'; cli_has stdout "Convert2ISO: '$output': IMG → ISO."
+cli_has stderr 'does not exist, skipping.'; cli_has stdout "✓ c2iso: $output  IMG → ISO"
 # Summary counts dispatched jobs, not path validation errors.
 cli_summary Conversion 1 0; cmp expected.iso "$output" || cli_fail 'valid job failed'; cli_pass
 rm "$output"

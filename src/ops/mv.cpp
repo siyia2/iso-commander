@@ -32,7 +32,7 @@ bool performMoveOperation(
 
 	if (cancelled) {
 		logOperationResult(
-		    ctx, false, true, {}, "moving",
+		    ctx, false, true, {},
 		    paths.srcDir, paths.srcFile,
 		    paths.destDirProcessed, paths.destFile
 		);
@@ -55,7 +55,7 @@ bool performMoveOperation(
 		}
 
 		logOperationResult(
-		    ctx, true, false, {}, "moving",
+		    ctx, true, false, {},
 		    paths.srcDir, paths.srcFile,
 		    paths.destDirProcessed, paths.destFile
 		);
@@ -91,15 +91,9 @@ bool performMoveOperation(
 			std::string msg;
 			msg.reserve(160 + displaySrc.size() + deleteEc.message().size());
 
-			msg.append(errLabel)
-			   .append("Move completed but failed to remove source file: ")
-			   .append(errPath)
-			   .append("'")
-			   .append(displaySrc)
-			   .append("'")
-			   .append(UI::Palette::BoldReset)
-			   .append(errLabel)
-			   .append(" - ")
+			msg.append(errLabel).append("✗ ")
+			   .append(errPath).append(displaySrc)
+			   .append(errLabel).append("\n  Move completed but failed to remove source file: ")
 			   .append(deleteEc.message())
 			   .append(UI::Palette::BoldReset);
 
@@ -120,7 +114,7 @@ bool performMoveOperation(
 		}
 
 		logOperationResult(
-		    ctx, true, false, {}, "moving",
+		    ctx, true, false, {},
 		    paths.srcDir, paths.srcFile,
 		    paths.destDirProcessed, paths.destFile
 		);
@@ -133,7 +127,6 @@ bool performMoveOperation(
 	    false,
 	    GlobalState::g_operationCancelled.load(std::memory_order_acquire),
 	    ec,
-	    "moving",
 	    paths.srcDir,
 	    paths.srcFile,
 	    paths.destDirProcessed,

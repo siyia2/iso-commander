@@ -239,7 +239,7 @@ namespace {
 				verbosePrint(verboseSets.uniqueErrorTokenMessages,
 				             verboseSets.operationCompleted,
 				             verboseSets.operationSkipped,
-				             verboseSets.operationFailed, 3);
+				             verboseSets.operationFailed, 3, "c2iso");
 
 			}
 
@@ -334,7 +334,9 @@ namespace {
 				    .append("IDX")
 				    .append(pt.primary)
 				    .append(" ↵ for ")
-				    .append(pt.highlight)
+				    .append("\001")
+				    .append(getOperationColor(operation))
+				    .append("\002")
 				    .append(operation)
 				    .append(pt.primary)
 				    .append(", ? for help: ")

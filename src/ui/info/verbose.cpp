@@ -36,6 +36,53 @@ std::int64_t monotonicNowNs() {
 }
 
 /**
+ * @brief Inserts the fixed-color operation label after a result's status symbol.
+ *
+ * Keeps the original status and body colors, including diagnostics on continuation
+ * lines. Input-validation errors without a status receive a failure symbol.
+ * Formatting is deferred until display so stored messages and their ordering
+ * remain unchanged.
+ */
+std::string formatVerboseLine(std::string_view operation, std::string_view line) {
+
+	if (line.empty()) return {};
+
+	// Result producers prefix their text with theme SGR sequences.
+	std::size_t offset = 0;
+	while (line.substr(offset).starts_with("\033[")) {
+		const auto end = line.find('m', offset + 2);
+		if (end == std::string_view::npos) break;
+		offset = end + 1;
+	}
+
+	const auto theme = resolveVerboseTheme();
+	const auto operationColor = getOperationColor(operation);
+	std::string result;
+	result.reserve(line.size() + operationColor.size() + operation.size() +
+	               theme.label.size() + offset + 8);
+
+	const auto body = line.substr(offset);
+	for (std::string_view status : {"✓ ", "– ", "✗ "}) {
+		if (!body.starts_with(status)) continue;
+		result.append(line.substr(0, offset + status.size()))
+		      .append(operationColor).append(operation)
+		      .append(theme.label).append(": ")
+		      .append(offset ? line.substr(0, offset) : theme.reset)
+		      .append(body.substr(status.size()));
+		return result;
+	}
+
+	// Token and destination validation messages have no preexisting status.
+	result.append(theme.error).append("✗ ")
+	      .append(operationColor).append(operation)
+	      .append(theme.label).append(": ")
+	      .append(theme.error).append(line);
+	if (!offset) result.append(theme.reset);
+	return result;
+
+}
+
+/**
  * @brief Prints categorized operation results, sorted case-insensitively.
  *
  * Manages terminal state and prints sorted batches of success, warning and
@@ -56,6 +103,7 @@ std::int64_t monotonicNowNs() {
  *                     items).
  * @param tertiarySet  Additional context (e.g. specific warning categories).
  * @param errorSet     Explicit failure strings.
+ * @param operation    Short operation label on each result.
  * @param printType    Layout mode: 0 (Umount), 1 (Basic Ops), 2 (Mount),
  *                     3 (Conversion).
  */
@@ -63,7 +111,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
             std::unordered_set<std::string>& secondarySet,
             std::unordered_set<std::string>& tertiarySet,
             std::unordered_set<std::string>& errorSet,
-            int printType) {
+            int printType, std::string_view operation) {
 
 	signal(SIGINT, SIG_IGN);
 	disable_ctrl_d();
@@ -73,6 +121,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 		const VerboseAndDatabaseTheme vt = getVerboseTheme();
 		SyncOutput sync;
 		clearScrollBuffer();
+		std::cout << "\n";
 
 		// Stored mount/unmount records: how many there are, and how to walk them as
 		// formatted lines (one line in memory at a time).
@@ -80,6 +129,8 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 			std::function<std::size_t()> count;
 			std::function<void(const std::function<void(std::string_view)>&)> each;
 		};
+
+		bool printedGroup = false;
 
 		// Prints @p set sorted, then the stored records of @p records (mount and
 		// unmount results), formatted one at a time while printing, so no second copy
@@ -92,14 +143,16 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 
 			auto emit = [&](std::string_view item) {
 
+				const auto line = formatVerboseLine(operation, item);
 				if (isError)
-				    std::cerr << vt.red << item << vt.reset << "\n";
+				    std::cerr << vt.red << line << vt.reset << "\n";
 				else
-				    std::cout << item << "\n";
+				    std::cout << line << "\n";
 
 			};
 
-			std::cout << "\n";
+			if (printedGroup) std::cout << "\n";
+			printedGroup = true;
 
 			if (!set.empty()) {
 				std::vector<std::string_view> views;
@@ -257,7 +310,7 @@ static void printVerboseResults(const std::string& operation) {
 	    verboseSets.operationFailed,
 	    isMount ? verboseSets.operationSkipped : emptySet,
 	    verboseSets.uniqueErrorTokenMessages,
-	    isMount ? 2 : 1
+	    isMount ? 2 : 1, operation
 	);
 
 }

@@ -328,7 +328,7 @@ static void showMountSummary(bool silentMode, bool showVerbose,
 
 		auto printLine = [](std::string_view msg) {
 
-			std::cout << msg << UI::Palette::BoldReset << "\n";
+			std::cout << formatVerboseLine("mount", msg) << UI::Palette::BoldReset << "\n";
 
 		};
 		for (const auto& msg : verboseSets.operationCompleted) printLine(msg);

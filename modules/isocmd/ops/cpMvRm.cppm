@@ -264,7 +264,6 @@ void logOperationResult(
     bool success,
     bool cancelled,
     const std::error_code& ec,
-    std::string_view verb,
     std::string_view srcDir,
     std::string_view srcFile,
     std::string_view destDirProcessed,
@@ -274,8 +273,7 @@ void logOperationResult(
 /// Performs a buffered copy to one destination and reports its result.
 bool performBufferedCopyOperation(
     OperationContext& ctx,
-    const TransferPaths& paths,
-    std::string_view verb
+    const TransferPaths& paths
 );
 
 /// Performs a move to one destination, using copy/delete across devices.
