@@ -72,6 +72,22 @@ cli_summary() {
     elif [ "$2" -eq 0 ] && [ "$skipped" -eq 0 ]; then status=FAILED
     else status=PARTIAL; fi
     cli_has stdout "Status: $operation → $status"
+    # Consecutive result groups have exactly one empty line between them.
+    # Do not require specific result bodies or count deduplicated messages.
+    awk -v op="$operation" '
+        {
+            kind = 0
+            if (index($0, "✓ " op ": ") == 1) kind = 1
+            else if (index($0, "– " op ": ") == 1) kind = 2
+            else if (index($0, "✗ " op ": ") == 1) kind = 3
+            if (kind) {
+                if (previous && blanks != (kind != previous)) exit 1
+                previous = kind
+            }
+            if ($0 == "") ++blanks
+            else blanks = 0
+        }
+    ' cli.stdout || cli_fail 'incorrect verbose result group spacing'
     if grep -Fxq -- "$operation:" cli.stdout; then
         cli_fail "unexpected standalone operation heading: $operation:"
     fi

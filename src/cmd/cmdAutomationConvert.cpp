@@ -451,14 +451,20 @@ static void displayConversionResults(
 	clearScrollBuffer();
 	std::cout << "\n";
 
-	for (const auto& msg : verboseSets.operationCompleted)
-	    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
+	bool printedGroup = false;
+	auto printGroup = [&](const auto& messages) {
 
-	for (const auto& msg : verboseSets.operationSkipped)
-	    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
+		if (messages.empty()) return;
+		if (printedGroup) std::cout << "\n";
+		printedGroup = true;
 
-	for (const auto& msg : verboseSets.operationFailed)
-	    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
+		for (const auto& msg : messages)
+		    std::cout << formatVerboseLine("c2iso", msg) << UI::Palette::BoldReset << "\n";
+
+	};
+	printGroup(verboseSets.operationCompleted);
+	printGroup(verboseSets.operationSkipped);
+	printGroup(verboseSets.operationFailed);
 
 	std::cout << "\nConversion summary:\n"
 	          << " Successful: " << completedTasks.load() << "\n"

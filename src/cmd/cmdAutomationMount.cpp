@@ -339,17 +339,27 @@ static void showMountSummary(bool silentMode, bool showVerbose,
 		clearScrollBuffer();
 		std::cout << "\n";
 
-		auto printLine = [](std::string_view msg) {
+		bool printedGroup = false;
+		auto printGroup = [&](const auto& messages, MountRecKind kind) {
 
-			std::cout << formatVerboseLine("mount", msg) << UI::Palette::BoldReset << "\n";
+			bool firstLine = true;
+			auto printLine = [&](std::string_view msg) {
+
+				if (firstLine) {
+					if (printedGroup) std::cout << "\n";
+					printedGroup = true;
+					firstLine = false;
+				}
+				std::cout << formatVerboseLine("mount", msg) << UI::Palette::BoldReset << "\n";
+
+			};
+			for (const auto& msg : messages) printLine(msg);
+			forEachMountLine(kind, printLine);
 
 		};
-		for (const auto& msg : verboseSets.operationCompleted) printLine(msg);
-		forEachMountLine(MountRecKind::Completed, printLine);
-		for (const auto& msg : verboseSets.operationSkipped) printLine(msg);
-		forEachMountLine(MountRecKind::Skipped, printLine);
-		for (const auto& msg : verboseSets.operationFailed) printLine(msg);
-		forEachMountLine(MountRecKind::Failed, printLine);
+		printGroup(verboseSets.operationCompleted, MountRecKind::Completed);
+		printGroup(verboseSets.operationSkipped, MountRecKind::Skipped);
+		printGroup(verboseSets.operationFailed, MountRecKind::Failed);
 
 		std::cout << "\nMount summary:\n"
 		          << " Successful: " << completedTasks.load() << "\n"

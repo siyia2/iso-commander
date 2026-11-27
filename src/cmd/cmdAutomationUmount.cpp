@@ -319,16 +319,26 @@ static void printVerboseUnmountSummary(
 	clearScrollBuffer();
 	std::cout << "\n";
 
-	auto printUmountLine = [](std::string_view msg) {
+	bool printedGroup = false;
+	auto printGroup = [&](const auto& messages, bool completed) {
 
-		std::cout << formatVerboseLine("umount", msg) << UI::Palette::BoldReset << "\n";
+		bool firstLine = true;
+		auto printLine = [&](std::string_view msg) {
+
+			if (firstLine) {
+				if (printedGroup) std::cout << "\n";
+				printedGroup = true;
+				firstLine = false;
+			}
+			std::cout << formatVerboseLine("umount", msg) << UI::Palette::BoldReset << "\n";
+
+		};
+		for (const auto& msg : messages) printLine(msg);
+		forEachUmountLine(completed, printLine);
 
 	};
-	for (const auto& msg : verboseSets.operationCompleted) printUmountLine(msg);
-	forEachUmountLine(true, printUmountLine);
-
-	for (const auto& msg : verboseSets.operationFailed) printUmountLine(msg);
-	forEachUmountLine(false, printUmountLine);
+	printGroup(verboseSets.operationCompleted, true);
+	printGroup(verboseSets.operationFailed, false);
 
 	std::cout << "\nUnmount summary:\n"
 	          << " Successful: " << completedTasks.load() << "\n"
