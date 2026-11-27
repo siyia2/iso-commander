@@ -38,9 +38,6 @@ namespace UI {
 		inline constexpr std::string_view BGNavy   = "\033[1;37;48;2;20;20;150m";
 		inline constexpr std::string_view idxGreen    = "\033[1;38;2;120;220;160m";
 
-		inline constexpr std::string_view PromptBlue   = "\001\033[1;38;2;0;115;215m\002";
-		inline constexpr std::string_view PromptGreen  = "\001\033[1;38;2;88;195;45m\002";
-		inline constexpr std::string_view PromptRed    = "\001\033[1;38;2;235;40;40m\002";
 		inline constexpr std::string_view PromptYellow = "\001\033[1;38;2;212;184;0m\002";
 		inline constexpr std::string_view PromptIndexGreen = "\001\033[1;38;2;120;220;160m\002";
 

@@ -10,7 +10,6 @@
 import isocmd.core.paths;
 import isocmd.core.sharedRefreshState;
 import isocmd.database.databaseOps;
-import isocmd.core.cancellation;
 
 namespace isocmd_tests {
 

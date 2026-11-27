@@ -10,7 +10,6 @@
 import isocmd.settings.settings;
 import isocmd.app.main;
 import isocmd.core.uiState;
-import isocmd.util.stringManipulation;
 
 namespace isocmd_tests {
 

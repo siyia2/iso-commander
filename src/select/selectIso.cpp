@@ -11,7 +11,7 @@ import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.database.databaseOps;
 import isocmd.filter.filter;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.select.select;
 import isocmd.select.selectShared;

@@ -10,7 +10,7 @@ import isocmd.app.main;
 import isocmd.core.globalMutexes;
 import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.select.select;
 import isocmd.ui.display.lineEditorResize;

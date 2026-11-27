@@ -33,7 +33,6 @@ namespace GlobalState {
 
 	// State Management
 	inline std::atomic<bool> isoListDirty{true};
-	inline std::atomic<bool> g_pendingMenuRefresh{false};
 	inline std::atomic<PendingRefreshKind> g_pendingRefreshKind{PendingRefreshKind::None};
 	inline std::shared_ptr<RefreshState> g_pendingRefreshState{nullptr};
 	inline std::atomic<bool> g_suppressPendingRefresh{false};

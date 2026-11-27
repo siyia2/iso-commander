@@ -20,6 +20,9 @@ contracts and pointer-identity tests remain applicable.
 - ASCII and UTF-8 code-point insertion, Backspace/Delete, Left/Right, Home/End,
   history navigation and Ctrl+U (delete from the start to the cursor).
   Ctrl+D returns EOF on empty input and deletes forward otherwise.
+  Editing or clearing a recalled history entry and navigating away retains the
+  change when the prompt is submitted; the existing history writer omits cleared
+  entries. Submitting a recalled entry directly preserves its original value.
 - Fixed 256-entry single-byte dispatch and a fixed nine-entry escape-sequence
   table; ordinary UTF-8 characters are inserted directly. CSI/SS3 aliases,
   context-specific hotkeys, bracketed paste (including literal line breaks),

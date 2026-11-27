@@ -10,6 +10,7 @@
 
 import isocmd.input.lineEditor;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.write2usb.util.terminalGuards;
 

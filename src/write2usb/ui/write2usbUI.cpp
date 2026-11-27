@@ -7,7 +7,7 @@
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.display.display;

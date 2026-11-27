@@ -10,7 +10,6 @@
 #include <stddef.h>
 
 import std;
-import isocmd.core.cancellation;
 import isocmd.write2usb.windows.windowsWriterEngine;
 import isocmd.write2usb.util.checksum;
 import isocmd.write2usb.util.writeTypes;

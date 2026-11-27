@@ -645,7 +645,8 @@ namespace isocmd_tests {
 			workflowStep(term, "/", filterPrompt); auto frame = workflowPreview(term, "groupbeta", "groupbeta");
 			CHECK(has(frame, "groupbeta1.iso"));
 			frame = workflowStep(term, "\n", selectPrompt); CHECK(has(frame, "groupbeta1.iso") && !has(frame, "groupalpha1.iso"));
-			workflowStep(term, "/", filterPrompt); frame = workflowPreview(term, "groupalpha", "groupalpha");
+			// Delete the previously committed filter through history navigation.
+			workflowStep(term, "/", filterPrompt); frame = workflowPreview(term, "\x1b[A\x15\x1b[Bgroupalpha", "groupalpha");
 			CHECK(has(frame, "groupalpha1.iso"));
 			frame = workflowStep(term, "\n", selectPrompt); CHECK(has(frame, "groupalpha1.iso") && !has(frame, "groupbeta1.iso"));
 			CHECK(has(frame, "Pending Indices"));
@@ -749,6 +750,8 @@ namespace isocmd_tests {
 				checkWorkflowPagination(term);
 				checkWorkflowFilterPreview(term);
 				checkWorkflowCommittedFilters(term);
+				const auto filters = db.parent_path()/"iso_commander_filter_database.txt";
+				CHECK(has(readFile(filters), "groupalpha\n") && !has(readFile(filters), "groupbeta\n"));
 				checkWorkflowCopy(term, source, dest);
 				checkWorkflowDelete(term, source);
 				checkWorkflowMove(term, source, dest);
@@ -1096,7 +1099,15 @@ namespace isocmd_tests {
 				CHECK(has(plain(std::string_view(term.output).substr(start, end-start)), "2 ISO imported"));
 				CHECK(fileLines(db) == expected);
 				step(term, "\n", inputPrompt);
-				expectStep(term, source.string()+"\n", continuePrompt, "No new ISO found");
+				// Clearing a recalled path and moving back to the draft removes it
+				// when the next valid path search saves history.
+				expectStep(term, "\x1b[A\x15\x1b[B"+source.string()+"\n", continuePrompt, "No new ISO found");
+				CHECK(fileLines(db) == expected);
+				CHECK(fileLines(paths) == std::vector<std::string>{source.string()});
+				step(term, "\n", inputPrompt);
+				// A nonempty edit is retained in place, independently of the new search.
+				expectStep(term, "\x1b[A\x15"+nested.string()+"\x1b[B"+source.string()+"\n", continuePrompt, "No new ISO found");
+				CHECK(fileLines(paths) == (std::vector<std::string>{nested.string(), source.string()}));
 				CHECK(fileLines(db) == expected);
 				step(term, "\n", inputPrompt);
 				frame = step(term, "*stats\n", returnPrompt);

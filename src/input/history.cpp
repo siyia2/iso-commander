@@ -12,7 +12,7 @@ import isocmd.input.lineEditor;
 import isocmd.app.main;
 import isocmd.core.paths;
 import isocmd.input.history;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;

@@ -191,12 +191,6 @@ void reset_custom_keybindingsForSearches(void);
  * resetLineEditorPagination(), declared in inputHandling.cppm.
  */
 
-// Legacy declarations; neither has a definition or call site in the current tree.
-// Settings-value completion is configured by term::setupSettingLineEditor()
-// and cleaned up by term::CompletionGuard in settingsEditor.cpp.
-void beginSettingsValueCompletion(const std::string& key);
-void endSettingsValueCompletion();
-
 /**
  * @brief Repaints the last displayed completion listing after a terminal resize,
  *        or clears the saved snapshot if the input buffer has changed.

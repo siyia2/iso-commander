@@ -8,7 +8,7 @@ import isocmd.core.cancellation;
 import isocmd.core.lists;
 import isocmd.core.uiState;
 import isocmd.filter.filter;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.select.select;
 import isocmd.select.selectShared;

@@ -16,6 +16,7 @@ import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.database.databaseOps;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.display.lineEditorResize;

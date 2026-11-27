@@ -8,7 +8,7 @@
 import std;
 import isocmd.core.cancellation;
 import isocmd.core.threadCaps;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.tokenize;
 import isocmd.ops.cpMvRm;
 import isocmd.proc.process;

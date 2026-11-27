@@ -34,11 +34,15 @@ namespace isocmd_tests {
 		for (int n = 1; n <= 4096; ++n) CHECK(many[n-1] == "disk" + std::to_string(n) + ".iso");
 		const Indices subset{2, 0};
 		StringListView view(files, subset);
-		CHECK(view.size() == 2 && &view[0] == &files[2]);
-		CHECK(std::vector<std::string>(view.begin(), view.end()) == std::vector<std::string>({files[2], files[0]}));
+		CHECK(view.size() == 2 && !view.empty());
+		CHECK(&view[0] == &files[2] && &view[1] == &files[0]);
 		const Indices empty;
 		CHECK(StringListView(files, empty).empty());
-		CHECK(StringListView(files).size() == files.size());
+		const StringListView fullView(files);
+		CHECK(fullView.size() == files.size() && !fullView.empty());
+		for (std::size_t i = 0; i < fullView.size(); ++i) CHECK(&fullView[i] == &files[i]);
+		const std::vector<std::string> emptyFiles;
+		CHECK(StringListView(emptyFiles).empty());
 
 	}
 

@@ -43,68 +43,6 @@ public:
 
 	}
 
-	class const_iterator {
-	public:
-		using iterator_category = std::forward_iterator_tag;
-		using value_type        = std::string;
-		using difference_type   = std::ptrdiff_t;
-		using pointer           = const std::string*;
-		using reference         = const std::string&;
-
-		const_iterator(const StringListView* v, std::size_t i) noexcept : v_(v), i_(i) {}
-
-		reference operator*()  const noexcept {
-
-			return (*v_)[i_];
-
-		}
-
-		pointer   operator->() const noexcept {
-
-			return &(*v_)[i_];
-
-		}
-
-		const_iterator& operator++() noexcept {
-
-			++i_; return *this;
-
-		}
-
-		const_iterator  operator++(int) noexcept {
-
-			auto t = *this; ++i_; return t;
-
-		}
-
-		bool operator==(const const_iterator& o) const noexcept {
-
-			return i_ == o.i_;
-
-		}
-
-		bool operator!=(const const_iterator& o) const noexcept {
-
-			return i_ != o.i_;
-
-		}
-	private:
-		const StringListView* v_;
-		std::size_t i_;
-	};
-
-	const_iterator begin() const noexcept {
-
-		return {this, 0};
-
-	}
-
-	const_iterator end()   const noexcept {
-
-		return {this, size()};
-
-	}
-
 private:
 	const std::vector<std::string>* base_;
 	const std::vector<std::size_t>*      subset_ = nullptr;

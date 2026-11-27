@@ -5,7 +5,7 @@
 import std;
 import isocmd.cmd.cmdAutomation;
 import isocmd.core.cancellation;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.settings.settings;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.display.themes;
@@ -105,7 +105,7 @@ static std::vector<IsoInfo> validateIsos(const std::vector<std::string>& isoArgs
 		const fs::path canon = fs::canonical(p, ec);
 		const std::string full = ec ? p.string() : canon.string();
 		isos.push_back(IsoInfo{full, fs::path(full).filename().string(), size,
-			                   formatFileSize(size), isos.size() + 1});
+			                   formatFileSize(size)});
 	}
 	return isos;
 

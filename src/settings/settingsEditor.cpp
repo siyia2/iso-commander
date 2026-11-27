@@ -8,6 +8,7 @@ import isocmd.input.lineEditor;
 import isocmd.settings.settings;
 import isocmd.core.paths;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.input.tokenize;
 import isocmd.ui.interface.pausePrompts;

@@ -14,7 +14,7 @@
 
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.settings.settings;
 import isocmd.ui.display.themes;
@@ -166,8 +166,8 @@ namespace isocmd_tests {
 		try {
 			setupLineEditorToIgnoreCtrlC(); editorBindKeySequence("\033", exit_handler);
 			getskin(); UI::Palette::updateDefaultColors();
-			const std::vector<IsoInfo> isos{{"/fixture/iso10.iso", "iso10.iso", 100, "100 B", 1},
-				                            {"/fixture/iso2.iso", "iso2.iso", 200, "200 B", 2}};
+			const std::vector<IsoInfo> isos{{"/fixture/iso10.iso", "iso10.iso", 100, "100 B"},
+				                            {"/fixture/iso2.iso", "iso2.iso", 200, "200 B"}};
 			auto twoDevices = [] { return std::vector<std::string>{"/dev/zero", "/dev/null"}; };
 			auto cancelled = WriteMapping::collectWithDevices(isos, twoDevices, fakeValidate, false);
 			CHECK(cancelled.empty());

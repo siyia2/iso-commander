@@ -18,7 +18,6 @@
 #include <blkid/blkid.h>
 
 import std;
-import isocmd.core.cancellation;
 import isocmd.settings.settings;
 import isocmd.write2usb.util.alignedBuffer;
 import isocmd.write2usb.util.telemetry;

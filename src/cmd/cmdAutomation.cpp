@@ -4,7 +4,7 @@ import std;
 import isocmd.cmd.cmdAutomation;
 import isocmd.core.cancellation;
 import isocmd.core.uiState;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.ui.display.themes;
 
 // ─── Argument parsing ────────────────────────────────────────────────────────

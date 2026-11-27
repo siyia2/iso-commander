@@ -8,7 +8,7 @@ import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.lists;
 import isocmd.database.databaseOps;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.select.select;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.cli.syncOutput;

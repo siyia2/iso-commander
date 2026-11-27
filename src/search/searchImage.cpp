@@ -11,7 +11,7 @@ import isocmd.core.lists;
 import isocmd.core.paths;
 import isocmd.database.databaseOps;
 import isocmd.input.history;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.search.search;
 import isocmd.threadpool.threadpool;

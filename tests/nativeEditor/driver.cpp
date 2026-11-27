@@ -176,6 +176,18 @@ namespace {
 			readExpected("HISTORY> ", "draft", before);
 			readExpected("OLDER> ", "one", before);
 			readExpected("NEWER> ", "two", before);
+			// Editing a recalled entry, then navigating away, updates history.
+			readExpected("HISTORY-DELETE> ", "valid", before);
+			check(editorHistoryList() == std::vector<std::string>{"one", ""}, "cleared history entry retained for persistence");
+			readExpected("HISTORY-EDIT> ", "valid", before);
+			check(editorHistoryList() == std::vector<std::string>{"edited", ""}, "edited older history entry retained");
+			// Submitting a recalled entry directly must preserve its original value.
+			readExpected("HISTORY-DIRECT> ", "replacement", before);
+			check(editorHistoryList() == std::vector<std::string>{"edited", ""}, "direct submission does not overwrite history");
+			readExpected("HISTORY-REVISIT> ", "temporary", before);
+			check(editorHistoryList() == std::vector<std::string>{"edited", ""}, "revisited submitted entry preserves original");
+			readExpected("HISTORY-MULTIPLE> ", "draft", before);
+			check(editorHistoryList() == std::vector<std::string>{"first edit", "second edit"}, "multiple history edits and draft restoration");
 			check(!editorKeySequenceHandler("\022"), "Ctrl+R unbound");
 			for (std::string_view key : {"\001", "\002", "\005", "\006", "\007", "\013", "\016", "\020", "\031", "\027", "\037", "\024", "\032",
 			                            "\033b", "\033f", "\033d", "\033\177", "\033[1;5D", "\033[1;5C",
@@ -307,6 +319,11 @@ int main() {
 		p.step("HISTORY> ", "draft\033[A\033[A\033[B\033[B\n");
 		p.step("OLDER> ", "\033[A\033[A\n");
 		p.step("NEWER> ", "\033[A\033[A\033[B\n");
+		p.step("HISTORY-DELETE> ", "\033[A\025\033[Bvalid\n");
+		p.step("HISTORY-EDIT> ", "\033[A\033[A\025edited\033[B\033[Bvalid\n");
+		p.step("HISTORY-DIRECT> ", "\033[A\033[A\025replacement\n");
+		p.step("HISTORY-REVISIT> ", "\033[A\033[A\025temporary\033[B\033[A\n");
+		p.step("HISTORY-MULTIPLE> ", "draft\033[Asecond edit\033[A\025first edit\033[B\033[B\n");
 		p.step("UNBOUND> ", "abcd\033[D\033[D\001\002\005\006\007\013\016\020\022\031\027\037\024\033b\033f\033d\033\177\033[1;5D\033[1;2C\033[1;6DX\n");
 		p.step("CTRL-U-MIDDLE> ", "abcd\033[D\033[D\025X\n");
 		p.step("CTRL-U-END> ", "abcd\025\n");

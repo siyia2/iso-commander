@@ -48,7 +48,7 @@ namespace threadpool_detail {
  *
  * @code
  * ThreadPool pool(4);
- * auto result = pool.enqueue([](int x) { return x * x; }, 7);
+ * auto result = pool.enqueue([x = 7] { return x * x; });
  * // result.get() returns 49.
  * pool.waitAllTasksCompleted();
  * @endcode
@@ -86,7 +86,6 @@ private:
 	};
 
 	TaskQueue task_queue;
-	alignas(64) std::atomic<std::uint64_t> global_waiters{0};
 
 	static std::uint32_t pendingFromState(std::uint64_t s) noexcept {
 
@@ -117,8 +116,7 @@ public:
 
 	~ThreadPool();
 
-	// All in-tree submissions are already bound, zero-argument callables.
-	// Avoid instantiating an empty tuple and std::apply for each lambda.
+	// Submit a bound, zero-argument callable; capture any required arguments.
 	template <class F>
 	auto enqueue(F&& f) -> std::future<std::invoke_result_t<F>> {
 
@@ -138,43 +136,6 @@ public:
 					threadpool_detail::completePromise(*p);
 				} else {
 					p->set_value(std::move(func)());
-				}
-			} catch (...) {
-				if constexpr (std::is_void_v<return_type>) {
-					threadpool_detail::failPromise(*p);
-				} else {
-					p->set_exception(std::current_exception());
-				}
-			}
-
-		}));
-
-		return result;
-
-	}
-
-	// Retain the existing argument-binding path for unbound callables.
-	template <class F, class... Args>
-	    requires (sizeof...(Args) > 0)
-	auto enqueue(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
-
-		using return_type = std::invoke_result_t<F, Args...>;
-
-		std::future<return_type> result;
-		auto promise = threadpool_detail::preparePromise(result);
-
-		submitTask(MoveOnlyTask([
-		    func = std::forward<F>(f),
-		    tup  = std::make_tuple(std::forward<Args>(args)...),
-		    p    = std::move(promise)]() mutable
-		{
-
-			try {
-				if constexpr (std::is_void_v<return_type>) {
-					std::apply(std::move(func), std::move(tup));
-					threadpool_detail::completePromise(*p);
-				} else {
-					p->set_value(std::apply(std::move(func), std::move(tup)));
 				}
 			} catch (...) {
 				if constexpr (std::is_void_v<return_type>) {

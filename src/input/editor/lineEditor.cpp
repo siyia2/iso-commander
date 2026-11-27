@@ -73,6 +73,8 @@ namespace native_editor {
 		std::string text, draft;
 		winsize size{};
 		std::size_t historyPos = history.size();
+		// Only entries edited and left during navigation need a session-local copy.
+		std::vector<std::pair<std::size_t, std::string>> historyEdits;
 		bool eof = false, firstDraw = true;
 		int draftPoint = 0;
 		steady_clock::time_point nextHook = steady_clock::now();
@@ -118,6 +120,42 @@ namespace native_editor {
 		current->text.replace(start, end - start, copy);
 		editorCursor = start + static_cast<int>(copy.size());
 		syncBuffer();
+
+	}
+
+	/// Finds a recalled entry's pending edit, if any.
+	auto findHistoryEdit(Session& s) {
+
+		return std::find_if(s.historyEdits.begin(), s.historyEdits.end(),
+		                    [&](const auto& entry) { return entry.first == s.historyPos; });
+
+	}
+
+	/**
+	 * @brief Retains edits to the recalled entry before navigating away.
+	 *
+	 * Empty edits are kept: the persistent history writer omits empty lines.
+	 * Unchanged entries need no copy, and reverting an edit removes it.
+	 */
+	void rememberHistoryEdit(Session& s) {
+
+		if (s.historyPos >= history.size()) return;
+		const auto edit = findHistoryEdit(s);
+		if (s.text == history[s.historyPos]) {
+			if (edit != s.historyEdits.end()) s.historyEdits.erase(edit);
+		} else if (edit != s.historyEdits.end()) {
+			edit->second = s.text;
+		} else {
+			s.historyEdits.emplace_back(s.historyPos, s.text);
+		}
+
+	}
+
+	/// Recalls a pending edit instead of its original history entry, when present.
+	void recallHistory(Session& s) {
+
+		const auto edit = findHistoryEdit(s);
+		replace(0, editorBufferEnd, edit == s.historyEdits.end() ? history[s.historyPos] : edit->second);
 
 	}
 
@@ -863,6 +901,7 @@ void editorClearHistory() {
 	history.clear();
 	if (current) {
 		current->historyPos = 0;
+		current->historyEdits.clear();
 		current->draft.clear();
 		current->draftPoint = 0;
 	}
@@ -1052,30 +1091,31 @@ int editorSubmit(int, int) {
 }
 
 /**
- * @brief Navigates backward through history, preserving the current draft.
+ * @brief Navigates backward through history, preserving edits and the current draft.
  *
  * @param count Number of entries to move backward; nonpositive values do not move.
  * @return Zero, following the editor command convention.
  */
 int editorPreviousHistory(int count, int) {
 
-	if (!current) return 0;
+	if (!current || count <= 0) return 0;
 	auto& s = *current;
 	if (s.historyPos >= history.size()) {
 		s.historyPos = history.size();
 		s.draft = s.text;
 		s.draftPoint = editorCursor;
 	}
-	if (s.historyPos && count > 0) {
+	if (s.historyPos) {
+		rememberHistoryEdit(s);
 		s.historyPos -= std::min(s.historyPos, static_cast<std::size_t>(count));
-		replace(0, editorBufferEnd, history[s.historyPos]);
+		recallHistory(s);
 	}
 	return 0;
 
 }
 
 /**
- * @brief Navigates forward through history and restores the draft at the end.
+ * @brief Navigates forward through history, retaining edits and restoring the draft at the end.
  *
  * @param count Number of entries to move forward; nonpositive values do not move.
  * @return Zero, following the editor command convention.
@@ -1085,9 +1125,12 @@ int editorNextHistory(int count, int) {
 	if (!current || count <= 0) return 0;
 	auto& s = *current;
 	if (s.historyPos < history.size()) {
+		rememberHistoryEdit(s);
 		s.historyPos = std::min(history.size(), s.historyPos + static_cast<std::size_t>(count));
-		replace(0, editorBufferEnd, s.historyPos == history.size() ? s.draft : history[s.historyPos]);
-		if (s.historyPos == history.size()) editorCursor = std::min(s.draftPoint, editorBufferEnd);
+		if (s.historyPos == history.size()) {
+			replace(0, editorBufferEnd, s.draft);
+			editorCursor = std::min(s.draftPoint, editorBufferEnd);
+		} else recallHistory(s);
 	}
 	return 0;
 
@@ -1272,6 +1315,12 @@ std::optional<std::string> editLine(std::string_view prompt) {
 		std::fflush(stdout);
 	}
 	if (session.eof) return std::nullopt;
+	// Match the original history workflow: edits to entries left during navigation
+	// survive submission, but the entry being submitted retains its original value.
+	// The caller decides whether to append the submitted line and save history.
+	for (auto& [pos, text] : session.historyEdits) {
+		if (pos != session.historyPos && pos < history.size()) history[pos] = std::move(text);
+	}
 	return std::move(session.text);
 
 }

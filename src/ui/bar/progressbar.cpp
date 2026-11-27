@@ -13,6 +13,7 @@ import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.proc.process;
 import isocmd.ui.bar.progressBarSizeWatcher;

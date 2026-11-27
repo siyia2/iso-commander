@@ -9,7 +9,6 @@
 
 import isocmd.ops.cpMvRm;
 import isocmd.database.databaseOps;
-import isocmd.core.cancellation;
 
 namespace isocmd_tests {
 

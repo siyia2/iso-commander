@@ -20,7 +20,7 @@ import isocmd.core.paths;
 import isocmd.core.threadCaps;
 import isocmd.core.uiState;
 import isocmd.input.history;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.cli.syncOutput;
@@ -346,24 +346,6 @@ static int countNonEmptyLines(const std::string& filePath) {
 
 	file.close();
 	return nonEmptyLineCount;
-
-}
-
-/**
- * @brief Gets the user's home directory path.
- *
- * @return Contents of the HOME environment variable, or an empty string if
- *         HOME is not set.
- */
-std::string getHomeDirectory() {
-
-	const char* homeDir = getenv("HOME");
-
-	if (homeDir) {
-		return std::string(homeDir);
-	}
-
-	return "";
 
 }
 

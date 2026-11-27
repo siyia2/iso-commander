@@ -11,6 +11,7 @@ import isocmd.input.lineEditor;
 import isocmd.core.globalMutexes;
 import isocmd.input.history;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 import isocmd.proc.process;

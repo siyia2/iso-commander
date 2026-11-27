@@ -16,6 +16,7 @@ import isocmd.filter.filter;
 import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 import isocmd.search.search;

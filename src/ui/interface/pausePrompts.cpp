@@ -9,7 +9,7 @@
 
 import std;
 import isocmd.input.lineEditor;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;

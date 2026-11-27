@@ -8,7 +8,6 @@
 export module isocmd.write2usb.util.writeTypes;
 
 import std;
-import isocmd.core.cancellation;
 
 // C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
@@ -20,11 +19,7 @@ export extern "C++" {
  * @note The UI latches cancellation in the batch stop state before resetting the
  *       global flag, so outstanding workers remain cancelled after UI recovery.
  */
-inline bool isUsbWriteCancelled(const std::stop_token& token = {}) noexcept {
-	// Read the UI flag first: observing its reset must not be followed by
-	// a stale pre-latch token check.
-	return GlobalState::g_operationCancelled.load() || token.stop_requested();
-}
+bool isUsbWriteCancelled(const std::stop_token& token = {}) noexcept;
 
 /// Information about an ISO image file.
 struct IsoInfo {
@@ -32,7 +27,6 @@ struct IsoInfo {
 	std::string filename;      ///< Filename without the directory path.
 	std::uint64_t size;        ///< ISO size in bytes.
 	std::string sizeStr;       ///< Human-readable size (e.g., "4.20 GB").
-	std::size_t originalIndex; ///< One-based index in the source list or accepted CLI inputs.
 };
 
 /**

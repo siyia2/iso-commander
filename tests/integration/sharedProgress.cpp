@@ -9,7 +9,7 @@
 #include "../common/testHarness.h"
 
 import isocmd.core.cancellation;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.proc.process;
 import isocmd.ui.display.themes;
 

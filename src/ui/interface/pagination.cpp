@@ -6,7 +6,7 @@ import std;
 import isocmd.core.lists;
 import isocmd.core.uiState;
 import isocmd.filter.filter;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.ui.interface.pagination;
 import isocmd.select.select;

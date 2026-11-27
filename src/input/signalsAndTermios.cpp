@@ -9,7 +9,7 @@
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.uiState;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 
 /**
  * @brief Disables EOF (Ctrl+D) processing in the terminal.

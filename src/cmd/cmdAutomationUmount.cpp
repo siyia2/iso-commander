@@ -6,7 +6,7 @@ import std;
 import isocmd.cmd.cmdAutomation;
 import isocmd.core.cancellation;
 import isocmd.core.threadCaps;
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.ops.umount;
 import isocmd.proc.process;
 import isocmd.threadpool.threadpool;

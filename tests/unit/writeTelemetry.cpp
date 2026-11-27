@@ -147,7 +147,7 @@ namespace isocmd_tests {
 		rejected("1>/dev/isocmd-test-nonexistent-device", "Device not found");
 		rejected("1>/dev/null", "Missing mapping");
 		rejected("", "Missing mapping");
-		const std::vector<IsoInfo> isos{{"one.iso", "one.iso", 100, "100 B", 1}, {"two.iso", "two.iso", 200, "200 B", 2}};
+		const std::vector<IsoInfo> isos{{"one.iso", "one.iso", 100, "100 B"}, {"two.iso", "two.iso", 200, "200 B"}};
 		errors.clear();
 		CHECK(validateDevices(map, isos, true, errors).empty());
 		CHECK(errors.size() == 1 && errors[0].find("Root privileges") != std::string::npos);

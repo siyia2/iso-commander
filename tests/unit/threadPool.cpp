@@ -186,10 +186,14 @@ namespace isocmd_tests {
 
 	static void checkFutureTypes(ThreadPool& pool) {
 
-		// Move-only arguments.
+		// Transfer a move-only argument to a bound callable.
 		CHECK(pool.enqueue(
-		    [](std::unique_ptr<int> p) { return *p; },
-		    std::make_unique<int>(42)).get() == 42);
+		    [p = std::make_unique<int>(42)]() mutable {
+
+				auto consume = [](std::unique_ptr<int> value) { return *value; };
+				return consume(std::move(p));
+
+			}).get() == 42);
 
 		// Move-only callable captures.
 		CHECK(pool.enqueue(

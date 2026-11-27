@@ -10,7 +10,7 @@
 #include <errno.h>
 #include "../common/testHarness.h"
 
-import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.core.cancellation;
 import isocmd.ops.cpMvRm;
 import isocmd.database.databaseOps;

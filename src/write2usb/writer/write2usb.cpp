@@ -12,7 +12,6 @@
 #include <unistd.h>
 
 import std;
-import isocmd.core.cancellation;
 import isocmd.write2usb.util.alignedBuffer;
 import isocmd.write2usb.util.telemetry;
 import isocmd.write2usb.util.checksum;

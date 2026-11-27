@@ -8,45 +8,13 @@
 export module isocmd.write2usb.util.checksum;
 
 import std;
-import isocmd.write2usb.util.writeTypes;
 import isocmd.write2usb.util.telemetry;
 
 export extern "C++" {
+struct ProgressInfo;
+
 namespace usb_verify {
 
-
-	/**
-	 * @brief Compile-time byte lookup table for CRC-64/ECMA-182.
-	 * Polynomial 0x42F0E1EBA9EA3693, initial value and final XOR zero,
-	 * non-reflected input and output. Detects accidental corruption, not authenticity.
-	 */
-	inline constexpr auto crcTable = [] {
-
-		std::array<std::uint64_t, 256> table{};
-		for (std::size_t i = 0; i < table.size(); ++i) {
-			std::uint64_t value = static_cast<std::uint64_t>(i) << 56;
-			for (int bit = 0; bit < 8; ++bit)
-			    value = (value << 1) ^ ((value >> 63) ? 0x42F0E1EBA9EA3693ULL : 0);
-			table[i] = value;
-		}
-		return table;
-
-	}();
-
-	/// Eight slicing tables; each successive slice advances the previous by one zero byte.
-	inline constexpr auto crcSlices = [] {
-
-		std::array<std::array<std::uint64_t, 256>, 8> tables{};
-		tables[0] = crcTable;
-		for (std::size_t slice = 1; slice < tables.size(); ++slice) {
-			for (std::size_t i = 0; i < tables[slice].size(); ++i) {
-				const auto previous = tables[slice - 1][i];
-				tables[slice][i] = (previous << 8) ^ tables[0][previous >> 56];
-			}
-		}
-		return tables;
-
-	}();
 
 	/**
 	 * @brief Incremental CRC-64/ECMA-182 accumulator.
@@ -61,26 +29,7 @@ namespace usb_verify {
 		 * @param data Buffer readable for at least @p size bytes; no alignment required.
 		 * @param size Number of bytes to include in the CRC.
 		 */
-		void update(const char* data, std::size_t size) noexcept {
-
-			const auto* bytes = reinterpret_cast<const unsigned char*>(data);
-			while (size >= 8) {
-				// Byte loads preserve input order on all endiannesses and need no alignment.
-				value = crcSlices[7][(value >> 56) ^ bytes[0]] ^
-				        crcSlices[6][((value >> 48) & 0xFF) ^ bytes[1]] ^
-				        crcSlices[5][((value >> 40) & 0xFF) ^ bytes[2]] ^
-				        crcSlices[4][((value >> 32) & 0xFF) ^ bytes[3]] ^
-				        crcSlices[3][((value >> 24) & 0xFF) ^ bytes[4]] ^
-				        crcSlices[2][((value >> 16) & 0xFF) ^ bytes[5]] ^
-				        crcSlices[1][((value >> 8) & 0xFF) ^ bytes[6]] ^
-				        crcSlices[0][(value & 0xFF) ^ bytes[7]];
-				bytes += 8;
-				size -= 8;
-			}
-			for (std::size_t i = 0; i < size; ++i)
-			    value = (value << 8) ^ crcSlices[0][(value >> 56) ^ bytes[i]];
-
-		}
+		void update(const char* data, std::size_t size) noexcept;
 	};
 
 	/**
@@ -117,7 +66,7 @@ namespace usb_verify {
 		bool finish();
 
 		/// Checks both global cancellation and the row's latched batch stop token.
-		bool cancelled() const noexcept { return isUsbWriteCancelled(slot_.cancelToken); }
+		bool cancelled() const noexcept;
 
 	private:
 		ProgressInfo& slot_;                        ///< Borrowed UI progress row.

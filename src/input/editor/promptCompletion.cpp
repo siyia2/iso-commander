@@ -14,6 +14,7 @@ import std;
 import isocmd.input.lineEditor;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
+import isocmd.input.terminalControl;
 import isocmd.input.promptCompletion;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.util.writeTypes;

@@ -12,7 +12,6 @@
 
 import std;
 import isocmd.input.lineEditor;
-import isocmd.core.cancellation;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
