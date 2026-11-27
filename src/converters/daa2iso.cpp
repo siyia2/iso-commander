@@ -55,514 +55,293 @@ namespace fs = std::filesystem;
 //  LZMA decoder (Igor Pavlov / 7-zip SDK, minimal subset)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// LZMA decoding logic from Igor Pavlov's public-domain LzmaDec.c
+// (2008-11-06), distributed with DAA2ISO 0.1.7e.
+// Adapted for one-shot DAA chunks: the caller's output buffer is the
+// dictionary, and all mutable state remains local to each conversion.
+
 #define LZMA_PROPS_SIZE 5
 #define SZ_OK           0
 #define SZ_ERROR_DATA   1
 
-typedef std::size_t SizeT;
-typedef int    SRes;
+using SRes = int;
+using CLzmaProb = std::uint16_t;
 
-typedef void *(*ISzAlloc_Alloc)(void *, std::size_t);
-typedef void  (*ISzAlloc_Free) (void *, void *);
-struct ISzAlloc { ISzAlloc_Alloc Alloc; ISzAlloc_Free Free; };
-
-static void *SzAlloc(void *, std::size_t sz) {
-
-	return std::malloc(sz);
-
-}
-
-static void  SzFree (void *, void *p) {
-
-	std::free(p);
-
-}
-
-static ISzAlloc g_Alloc = { SzAlloc, SzFree };
-
-#define kNumBitModelTotalBits 11
-#define kBitModelTotal        (1 << kNumBitModelTotalBits)
-#define kNumMoveBits          5
-
-typedef std::uint16_t CLzmaProb;
-
-struct CLzmaDec {
-	CLzmaProb  *probs;
-	u8         *dic;
-	SizeT       dicBufSize;
-	SizeT       dicPos;
-	const u8   *buf;
-	u32         range, code;
-	SizeT       processedPos;
-	SizeT       checkDicSize;
-	unsigned    state;
-	u32         reps[4];
-	unsigned    remainLen;
-	int         needFlush, needInitState, needInitProbs;
-	u32         numProbs;
-	unsigned    tempBufSize;
-	u8          tempBuf[LZMA_PROPS_SIZE];
-	unsigned    lc, pb, lp;
+struct ISzAlloc {
+	void *(*Alloc)(void *, std::size_t);
+	void (*Free)(void *, void *);
 };
 
-#define LZMA_BASE_SIZE   1846
-#define LZMA_LIT_SIZE    768
-#define LzmaProps_GetNumProbs(lc,lp) (LZMA_BASE_SIZE + (LZMA_LIT_SIZE << ((lc)+(lp))))
+static void *SzAlloc(void *, std::size_t sz) { return std::malloc(sz); }
+static void SzFree(void *, void *p) { std::free(p); }
+static ISzAlloc g_Alloc = { SzAlloc, SzFree };
+
+struct CLzmaDec {
+	CLzmaProb *probs;
+	u32 numProbs;
+	u32 dicSize;
+	unsigned lc, lp, pb;
+	const u8 *buf, *bufEnd;
+	u32 range, code;
+};
+
+namespace {
+
+constexpr unsigned kNumBitModelTotalBits = 11;
+constexpr unsigned kBitModelTotal = 1u << kNumBitModelTotalBits;
+constexpr unsigned kNumMoveBits = 5;
+constexpr unsigned kNumPosBitsMax = 4;
+constexpr unsigned kNumPosStatesMax = 1u << kNumPosBitsMax;
+constexpr unsigned kNumStates = 12;
+constexpr unsigned kNumLitStates = 7;
+constexpr unsigned kNumLenToPosStates = 4;
+constexpr unsigned kNumPosSlotBits = 6;
+constexpr unsigned kStartPosModelIndex = 4;
+constexpr unsigned kEndPosModelIndex = 14;
+constexpr unsigned kNumFullDistances = 1u << (kEndPosModelIndex >> 1);
+constexpr unsigned kNumAlignBits = 4;
+constexpr unsigned kMatchMinLen = 2;
+constexpr unsigned LenChoice = 0;
+constexpr unsigned LenChoice2 = LenChoice + 1;
+constexpr unsigned LenLow = LenChoice2 + 1;
+constexpr unsigned LenMid = LenLow + (kNumPosStatesMax << 3);
+constexpr unsigned LenHigh = LenMid + (kNumPosStatesMax << 3);
+constexpr unsigned kNumLenProbs = LenHigh + 256;
+
+// Original SDK probability-model layout (no overlapping models).
+constexpr unsigned IsMatch = 0;
+constexpr unsigned IsRep = IsMatch + (kNumStates << kNumPosBitsMax);
+constexpr unsigned IsRepG0 = IsRep + kNumStates;
+constexpr unsigned IsRepG1 = IsRepG0 + kNumStates;
+constexpr unsigned IsRepG2 = IsRepG1 + kNumStates;
+constexpr unsigned IsRep0Long = IsRepG2 + kNumStates;
+constexpr unsigned PosSlot = IsRep0Long + (kNumStates << kNumPosBitsMax);
+constexpr unsigned SpecPos = PosSlot + (kNumLenToPosStates << kNumPosSlotBits);
+constexpr unsigned Align = SpecPos + kNumFullDistances - kEndPosModelIndex;
+constexpr unsigned LenCoder = Align + (1u << kNumAlignBits);
+constexpr unsigned RepLenCoder = LenCoder + kNumLenProbs;
+constexpr unsigned Literal = RepLenCoder + kNumLenProbs;
+constexpr unsigned LZMA_BASE_SIZE = 1846;
+constexpr unsigned LZMA_LIT_SIZE = 768;
+static_assert(Literal == LZMA_BASE_SIZE);
+
+struct LzmaInputError {};
+
+} // namespace
 
 static void LzmaDec_Construct(CLzmaDec *p) {
-
-	p->dic = nullptr; p->probs = nullptr;
-
-}
-
-static SRes LzmaDec_AllocateProbs(CLzmaDec *p, const u8 *props, unsigned propsSize, ISzAlloc *alloc) {
-
-	if (propsSize < LZMA_PROPS_SIZE) return SZ_ERROR_DATA;
-	unsigned lc = props[0] % 9;
-	unsigned rem = props[0] / 9;
-	unsigned lp = rem % 5;
-	unsigned pb = rem / 5;
-	if (pb > 4) return SZ_ERROR_DATA;
-	p->lc = lc; p->lp = lp; p->pb = pb;
-	u32 num = LzmaProps_GetNumProbs(lc, lp);
-	if (p->probs && p->numProbs == num) return SZ_OK;
-	if (p->probs) {
-		alloc->Free(alloc, p->probs);
-		p->probs = nullptr;
-	}
-	p->probs = (CLzmaProb *)alloc->Alloc(alloc, num * sizeof(CLzmaProb));
-	if (!p->probs) return SZ_ERROR_DATA;
-	p->numProbs = num;
-	return SZ_OK;
-
+	*p = {};
 }
 
 static SRes LzmaDec_Allocate(CLzmaDec *p, const u8 *props, unsigned propsSize, ISzAlloc *alloc) {
+	if (propsSize < LZMA_PROPS_SIZE || props[0] >= 9 * 5 * 5) return SZ_ERROR_DATA;
+	p->lc = props[0] % 9;
+	p->lp = (props[0] / 9) % 5;
+	p->pb = props[0] / 45;
+	p->dicSize = static_cast<u32>(props[1]) | (static_cast<u32>(props[2]) << 8) |
+	             (static_cast<u32>(props[3]) << 16) | (static_cast<u32>(props[4]) << 24);
+	if (p->dicSize < 4096) p->dicSize = 4096;
 
-	return LzmaDec_AllocateProbs(p, props, propsSize, alloc);
-
+	const u32 num = LZMA_BASE_SIZE + (LZMA_LIT_SIZE << (p->lc + p->lp));
+	if (p->probs && p->numProbs == num) return SZ_OK;
+	alloc->Free(alloc, p->probs);
+	p->probs = static_cast<CLzmaProb *>(alloc->Alloc(alloc, num * sizeof(CLzmaProb)));
+	if (!p->probs) return SZ_ERROR_DATA;
+	p->numProbs = num;
+	return SZ_OK;
 }
 
 static void LzmaDec_Free(CLzmaDec *p, ISzAlloc *alloc) {
-
-	alloc->Free(alloc, p->probs); p->probs = nullptr;
-
-}
-
-static void LzmaDec_InitProbs(CLzmaDec *p) {
-
-	for (u32 i = 0; i < p->numProbs; i++) p->probs[i] = kBitModelTotal >> 1;
-	p->needInitProbs = 0;
-
-}
-
-static void LzmaDec_InitState(CLzmaDec *p) {
-
-	p->state = 0;
-	p->reps[0] = p->reps[1] = p->reps[2] = p->reps[3] = 1;
-	p->remainLen = 0;
-	p->needInitState = 0;
-
+	alloc->Free(alloc, p->probs);
+	p->probs = nullptr;
 }
 
 static void LzmaDec_Init(CLzmaDec *p) {
-
-	p->dicPos = 0;
-	p->needFlush = 1;
-	p->remainLen = 0;
-	p->tempBufSize = 0;
-	p->processedPos = 0;
-	p->checkDicSize = 0;
-	LzmaDec_InitProbs(p);
-	LzmaDec_InitState(p);
-
+	std::fill_n(p->probs, p->numProbs, static_cast<CLzmaProb>(kBitModelTotal >> 1));
 }
 
-#define NORMALIZE if (p->range < (1 << 24)) { p->range <<= 8; p->code = (p->code << 8) | (*p->buf++); }
-
-#define GET_BIT2(prob, mi, A0, A1) \
-    { u32 ttt = *(prob); \
-      u32 bound = (p->range >> kNumBitModelTotalBits) * ttt; \
-      if (p->code < bound) { p->range = bound; ttt += (kBitModelTotal - ttt) >> kNumMoveBits; *(prob) = (CLzmaProb)ttt; mi = (mi + mi); A0; } \
-      else { p->range -= bound; p->code -= bound; ttt -= ttt >> kNumMoveBits; *(prob) = (CLzmaProb)ttt; mi = (mi + mi + 1); A1; } \
-      NORMALIZE; }
-
-#define GET_BIT(prob, mi)   GET_BIT2(prob, mi, ; , ; )
-
-#define TREE_GET_BIT(probs, mi)  GET_BIT((probs) + mi, mi)
-#define TREE_DECODE(probs, limit, mi) \
-  { mi = 1; do { TREE_GET_BIT(probs, mi); } while (mi < limit); mi -= limit; }
-
-#define kNumPosBitsMax      4
-#define kNumPosStatesMax    (1 << kNumPosBitsMax)
-#define kLenNumLowBits      3
-#define kLenNumLowSymbols   (1 << kLenNumLowBits)
-#define kLenNumMidBits      3
-#define kLenNumMidSymbols   (1 << kLenNumMidBits)
-#define kLenNumHighBits     8
-#define kLenNumHighSymbols  (1 << kLenNumHighBits)
-
-#define IsMatch       0
-#define IsRep         192
-#define IsRepG0       204
-#define IsRepG1       216
-#define IsRepG2       228
-#define IsRep0Long    240
-#define PosSlot       272
-#define SpecPos       400
-#define Align         616
-#define LenCoder      632
-#define RepLenCoder   792
-#define Literal       952
-
-#define kNumStates             12
-#define kNumLenToBitModelTotal 10
-#define kMatchMinLen           2
-
-/**
- * FIXED LZMA DECODER
- * Supports volumes > 4GB and fixes Double-Free crashes.
- */
-static u32 lzma_decode_len(CLzmaDec *p, CLzmaProb *prob, u32 posState) {
-
-	u32 ttt, bound, sym;
-	CLzmaProb *pc = prob;
-
-	ttt = *pc;
-	bound = (p->range >> kNumBitModelTotalBits) * ttt;
-	if (p->code < bound) {
-		p->range = bound;
-		ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
-		*pc = (CLzmaProb)ttt;
-		NORMALIZE;
-		pc = prob + 1 + (posState << kLenNumLowBits);
-		TREE_DECODE(pc, kLenNumLowSymbols, sym);
-		return sym;
+static void lzma_normalize(CLzmaDec *p) {
+	if (p->range < (1u << 24)) {
+		if (p->buf == p->bufEnd) throw LzmaInputError{};
+		p->range <<= 8;
+		p->code = (p->code << 8) | *p->buf++;
 	}
-
-	p->range -= bound;
-	p->code -= bound;
-	ttt -= ttt >> kNumMoveBits;
-	*pc = (CLzmaProb)ttt;
-	NORMALIZE;
-
-	pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits);
-	ttt = *pc;
-	bound = (p->range >> kNumBitModelTotalBits) * ttt;
-	if (p->code < bound) {
-		p->range = bound;
-		ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
-		*pc = (CLzmaProb)ttt;
-		NORMALIZE;
-		pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits) + 1 + (posState << kLenNumMidBits);
-		TREE_DECODE(pc, kLenNumMidSymbols, sym);
-		return kLenNumLowSymbols + sym;
-	}
-
-	p->range -= bound;
-	p->code -= bound;
-	ttt -= ttt >> kNumMoveBits;
-	*pc = (CLzmaProb)ttt;
-	NORMALIZE;
-
-	pc = prob + 1 + (kNumPosStatesMax << kLenNumLowBits) + 1 + (kNumPosStatesMax << kLenNumMidBits);
-	TREE_DECODE(pc, kLenNumHighSymbols, sym);
-	return kLenNumLowSymbols + kLenNumMidSymbols + sym;
-
 }
 
-static std::size_t lzma_decode_distance(CLzmaDec *p, CLzmaProb *probs, int len) {
-
-	u32 posSlot;
-	int numDirectBits;
-	u32 distance;
-	unsigned lenState = (unsigned)(len < kNumLenToBitModelTotal - 1 ? len : kNumLenToBitModelTotal - 1);
-	CLzmaProb *prob = probs + PosSlot + (lenState << 6);
-
-	TREE_DECODE(prob, 1 << 6, posSlot);
-
-	if (posSlot < 4) {
-		distance = posSlot;
-	} else {
-		numDirectBits = (int)(((posSlot >> 1) - 1));
-		distance = (2 | (posSlot & 1));
-		if (posSlot < 14) {
-			distance <<= numDirectBits;
-			prob = probs + SpecPos + distance - posSlot - 1;
-			u32 mask = 1;
-			distance += mask;
-			for (int i = numDirectBits - 1; i >= 4; i--) {
-				u32 tt2 = *(prob + (distance >> 1));
-				u32 bd = (p->range >> kNumBitModelTotalBits) * tt2;
-				if (p->code < bd) {
-					p->range = bd;
-					tt2 += (kBitModelTotal - tt2) >> kNumMoveBits;
-					*(prob + (distance >> 1)) = (CLzmaProb)tt2;
-					NORMALIZE;
-				} else {
-					p->range -= bd;
-					p->code -= bd;
-					tt2 -= tt2 >> kNumMoveBits;
-					*(prob + (distance >> 1)) = (CLzmaProb)tt2;
-					NORMALIZE;
-					distance |= mask;
-				}
-				mask <<= 1;
-				distance <<= 1;
-			}
-			prob = probs + Align;
-			distance <<= 4;
-			u32 sym2 = 1;
-			for (int i = 0; i < 4; i++) { TREE_GET_BIT(prob, sym2); }
-			distance |= sym2 & 0xF;
-		} else {
-			numDirectBits -= 4;
-			u32 directBitsResult = 0;
-			for (int i = numDirectBits - 1; i >= 0; i--) {
-				p->range >>= 1;
-				if (p->code >= p->range) {
-					p->code -= p->range;
-					directBitsResult |= (1 << i);
-				}
-				NORMALIZE;
-			}
-			distance = ((distance << numDirectBits) | directBitsResult) << 4;
-			prob = probs + Align;
-			u32 sym2 = 1;
-			for (int i = 0; i < 4; i++) { TREE_GET_BIT(prob, sym2); }
-			distance |= sym2 & 0xF;
-		}
-	}
-	return (std::size_t)distance + 1;
-
-}
-
-typedef enum {
-	LZMA_STEP_NEXT,   /* symbol fully handled, go to next loop iteration */
-	LZMA_STEP_MATCH,  /* a match must be copied (v->len / v->rep0 are set) */
-	LZMA_STEP_DONE    /* stop decoding and return v->result */
-} LzmaStep;
-
-typedef struct {
-	unsigned state;
-	std::size_t   rep0, rep1, rep2, rep3;
-	int      len;
-	std::size_t   result;
-} LzmaVars;
-
-/* Decode one adaptive bit (the update / normalize pattern repeated everywhere). */
 static unsigned lzma_decode_bit(CLzmaDec *p, CLzmaProb *prob) {
-
-	u32 ttt = *prob;
-	u32 bound = (p->range >> kNumBitModelTotalBits) * ttt;
-
+	lzma_normalize(p);
+	const u32 ttt = *prob;
+	const u32 bound = (p->range >> kNumBitModelTotalBits) * ttt;
 	if (p->code < bound) {
 		p->range = bound;
-		ttt += (kBitModelTotal - ttt) >> kNumMoveBits;
-		*prob = (CLzmaProb)ttt;
-		NORMALIZE;
+		*prob = static_cast<CLzmaProb>(ttt + ((kBitModelTotal - ttt) >> kNumMoveBits));
 		return 0;
 	}
-	p->range -= bound; p->code -= bound;
-	ttt -= ttt >> kNumMoveBits; *prob = (CLzmaProb)ttt;
-	NORMALIZE;
+	p->range -= bound;
+	p->code -= bound;
+	*prob = static_cast<CLzmaProb>(ttt - (ttt >> kNumMoveBits));
 	return 1;
-
 }
 
-/* Position in the dictionary that is `rep0` bytes behind the write position. */
-static std::size_t lzma_dic_src(const CLzmaDec *p, std::size_t rep0) {
-
-	return (p->dicPos >= rep0) ? (p->dicPos - rep0)
-	                           : (p->dicPos + p->dicBufSize - rep0);
-
+static unsigned lzma_tree_decode(CLzmaDec *p, CLzmaProb *probs, unsigned bits) {
+	unsigned symbol = 1;
+	const unsigned limit = 1u << bits;
+	while (symbol < limit) symbol = (symbol << 1) | lzma_decode_bit(p, probs + symbol);
+	return symbol - limit;
 }
 
-static void lzma_init(CLzmaDec *p, const u8 *in, u8 *out, std::size_t outsz) {
-
-	// Basic Initialization
-	p->dic         = out;
-	p->dicBufSize  = outsz;
-	p->dicPos      = 0;
-	p->buf         = in;
-	p->code        = 0;
-	p->range       = 0xFFFFFFFF;
-
-	// Load first 5 bytes
-	for (int i = 0; i < 5; i++) p->code = (p->code << 8) | (*p->buf++);
-
+static unsigned lzma_decode_len(CLzmaDec *p, CLzmaProb *probs, unsigned posState) {
+	if (lzma_decode_bit(p, probs + LenChoice) == 0)
+		return lzma_tree_decode(p, probs + LenLow + (posState << 3), 3);
+	if (lzma_decode_bit(p, probs + LenChoice2) == 0)
+		return 8 + lzma_tree_decode(p, probs + LenMid + (posState << 3), 3);
+	return 16 + lzma_tree_decode(p, probs + LenHigh, 8);
 }
 
-static CLzmaProb *lzma_literal_probs(CLzmaDec *p, CLzmaProb *probs) {
-
-	CLzmaProb *prob = probs + Literal;
-	if (p->processedPos != 0 || p->checkDicSize != 0) {
-		u8 prevByte = (p->dicPos == 0) ? 0 : p->dic[p->dicPos - 1];
-		prob += (LZMA_LIT_SIZE * (((p->processedPos & ((1 << p->lp) - 1)) << p->lc)
-		        + (prevByte >> (8 - p->lc))));
+static u32 lzma_reverse_bits(CLzmaDec *p, CLzmaProb *probs, unsigned bits) {
+	u32 result = 0;
+	unsigned symbol = 1;
+	for (unsigned i = 0; i < bits; ++i) {
+		const unsigned bit = lzma_decode_bit(p, probs + symbol);
+		symbol = (symbol << 1) | bit;
+		result |= static_cast<u32>(bit) << i;
 	}
-	return prob;
-
+	return result;
 }
 
-/* Literal decoding when the previous symbol was a match (uses the match byte). */
-static u32 lzma_decode_matched_literal(CLzmaDec *p, CLzmaProb *prob, u8 matchByte) {
+// Distances stay 32-bit as in the SDK; 0xffffffff is the end marker.
+static u32 lzma_decode_distance(CLzmaDec *p, unsigned len) {
+	const unsigned lenState = len < kNumLenToPosStates ? len : kNumLenToPosStates - 1;
+	const unsigned posSlot = lzma_tree_decode(p, p->probs + PosSlot + (lenState << kNumPosSlotBits), 6);
+	if (posSlot < kStartPosModelIndex) return posSlot;
 
-	u32 symbol = 1;
+	unsigned numDirectBits = (posSlot >> 1) - 1;
+	u32 distance = 2 | (posSlot & 1);
+	if (posSlot < kEndPosModelIndex) {
+		distance <<= numDirectBits;
+		return distance | lzma_reverse_bits(p, p->probs + SpecPos + distance - posSlot - 1, numDirectBits);
+	}
+	for (numDirectBits -= kNumAlignBits; numDirectBits != 0; --numDirectBits) {
+		lzma_normalize(p);
+		p->range >>= 1;
+		distance <<= 1;
+		if (p->code >= p->range) {
+			p->code -= p->range;
+			distance |= 1;
+		}
+	}
+	return (distance << kNumAlignBits) | lzma_reverse_bits(p, p->probs + Align, kNumAlignBits);
+}
 
-	do {
-		u32 bit;
-		CLzmaProb *probLit;
+static unsigned lzma_matched_literal(CLzmaDec *p, CLzmaProb *probs, unsigned matchByte) {
+	unsigned symbol = 1, offs = 0x100;
+	while (symbol < 0x100) {
 		matchByte <<= 1;
-		bit = matchByte & 0x100;
-		probLit = prob + 0x100 + bit + symbol;
-		GET_BIT2(probLit, symbol, bit = 0, bit = 0x100);
-		if ((matchByte & 0x100) != bit) {
-			while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
-			break;
-		}
-	} while (symbol < 0x100);
+		const unsigned bit = matchByte & offs;
+		const unsigned decoded = lzma_decode_bit(p, probs + offs + bit + symbol);
+		symbol = (symbol << 1) | decoded;
+		offs &= decoded ? bit : ~bit;
+	}
 	return symbol;
-
 }
 
-static LzmaStep lzma_step_literal(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v) {
-
-	CLzmaProb *prob = lzma_literal_probs(p, probs);
-	u32 symbol = 1;
-
-	if (v->state >= 7) {
-		u8 matchByte = p->dic[lzma_dic_src(p, v->rep0)];
-		symbol = lzma_decode_matched_literal(p, prob, matchByte);
+static unsigned lzma_literal(CLzmaDec *p, const u8 *out, std::size_t pos,
+                             unsigned state, u32 rep0) {
+	CLzmaProb *probs = p->probs + Literal;
+	if (pos != 0) {
+		const unsigned prev = out[pos - 1];
+		probs += LZMA_LIT_SIZE * (((pos & ((1u << p->lp) - 1)) << p->lc) +
+		                         (prev >> (8 - p->lc)));
 	}
-	while (symbol < 0x100) { GET_BIT(prob + symbol, symbol); }
-
-	p->dic[p->dicPos++] = (u8)symbol;
-	p->processedPos++;
-	v->state = (v->state < 4) ? 0 : (v->state < 10) ? v->state - 3 : v->state - 6;
-	return LZMA_STEP_NEXT;
-
+	if (state < kNumLitStates) return lzma_tree_decode(p, probs, 8);
+	return lzma_matched_literal(p, probs, out[pos - rep0]);
 }
 
-/* IsRep == 0: a normal match with a freshly decoded distance. */
-static LzmaStep lzma_step_simple_match(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v, u32 posState) {
-
-	v->rep3 = v->rep2; v->rep2 = v->rep1; v->rep1 = v->rep0;
-	v->len = (int)lzma_decode_len(p, probs + LenCoder, posState);
-	v->state = (v->state < 7) ? 7 : 10;
-
-	v->rep0 = lzma_decode_distance(p, probs, v->len);
-	if (v->rep0 == 0) {
-		v->result = p->dicPos;
-		return LZMA_STEP_DONE;
-	}
-	return LZMA_STEP_MATCH;
-
-}
-
-/* IsRepG0 == 0 and IsRep0Long == 0: single byte copied from rep0. */
-static LzmaStep lzma_step_short_rep(CLzmaDec *p, LzmaVars *v) {
-
-	if (p->dicPos == 0 && p->checkDicSize == 0) {
-		v->result = 0;
-		return LZMA_STEP_DONE;
-	}
-	std::size_t srcPos = lzma_dic_src(p, v->rep0);
-	if (p->dicPos >= p->dicBufSize) {
-		v->result = p->dicPos;
-		return LZMA_STEP_DONE;
-	}
-	p->dic[p->dicPos++] = p->dic[srcPos];
-	p->processedPos++;
-	v->state = (v->state < 7) ? 9 : 11;
-	return LZMA_STEP_NEXT;
-
-}
-
-/* IsRepG0 == 1: choose rep1 / rep2 / rep3 and rotate the rep history. */
-static void lzma_select_rep_distance(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v) {
-
-	std::size_t distance;
-
-	if (lzma_decode_bit(p, probs + IsRepG1 + v->state) == 0) {
-		distance = v->rep1;
+static void lzma_select_rep(CLzmaDec *p, unsigned state, u32 (&reps)[4]) {
+	u32 distance;
+	if (lzma_decode_bit(p, p->probs + IsRepG1 + state) == 0) {
+		distance = reps[1];
 	} else {
-		if (lzma_decode_bit(p, probs + IsRepG2 + v->state) == 0) {
-			distance = v->rep2;
+		if (lzma_decode_bit(p, p->probs + IsRepG2 + state) == 0) {
+			distance = reps[2];
 		} else {
-			distance = v->rep3;
-			v->rep3 = v->rep2;
+			distance = reps[3];
+			reps[3] = reps[2];
 		}
-		v->rep2 = v->rep1;
+		reps[2] = reps[1];
 	}
-	v->rep1 = v->rep0;
-	v->rep0 = distance;
-
+	reps[1] = reps[0];
+	reps[0] = distance;
 }
 
-/* IsRep == 1: repeated match. */
-static LzmaStep lzma_step_rep_match(CLzmaDec *p, CLzmaProb *probs, LzmaVars *v, u32 posState) {
+// The original SDK's state transitions, using a contiguous dictionary.
+// DAA chunks are independent streams, so streaming/refill state is unnecessary.
+static std::size_t lzma_decode_full(CLzmaDec *p, const u8 *in, std::size_t insz,
+                                    u8 *out, std::size_t outsz) {
+	if (!p->probs || insz < 5 || in[0] != 0) return 0;
+	p->buf = in + 5;
+	p->bufEnd = in + insz;
+	p->range = 0xffffffffu;
+	p->code = (static_cast<u32>(in[1]) << 24) | (static_cast<u32>(in[2]) << 16) |
+	          (static_cast<u32>(in[3]) << 8) | in[4];
 
-	if (lzma_decode_bit(p, probs + IsRepG0 + v->state) == 0) {
-		CLzmaProb *prob = probs + IsRep0Long + (v->state << kNumPosBitsMax) + posState;
-		if (lzma_decode_bit(p, prob) == 0)
-		    return lzma_step_short_rep(p, v);
-	} else {
-		lzma_select_rep_distance(p, probs, v);
-	}
+	std::size_t pos = 0;
+	unsigned state = 0;
+	u32 reps[4] = {1, 1, 1, 1};
+	try {
+		for (;;) {
+			lzma_normalize(p);
+			// SDK FINISH_END also accepts a sized stream without an end marker.
+			if (pos == outsz && p->code == 0) return pos;
+			const unsigned posState = pos & ((1u << p->pb) - 1);
+			const unsigned statePos = (state << kNumPosBitsMax) + posState;
+			if (lzma_decode_bit(p, p->probs + IsMatch + statePos) == 0) {
+				if (pos == outsz || (state >= kNumLitStates && reps[0] > pos)) return 0;
+				out[pos] = static_cast<u8>(lzma_literal(p, out, pos, state, reps[0]));
+				++pos;
+				state = state < 4 ? 0 : (state < 10 ? state - 3 : state - 6);
+				continue;
+			}
 
-	v->len = (int)lzma_decode_len(p, probs + RepLenCoder, posState);
-	v->state = (v->state < 7) ? 8 : 11;
-	return LZMA_STEP_MATCH;
+			unsigned len;
+			if (lzma_decode_bit(p, p->probs + IsRep + state) == 0) {
+				len = lzma_decode_len(p, p->probs + LenCoder, posState);
+				const u32 distance = lzma_decode_distance(p, len);
+				if (distance == 0xffffffffu) {
+					lzma_normalize(p);
+					return p->code == 0 ? pos : 0;
+				}
+				if (distance >= pos || distance >= p->dicSize) return 0;
+				reps[3] = reps[2]; reps[2] = reps[1]; reps[1] = reps[0];
+				reps[0] = distance + 1;
+				state = state < kNumLitStates ? 7 : 10;
+			} else {
+				if (pos == 0 || pos == outsz) return 0;
+				if (lzma_decode_bit(p, p->probs + IsRepG0 + state) == 0) {
+					if (lzma_decode_bit(p, p->probs + IsRep0Long + statePos) == 0) {
+						if (reps[0] > pos || reps[0] > p->dicSize) return 0;
+						out[pos] = out[pos - reps[0]];
+						++pos;
+						state = state < kNumLitStates ? 9 : 11;
+						continue;
+					}
+				} else {
+					lzma_select_rep(p, state, reps);
+				}
+				len = lzma_decode_len(p, p->probs + RepLenCoder, posState);
+				state = state < kNumLitStates ? 8 : 11;
+			}
 
-}
-
-/* Copies the match; returns 0 if the distance is invalid. */
-static int lzma_copy_match(CLzmaDec *p, std::size_t rep0, int len) {
-
-	// FINAL MATCH COPY
-	if (rep0 > p->dicPos + p->checkDicSize) return 0;
-	while (len--) {
-		if (p->dicPos >= p->dicBufSize) break;
-		std::size_t srcPos = lzma_dic_src(p, rep0);
-		p->dic[p->dicPos++] = p->dic[srcPos];
-		p->processedPos++;
-	}
-	return 1;
-
-}
-
-static std::size_t lzma_decode_full(CLzmaDec *p, const u8 *in, std::size_t insz, u8 *out, std::size_t outsz) {
-
-	lzma_init(p, in, out, outsz);
-	(void)insz;
-
-	LzmaVars v = { 0, 1, 1, 1, 1, 0, 0 };
-	CLzmaProb *probs = p->probs;
-
-	for (;;) {
-		if (p->dicPos >= p->dicBufSize) return p->dicPos;
-
-		u32 posState = (u32)((std::size_t)p->dicPos & ((1 << p->pb) - 1));
-		CLzmaProb *prob = probs + IsMatch + (v.state << kNumPosBitsMax) + posState;
-
-		LzmaStep step;
-		if (lzma_decode_bit(p, prob) == 0) {
-			step = lzma_step_literal(p, probs, &v);
-		} else if (lzma_decode_bit(p, probs + IsRep + v.state) == 0) {
-			step = lzma_step_simple_match(p, probs, &v, posState);
-		} else {
-			step = lzma_step_rep_match(p, probs, &v, posState);
+			len += kMatchMinLen;
+			if (reps[0] > pos || reps[0] > p->dicSize || len > outsz - pos) return 0;
+			while (len--) {
+				out[pos] = out[pos - reps[0]];
+				++pos;
+			}
 		}
-
-		if (step == LZMA_STEP_DONE) return v.result;
-		if (step == LZMA_STEP_NEXT) continue;
-
-		v.len += kMatchMinLen;
-		if (!lzma_copy_match(p, v.rep0, v.len)) return 0;
+	} catch (const LzmaInputError &) {
+		return 0;
 	}
-	return p->dicPos;
-
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1249,9 +1028,9 @@ struct ChunkDecodeConfig {
  * @brief Decodes the length and compression type for a single chunk index entry.
  *
  * @details Reads either the legacy v1.00 three-byte layout or advances through
- *          the v1.10 bit-packed index stream using @p bitpos. Any decoded
- *          length at or above @p cfg.chunksize marks the entry as uncompressed
- *          (@c -1).
+ *          the v1.10 bit-packed index stream using @p bitpos. Only v1.10
+ *          entries with a decoded length at or above @p cfg.chunksize are
+ *          marked as uncompressed (@c -1); v1.00 always uses INFLATE.
  *
  * @param[in]     daa_data   Pointer to the decoded chunk index table.
  * @param[in]     cfg        Format version, chunk size, and bit-reader settings.
@@ -1275,7 +1054,7 @@ static void decodeChunkEntry(const void *daa_data, const ChunkDecodeConfig &cfg,
 		out_len = (static_cast<u32>(pdata[chunk_idx].n1) << 16) |
 		          pdata[chunk_idx].n2 |
 		          (static_cast<u32>(pdata[chunk_idx].n3) << 8);
-		out_ztype = (out_len >= cfg.chunksize) ? -1 : 1;
+		out_ztype = 1; // DAA v1.00 always uses INFLATE.
 		return;
 	}
 
@@ -1302,6 +1081,8 @@ static void decodeChunkEntry(const void *daa_data, const ChunkDecodeConfig &cfg,
  * @param[in,out] ctx         Active DAA decoding context and buffers.
  * @param[in]     chunksize   Configured uncompressed chunk size in bytes.
  * @param[in]     in_len      Byte length of compressed or raw data in @c ctx.in.
+ * @param[in]     expected    Actual remaining ISO bytes for a short final chunk,
+ *                            otherwise the full chunk size.
  * @param[in]     ztype       Chunk mode (@c -1 raw copy, @c 0 LZMA, @c 1 Inflate).
  * @param[in]     lzma_filter Non-zero to apply @c poweriso_is_shit after LZMA decode.
  *
@@ -1310,7 +1091,7 @@ static void decodeChunkEntry(const void *daa_data, const ChunkDecodeConfig &cfg,
  * @throws DaaError If @p ztype is unrecognized or decompression fails.
  */
 static u32 decompressChunk(DaaContext &ctx, u32 chunksize, u32 in_len,
-                           int ztype, int lzma_filter)
+                           u32 expected, int ztype, int lzma_filter)
 {
 
 	if (ztype == -1) {
@@ -1321,8 +1102,15 @@ static u32 decompressChunk(DaaContext &ctx, u32 chunksize, u32 in_len,
 
 	if (ztype == 0) {
 		LzmaDec_Init(&ctx.lzma);
-		const u32 outlen = lzma_decode_full(
-		    &ctx.lzma, ctx.in, in_len, ctx.out_buf, ctx.outsz);
+		u32 outlen = lzma_decode_full(
+		    &ctx.lzma, ctx.in, in_len, ctx.out_buf, chunksize);
+		// A short final stream may omit the end marker. Try its known size
+		// only if full-chunk decoding failed, preserving padded chunks.
+		if (outlen == 0 && expected != 0 && expected < chunksize) {
+			LzmaDec_Init(&ctx.lzma);
+			outlen = lzma_decode_full(
+			    &ctx.lzma, ctx.in, in_len, ctx.out_buf, expected);
+		}
 		if (outlen == 0) {
 			throw DaaError("LZMA decompression failed");
 		}
@@ -1333,7 +1121,7 @@ static u32 decompressChunk(DaaContext &ctx, u32 chunksize, u32 in_len,
 	}
 
 	if (ztype == 1) {
-		std::size_t destLen = ctx.outsz;
+		std::size_t destLen = chunksize;
 		if (tinf_uncompress(ctx.tinf, ctx.out_buf, &destLen, ctx.in, in_len,
 		                    ctx.swapped_btype) != TINF_OK) {
 			throw DaaError("INFLATE decompression failed");
@@ -1462,7 +1250,10 @@ static bool processAllChunks(DaaContext &ctx, const daa_t &daa, void *daa_data,
 		ctx_alloc(&ctx.in, len, &ctx.insz);
 		ctx_read(ctx, ctx.in, len);
 
-		const u32 outlen = decompressChunk(ctx, daa.chunksize, len, ztype, lzma_filter);
+		const u32 expected = (i == last_chunk && tot < daa.isosize)
+		    ? static_cast<u32>(std::min<u64>(daa.chunksize, daa.isosize - tot))
+		    : daa.chunksize;
+		const u32 outlen = decompressChunk(ctx, daa.chunksize, len, expected, ztype, lzma_filter);
 		writeValidatedChunk(ctx, outlen, i == last_chunk, daa.chunksize,
 		                    daa.isosize, tot);
 	}
