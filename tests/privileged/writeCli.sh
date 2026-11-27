@@ -153,9 +153,9 @@ capture_verbose() {
 verbose_result() {
     cli_has stdout "Status: write2usb → $1"
     if [ "$success_status" = PASS ]; then
-        cli_has stdout "Successful: $2 | Verified: $2 | Time Elapsed:"
+        cli_has stdout "Written: $2 | Verified: $2 | Time Elapsed:"
     else
-        cli_has stdout "Successful: $2 | Time Elapsed:"
+        cli_has stdout "Written: $2 | Time Elapsed:"
         cli_lacks stdout "Verified:"
     fi
     cli_empty stderr
