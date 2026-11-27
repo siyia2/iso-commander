@@ -525,7 +525,7 @@ void reportErrorCpMvRm(
 		        .append(label).append(": ").append(vt.red).append("Failed to overwrite: ").append(errorDetail);
 	} else if (errorType == "file_exists") {
 		errorMsg.append(vt.yellow).append(displaySrc)
-		        .append(vt.reset).append(" → ")
+		        .append(label).append(" → ")
 		        .append(vt.yellow).append(destDir).append(srcFile)
 		        .append(label).append(": ").append(vt.red).append("File exists (overwrite with -o)");
 	} else if (errorType == "remove_after_move") {
@@ -583,7 +583,7 @@ void logOperationResult(
 
 		msg.append(colors.error_label).append("✗ ")
 		   .append(colors.error_path).append(displaySrc)
-		   .append(colors.arrow).append(" → ")
+		   .append(colors.success_label).append(" → ")
 		   .append(colors.error_path).append(destDirProcessed).append(destFile)
 		   .append(colors.success_label).append(": ").append(colors.error_label).append(errorDetail)
 		   .append(UI::Palette::BoldReset);
