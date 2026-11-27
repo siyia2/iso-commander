@@ -100,7 +100,7 @@ cli_has stdout "✓ umount: $mount_point"; cli_summary Unmount 1 0
 for action in umount unmount; do
     cli_run "$action: invalid paths and disallowed directory" 1 "$action" "$PWD/missing-mount" "$PWD/empty-mount-input" "$PWD/missing-mount" "$PWD/missing-mount-2" "$PWD/empty-mount-input"
     expected=$(printf '%s\n' \
-        'Warning: Use /mnt/ISOs, /mnt/ISOs/isoFolder.' \
+        'Warning: Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.' \
         "Warning: '$PWD/missing-mount' does not exist or is not a valid mount point, skipping." \
         "Warning: '$PWD/empty-mount-input' is not allowed." \
         "Warning: '$PWD/missing-mount-2' does not exist or is not a valid mount point, skipping.")

@@ -142,7 +142,7 @@ static void warnInvalidMountPath(const ParsedArgs& args,
                                  const std::string& rawPath) {
 
 	if (!res.pathHintShown) {
-		warnMsg(args.silentMode, "Use /mnt/ISOs, /mnt/ISOs/isoFolder.");
+		warnMsg(args.silentMode, "Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.");
 		res.pathHintShown = true;
 	}
 	warnMsg(args.silentMode, reason, rawPath);
