@@ -11,14 +11,6 @@ Mount ISOs, convert images, write bootable USB drives — done right
 2. **Static Binary** — Download from the [latest release](https://github.com/siyia2/iso-commander/releases)
 3. **Source** — `make` (requires GCC 15+)
 
-### Manual
-
-- `man isocmd` — commands, interactive usage and USB writing
-- `man 5 isocmd.conf` — configuration settings and defaults
-
-From the source tree, use `man -l man/isocmd.1` and
-`man -l man/isocmd.conf.5`.
-
 ### Dependencies
 
 | Platform | Packages |
