@@ -128,11 +128,15 @@ cmp expected.iso other.iso || cli_fail 'incorrect ISO bytes'
 [ "$(cat "$output")" = 'keep-existing-output' ] || cli_fail 'existing ISO overwritten'; cli_pass
 rm "$output" other.img other.iso
 
-cli_run 'c2iso: invalid input paths' 1 c2iso "$PWD/missing.img" "$PWD/unsupported.txt" "$PWD/not-image"
-cli_has stderr "Warning: '$PWD/missing.img' does not exist, skipping."
-cli_has stderr "Warning: '$PWD/unsupported.txt' is not a supported image (bin/img/ccd/mdf/nrg/chd/daa/gbi), skipping."
-cli_has stderr "Warning: '$PWD/not-image' is not a valid file or directory, skipping."
+cli_run 'c2iso: repeated invalid input paths' 1 c2iso "$PWD/missing.img" "$PWD/unsupported.txt" "$PWD/missing.img" "$PWD/not-image" "$PWD/unsupported.txt" "$PWD/not-image"
+expected=$(printf '%s\n' \
+    "Warning: '$PWD/missing.img' does not exist, skipping." \
+    "Warning: '$PWD/unsupported.txt' is not a supported image (bin/img/ccd/mdf/nrg/chd/daa/gbi), skipping." \
+    "Warning: '$PWD/not-image' is not a valid file or directory, skipping.")
+[ "$(grep -F 'Warning: ' cli.stderr)" = "$expected" ] || cli_fail 'unexpected conversion path warnings or order'
 cli_has stdout 'No convertible image files found.'; cli_lacks stdout 'Conversion summary:'; cli_pass
+cli_run 'c2iso: silent repeated invalid paths' 1 c2iso --silent "$PWD/missing.img" "$PWD/missing.img"
+cli_quiet; cli_pass
 
 cli_run 'c2iso: backend failure and partial-output cleanup' 1 c2iso "$PWD/broken.img"
 cli_record stdout '✗ c2iso: ' 'broken.img' '  Failed'

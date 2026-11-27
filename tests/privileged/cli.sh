@@ -35,7 +35,17 @@ if [ "$1" = validation ]; then
         cli_line stderr " • '$PWD/wrong.txt' is not an ISO file."
         cli_line stderr " • '$PWD/empty.iso' is empty or unreadable."
         cli_line stderr " • '/dev/null' is not a removable USB flash device."
-        cli_line stderr " • '/dev/null' is listed more than once."; cli_empty stdout; cli_pass
+        cli_line stderr " • '/dev/null' is listed more than once."
+        [ "$(grep -Fxc -- " • '/dev/null' is listed more than once." cli.stderr)" -eq 1 ] || cli_fail 'duplicate target diagnostic repeated'
+        cli_empty stdout; cli_pass
+        cli_run "w2usb: $mode repeated invalid ISO and target" 1 w2usb "$@" "$PWD/missing.iso" "$PWD/wrong.txt" "$PWD/missing.iso" /dev/null /dev/null /dev/null
+        expected=$(printf '%s\n' \
+            " • '$PWD/missing.iso' is not a regular file." \
+            " • '$PWD/wrong.txt' is not an ISO file." \
+            " • '/dev/null' is not a removable USB flash device." \
+            " • '/dev/null' is listed more than once.")
+        [ "$(grep -F ' • ' cli.stderr)" = "$expected" ] || cli_fail 'unexpected USB diagnostics or order'
+        cli_empty stdout; cli_pass
     done
     exit 0
 fi
@@ -55,10 +65,14 @@ cli_run 'mount: no paths' 0 mount
 cli_has stdout 'No ISO files to mount.'; cli_empty stderr; cli_pass
 cli_run 'mount: empty surface scan' 0 mount -d0 "$PWD/empty-mount-input"
 cli_has stdout '(surface scan)...'; cli_has stdout 'No ISO files found to mount.'; cli_empty stderr; cli_pass
-cli_run 'mount: invalid paths' 1 mount "$PWD/missing.iso" "$PWD/wrong-mount.txt"
-cli_has stderr "'$PWD/missing.iso' does not exist, skipping."
-cli_has stderr "'$PWD/wrong-mount.txt' is not an ISO file, skipping."
+cli_run 'mount: repeated invalid paths' 1 mount "$PWD/missing.iso" "$PWD/wrong-mount.txt" "$PWD/missing.iso" "$PWD/wrong-mount.txt"
+expected=$(printf '%s\n' \
+    "Warning: '$PWD/missing.iso' does not exist, skipping." \
+    "Warning: '$PWD/wrong-mount.txt' is not an ISO file, skipping.")
+[ "$(grep -F 'Warning: ' cli.stderr)" = "$expected" ] || cli_fail 'unexpected mount path warnings or order'
 cli_has stdout 'No ISO files to mount.'; cli_pass
+cli_run 'mount: silent repeated invalid paths' 1 mount --silent "$PWD/missing.iso" "$PWD/missing.iso"
+cli_quiet; cli_pass
 cli_run 'mount: invalid image failure' 1 mount "$PWD/bad.iso"
 cli_record stdout '✗ mount: ' 'bad.iso' '{badFS}'
 cli_summary Mount 0 1; [ -z "$(ls -A /mnt/ISOs)" ] || cli_fail 'unexpected mount'; cli_pass
@@ -82,10 +96,19 @@ cli_has stdout 'Located 1 mount point; Attempting to unmount...'
 cli_has stdout "✓ umount: $mount_point"; cli_summary Unmount 1 0
 [ ! -e "$mount_point" ] || cli_fail 'mount directory retained'; cli_pass
 
-cli_run 'unmount: invalid path and disallowed directory' 1 unmount "$PWD/missing-mount" "$PWD/empty-mount-input"
-cli_has stderr 'does not exist or is not a valid mount point, skipping.'
-cli_has stderr 'is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.'
-cli_has stdout 'No ISO mount points found to unmount.'; cli_pass
+# The supported-path hint appears exactly once, before either type of invalid path.
+for action in umount unmount; do
+    cli_run "$action: invalid paths and disallowed directory" 1 "$action" "$PWD/missing-mount" "$PWD/empty-mount-input" "$PWD/missing-mount" "$PWD/missing-mount-2" "$PWD/empty-mount-input"
+    expected=$(printf '%s\n' \
+        'Warning: Use /mnt/ISOs, /mnt/ISOs/isoFolder.' \
+        "Warning: '$PWD/missing-mount' does not exist or is not a valid mount point, skipping." \
+        "Warning: '$PWD/empty-mount-input' is not allowed." \
+        "Warning: '$PWD/missing-mount-2' does not exist or is not a valid mount point, skipping.")
+    [ "$(grep -F 'Warning: ' cli.stderr)" = "$expected" ] || cli_fail 'unexpected unmount path warnings or hint order'
+    cli_has stdout 'No ISO mount points found to unmount.'; cli_pass
+    cli_run "$action: silent invalid paths" 1 "$action" --silent "$PWD/empty-mount-input" "$PWD/missing-mount" "$PWD/missing-mount"
+    cli_quiet; cli_pass
+done
 cli_run 'umount: empty all scan' 0 umount all
 cli_has stdout 'Scanning /mnt/ISOs for ISO mount points (surface scan)...'
 cli_has stdout 'No ISO mount points found to unmount.'; cli_empty stderr; cli_pass

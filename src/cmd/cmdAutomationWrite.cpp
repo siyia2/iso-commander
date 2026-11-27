@@ -353,6 +353,12 @@ int handleWriteUsb(const ParsedArgs& args) {
 	}
 
 	if (!errors.empty()) {
+		// Deduplicate diagnostics only; repeated ISO arguments and duplicate
+		// target validation must retain their original mapping semantics.
+		std::unordered_set<std::string> seenErrors;
+		std::erase_if(errors, [&seenErrors](const auto& error) {
+			return !seenErrors.insert(error).second;
+		});
 		printValidationErrors(wt, errors);
 		return 1;
 	}

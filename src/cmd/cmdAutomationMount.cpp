@@ -161,11 +161,14 @@ static bool collectIsosAndValidatePaths(const ParsedArgs& args,
                                        bool& hasErrors,
                                        bool& noScanDir) {
 
+	std::unordered_set<std::string_view> seenPaths;
 	for (const auto& rawPath : args.paths) {
 		if (GlobalState::g_operationCancelled.load()) {
 			verboseWarn(args.silentMode, "Operation cancelled by user.");
 			return true;
 		}
+
+		if (!seenPaths.insert(rawPath).second) continue;
 
 		fs::path path(rawPath);
 

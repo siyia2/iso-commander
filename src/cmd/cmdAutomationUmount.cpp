@@ -72,6 +72,7 @@ static void runUnmountWorkers(const std::vector<std::string>& paths,
 struct CollectionResult {
 	std::unordered_set<std::string> mountPoints;
 	bool hasErrors = false;
+	bool pathHintShown = false;
 	bool cancelled = false;
 	bool abortImmediately = false;
 };
@@ -134,6 +135,21 @@ static void collectFromMnt(const fs::path& mntPath,
 
 }
 
+/// Reports an invalid input path, showing the supported path forms only once.
+static void warnInvalidMountPath(const ParsedArgs& args,
+                                 CollectionResult& res,
+                                 std::string_view reason,
+                                 const std::string& rawPath) {
+
+	if (!res.pathHintShown) {
+		warnMsg(args.silentMode, "Use /mnt/ISOs, /mnt/ISOs/isoFolder.");
+		res.pathHintShown = true;
+	}
+	warnMsg(args.silentMode, reason, rawPath);
+	res.hasErrors = true;
+
+}
+
 /**
  * @brief Validates and processes a single user-specified input path.
  *
@@ -155,10 +171,7 @@ static void processUserPath(const std::string& rawPath,
 			} else if (canonical.rfind("/mnt/ISOs/", 0) == 0) {
 				res.mountPoints.insert(canonical);
 			} else {
-				warnMsg(args.silentMode,
-				        "is not allowed. Only /mnt/ISOs or /mnt/ISOs/isoFolder are valid.",
-				        rawPath);
-				res.hasErrors = true;
+				warnInvalidMountPath(args, res, "is not allowed.", rawPath);
 			}
 		} else {
 			fs::path candidate = path.is_relative()
@@ -168,10 +181,9 @@ static void processUserPath(const std::string& rawPath,
 			if (fs::exists(candidate) && fs::is_directory(candidate)) {
 				res.mountPoints.insert(fs::canonical(candidate).string());
 			} else {
-				warnMsg(args.silentMode,
-				        "does not exist or is not a valid mount point, skipping.",
-				        rawPath);
-				res.hasErrors = true;
+				warnInvalidMountPath(args, res,
+				                     "does not exist or is not a valid mount point, skipping.",
+				                     rawPath);
 			}
 		}
 	} catch (const fs::filesystem_error& e) {
@@ -210,10 +222,12 @@ static CollectionResult collectMountPoints(const ParsedArgs& args) {
 		return res;
 	}
 
+	std::unordered_set<std::string_view> seenPaths;
 	for (const auto& rawPath : args.paths) {
 		if (checkCancellation(args, res)) {
 			break;
 		}
+		if (!seenPaths.insert(rawPath).second) continue;
 		processUserPath(rawPath, args, res);
 	}
 
