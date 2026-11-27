@@ -788,8 +788,8 @@ namespace {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Writes an ISO image to a raw block device, routing Windows and
- *        Linux media to the appropriate writer.
+ * @brief Writes an ISO image to a raw block device, using a dedicated Windows
+ *        writer or raw sector copy for other images (including hybrid ISOs).
  *
  * Opens the ISO once, validates it with iso_detect::isValidIso9660, then checks
  * for Windows media with iso_detect::isWindowsIsoInitialCheck. Windows images

@@ -128,7 +128,7 @@ fresh 16 MiB sparse backing file in a root-owned private temporary directory
 and attaches a new loop device. No user-supplied device path is accepted by the
 runner. The executable independently verifies that the block device is a whole
 loop device and that its kernel-reported backing inode/device and size match
-that fresh file before calling the real Linux ISO writer. It checks the written
+that fresh file before calling the real raw ISO writer. It checks the written
 bytes, alignment padding, completion flag and untouched trailing byte.
 
 The end-to-end `w2usb` CLI suite creates a second 16 MiB backing file and
@@ -297,7 +297,7 @@ tests/
 | Integration: interactive conversion | BIN/IMG discovery and empty cache, staged selection clearing, filtering, executing a staged source index from a different filtered view, exact ISO bytes, invalid-sector failure and cleanup, existing output preservation, database registration, cache listing and clearing; accept/decline verbose results, assert compact success/failure/skip symbols and original diagnostic codes and dismiss with Enter/Esc/Ctrl+D |
 | Integration: USB UI | Injected discovery/validation using harmless device names; invalid mapping retry, confirmation resize, decline and prefill, multi-device task ordering, completed/partial/failed summaries |
 | Integration: progress | Real WriteScreen rendering at 10/50/99/100%, speed and bar glyphs, filename clipping, active/result resize, DONE/PASS/FAIL/CXL, verification bars and interrupted summary; copy result resize at verbose prompt |
-| Privileged | Linux writer on verified disposable loop device; 16 raw I/O scenarios (EINTR, short reads, aligned and unaligned short writes with bounded restart, premature EOF, EIO, ENOSPC, zero writes, final fsync EINTR retries and hard failure, close EIO during failure cleanup, active cancellation and clean retry), exact device prefix/padding and untouched tail; CLI USB argument and device validation (including multiple errors and duplicate targets); 26 real raw-writer CLI cases (14 ordinary and 12 with `--verify`): single/broadcast/paired success, invalid image, mixed batch, capacity/duplicate/mounted/busy rejection, verbose per-job status and summary, silent output, exit codes and full-device data checks; optional full Windows FAT-only and FAT32 + NTFS verified writes in direct and buffered modes on disposable partitioned loops, independent read-only remount and byte comparisons; optional private-namespace ISO mount/read/unmount and CLI success, skip, failure, mixed results, status/summary and silent mode |
+| Privileged | Raw writer on verified disposable loop device; 16 raw I/O scenarios (EINTR, short reads, aligned and unaligned short writes with bounded restart, premature EOF, EIO, ENOSPC, zero writes, final fsync EINTR retries and hard failure, close EIO during failure cleanup, active cancellation and clean retry), exact device prefix/padding and untouched tail; CLI USB argument and device validation (including multiple errors and duplicate targets); 26 real raw-writer CLI cases (14 ordinary and 12 with `--verify`): single/broadcast/paired success, invalid image, mixed batch, capacity/duplicate/mounted/busy rejection, verbose per-job status and summary, silent output, exit codes and full-device data checks; optional full Windows FAT-only and FAT32 + NTFS verified writes in direct and buffered modes on disposable partitioned loops, independent read-only remount and byte comparisons; optional private-namespace ISO mount/read/unmount and CLI success, skip, failure, mixed results, status/summary and silent mode |
 
 ## Safety and limitations
 
@@ -358,7 +358,7 @@ one chunk at a time and drains any dirty final page after truncation.
 In both modes, the final syncfs covers filesystem metadata and device-cache flushing before successful completion.
 The suite does not yet simulate all cleanup syscalls (e.g. unmount/rmdir),
 full Windows filesystem syncfs/remount fault injection, Windows end-to-end CLI or corruption/cancellation cases on real FAT32/NTFS volumes, all converters, successful physical-device flashing through either CLI or UI, every interactive operation or all possible thread
-interleavings. The unprivileged Windows copy-engine tests use regular filesystem paths; the optional privileged Windows tests exercise actual FAT32/NTFS volumes. The privileged Linux writer fixture has a synthetic
+interleavings. The unprivileged Windows copy-engine tests use regular filesystem paths; the optional privileged Windows tests exercise actual FAT32/NTFS volumes. The privileged raw writer fixture has a synthetic
 ISO signature, not a bootable image. Passing sanitizers do not prove the absence
 of all races or undefined behavior.
 

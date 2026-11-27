@@ -68,7 +68,7 @@ timeout -k 5s 120s "$binary" "$loop" || raw_rc=$?
 # A timeout or signal could leave an unfinished writer.
 [ "$raw_rc" -le 1 ] || exit "$raw_rc"
 
-# End-to-end raw Linux writer CLI tests, independent of ISO creation tools.
+# End-to-end raw ISO writer CLI tests, independent of ISO creation tools.
 # Capture the status so the existing mount suite still runs if a CLI regression fails.
 for cmd in unshare mount umount mknod cmp dd find script stty; do command -v "$cmd" >/dev/null || { echo "Missing $cmd" >&2; exit 2; }; done
 truncate -s 16M backing2.img

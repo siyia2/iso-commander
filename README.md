@@ -54,7 +54,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 - Built-in theme engine with full RGB color support
 
 🖊️ **Best-in-Class USB Write Engine**
-- Automatic ISO detection — custom write method for Windows vs. others
+- Automatic ISO detection — custom write method for Windows, raw sector copy for hybrid ISOs
 - No wimlib, no file splitting — `install.wim` routed to NTFS natively
 - Dynamic NTFS driver selection — `NTFSPLUS` is preferred for best performance
 
@@ -65,7 +65,7 @@ Mount ISOs, convert images, write bootable USB drives — done right
 | Windows < 10     | Unsupported       | ✗    | ✗    | ✗      |
 | Windows 10/11    | GPT + FAT32 + NTFS | ✗    | ✓    | ◇      |
 | Windows 10/11 PE | GPT + FAT32       | ✗    | ✓    | ◇      |
-| Linux/BSD        | Raw Sector Copy   | ✓ *  | ✓ *  | ◇      |
+| Hybrid           | Raw Sector Copy   | ✓ *  | ✓ *  | ◇      |
 
 > \* Boot compatibility depends on the source ISO\
 > ◇ Optional readback verification
