@@ -328,7 +328,7 @@ void ConfirmResizeWatcher::stop() {
  * Device path, drive name and speed are padded to the widest value across
  * rows so the bars line up. Drive names are always shown in full. The bar
  * has 5 cells and 10% steps while writing (empty ░, half ▄, full ▇)
- * and during active verification (empty space, half ⡆, full ⣶).
+ * and during active verification (empty space, half ⠆, full ⠶).
  * Both are floored from the percentage, so the bar is full only at 100%.
  * Terminal states restore the regular write bar. Failure or cancellation
  * after a completed write shows the full write bar rather than the
