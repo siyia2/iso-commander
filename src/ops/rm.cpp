@@ -150,7 +150,7 @@ void performDeleteOperation(
 
 		msg.append(colors.error_label).append("✗ ")
 		   .append(colors.error_path).append(displaySrc)
-		   .append(colors.error_label).append("  ")
+		   .append(colors.error_label).append(": ")
 		   .append("Cancelled")
 		   .append(UI::Palette::BoldReset);
 
@@ -200,7 +200,7 @@ void performDeleteOperation(
 
 		msg.append(colors.error_label).append("✗ ")
 		   .append(colors.error_path).append(displaySrc)
-		   .append(colors.error_label).append("  ")
+		   .append(colors.error_label).append(": ")
 		   .append(ec ? ec.message() : "File not found")
 		   .append(UI::Palette::BoldReset);
 

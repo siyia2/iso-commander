@@ -239,7 +239,7 @@ namespace {
 				verbosePrint(verboseSets.uniqueErrorTokenMessages,
 				             verboseSets.operationCompleted,
 				             verboseSets.operationSkipped,
-				             verboseSets.operationFailed, 3, "c2iso");
+				             verboseSets.operationFailed, 3, operation);
 
 			}
 

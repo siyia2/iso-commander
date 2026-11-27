@@ -93,7 +93,7 @@ bool performMoveOperation(
 
 			msg.append(errLabel).append("✗ ")
 			   .append(errPath).append(displaySrc)
-			   .append(errLabel).append("\n  Move completed but failed to remove source file: ")
+			   .append(errLabel).append(": Move completed but failed to remove source file: ")
 			   .append(deleteEc.message())
 			   .append(UI::Palette::BoldReset);
 

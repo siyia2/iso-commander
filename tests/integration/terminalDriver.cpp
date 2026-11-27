@@ -1172,10 +1172,10 @@ namespace isocmd_tests {
 			// Execute the staged source index while another image is visible.
 			expectStep(term, "P", inputPrompt, "COMPLETED");
 			const auto raw = rawStep(term, "y\n", continuePrompt);
-			CHECK(has(raw, "\033[1;38;2;235;120;20mc2iso\033[1;38;2;222;222;222m:"));
+			CHECK(has(raw, "\033[1;38;2;235;120;20mccd2iso\033[1;38;2;222;222;222m:"));
 			auto frame = plain(raw);
-			CHECK(has(frame, "✓ c2iso: ") && has(frame, "alpha.iso") && has(frame, "→ ISO"));
-			CHECK(!has(frame, "beta.iso") && !has(frame, "  Failed"));
+			CHECK(has(frame, "✓ ccd2iso: ") && has(frame, "alpha.iso: IMG → ISO"));
+			CHECK(!has(frame, "beta.iso") && !has(frame, ": Failed"));
 			frame = step(term, "\n", selectionPrompt);
 			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img") && !has(frame, "→ ISO"));
 			CHECK(readFile(source/"alpha.iso") == alpha);
@@ -1192,7 +1192,7 @@ namespace isocmd_tests {
 
 			expectStep(term, "3\n", inputPrompt, "FAILED");
 			const auto frame = step(term, "Y\n", continuePrompt);
-			CHECK(has(frame, "✗ c2iso: ") && has(frame, "broken.img") && has(frame, "  Failed") && !has(frame, "→ ISO"));
+			CHECK(has(frame, "✗ ccd2iso: ") && has(frame, "broken.img: Failed") && !has(frame, "→ ISO"));
 			step(term, "\x1b", selectionPrompt);
 			CHECK(!fs::exists(source/"broken.iso"));
 			CHECK(fileLines(db) == (std::vector<std::string>{(source/"alpha.iso").string(), (source/"beta.iso").string()}));
@@ -1206,8 +1206,8 @@ namespace isocmd_tests {
 			const auto progress = step(term, "1\n", inputPrompt);
 			CHECK(has(progress, "SKIPPED") && has(progress, "100% (0/1)") && !has(progress, "Skipped:"));
 			const auto frame = step(term, "y\n", continuePrompt);
-			CHECK(has(frame, "– c2iso: ") && has(frame, "alpha.img") && has(frame, "ISOalrExists"));
-			CHECK(!has(frame, "  Failed") && !has(frame, "→ ISO"));
+			CHECK(has(frame, "– ccd2iso: ") && has(frame, "alpha.img: ISOalrExists"));
+			CHECK(!has(frame, ": Failed") && !has(frame, "→ ISO"));
 			step(term, "\x04", selectionPrompt);
 			CHECK(readFile(source/"alpha.iso") == "keep existing ISO");
 

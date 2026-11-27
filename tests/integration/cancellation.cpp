@@ -47,6 +47,10 @@ namespace isocmd_tests {
 		CHECK(!performMoveOperation(ctx, {src, dst, "test", "source.iso", "test/", "dest.iso"}, 6));
 		performDeleteOperation(ctx, src, "test", "source.iso", 6);
 		CHECK(readFile(src) == "source" && readFile(dst) == "sentinel" && failed == 2 && done == 0 && !ok);
+		reporter.flush(); CHECK(errors.size() == 2 && successes.empty());
+		for (const auto& error : errors) {
+			CHECK(error.contains(": Cancelled") && !error.contains('\n'));
+		}
 		std::vector<std::string> files; std::unordered_set<std::string> scanErrors; std::mutex fm, em;
 		traverse(tmp.path, files, scanErrors, bytes, fm, em, -1, false);
 		CHECK(files.empty() && scanErrors.size() == 1);

@@ -41,7 +41,7 @@ std::int64_t monotonicNowNs() {
  * Keeps the original status and body colors, including diagnostics on continuation
  * lines. Input-validation errors without a status receive a failure symbol.
  * Formatting is deferred until display so stored messages and their ordering
- * remain unchanged.
+ * remain unchanged. All status markers are followed by a space.
  */
 std::string formatVerboseLine(std::string_view operation, std::string_view line) {
 

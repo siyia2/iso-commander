@@ -326,13 +326,13 @@ namespace {
 			msg.reserve(themes.missingLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 32);
 			msg.append(themes.errLabel).append("✗ ")
 			   .append(themes.errPath).append(file.displayPath)
-			   .append(themes.missingLabel).append("  MissingFile");
+			   .append(themes.missingLabel).append(": MissingFile");
 			removeFromCache(file.inputPath, ctx);
 		} else {
 			msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 48);
 			msg.append(themes.errLabel).append("✗ ")
 			   .append(themes.errPath).append(file.displayPath)
-			   .append(themes.errLabel).append("  NoAccess");
+			   .append(themes.errLabel).append(": NoAccess");
 		}
 		msg.append(UI::Palette::BoldReset);
 		ctx.localFailedMsgs.push_back(std::move(msg));
@@ -357,7 +357,7 @@ namespace {
 		msg.reserve(themes.skipLabel.size() * 2 + themes.skipPath.size() + file.displayPath.size() + 32);
 		msg.append(themes.skipLabel).append("– ")
 		   .append(themes.skipPath).append(file.displayPath)
-		   .append(themes.skipLabel).append("  ISOalrExists");
+		   .append(themes.skipLabel).append(": ISOalrExists");
 		msg.append(UI::Palette::BoldReset);
 		ctx.localSkippedMsgs.push_back(std::move(msg));
 		ctx.skippedTasks->fetch_add(1, std::memory_order_acq_rel);
@@ -394,7 +394,7 @@ namespace {
 		msg.reserve(themes.okLabel.size() * 2 + themes.okPath.size() + file.outputPath.size() + fileType.size() + 16);
 		msg.append(themes.okPath).append("✓ ")
 		   .append(themes.okPath).append(file.outputPath)
-		   .append(themes.okLabel).append("  ").append(fileType).append(" → ISO");
+		   .append(themes.okLabel).append(": ").append(fileType).append(" → ISO");
 		msg.append(UI::Palette::BoldReset);
 		ctx.localSuccessMsgs.push_back(std::move(msg));
 
@@ -425,7 +425,7 @@ namespace {
 		msg.reserve(themes.errLabel.size() * 2 + themes.errPath.size() + file.displayPath.size() + 24);
 		msg.append(themes.errLabel).append("✗ ")
 		   .append(themes.errPath).append(file.displayPath)
-		   .append(themes.errLabel).append("  ").append(isCancelled ? "Cancelled" : "Failed");
+		   .append(themes.errLabel).append(": ").append(isCancelled ? "Cancelled" : "Failed");
 		msg.append(UI::Palette::BoldReset);
 		ctx.localFailedMsgs.push_back(std::move(msg));
 
