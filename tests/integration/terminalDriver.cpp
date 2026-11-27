@@ -1181,7 +1181,7 @@ namespace isocmd_tests {
 
 		const bool successful=i==0 || i==3;
 		CHECK(has(frame,successful?"COMPLETED":i==1?"PARTIAL":"FAILED"));
-		CHECK(has(frame,i==2?"Successful: 0/3":"Successful: 3/3"));
+		CHECK(has(frame,i==2?"Written: 0/3":"Written: 3/3"));
 		if (i==3) CHECK(!has(frame,"Verified:"));
 		else CHECK(has(frame,i==0?"Verified: 3/3":i==1?"Verified: 2/3":"Verified: 0/3"));
 		checkWriteElapsed(frame, i);
@@ -1265,7 +1265,7 @@ namespace isocmd_tests {
 
 	static void checkInitialProgress(const std::string& frame) {
 
-		CHECK(has(frame,"▄░░░░") && has(frame,"▇▇▄░░") && has(frame,"▇▇▇▇▄"));
+		CHECK(has(frame,"▄░░░░") && has(frame,"[⣶⣶⡆  ]") && has(frame,"▇▇▇▇▄"));
 		CHECK(has(frame,"10%") && has(frame,"] 50%") && !has(frame,"CHK") && has(frame,"99%") && has(frame,"12.3 MB/s"));
 		CHECK(has(frame,"very-long-fixture-image-for-resize-testing.iso"));
 		checkSpeedSpacing(frame);
@@ -1295,11 +1295,11 @@ namespace isocmd_tests {
 				checkSpeedSpacing(frame);
 				term.send("\n"); frame=screenFrame(term,start,"INTERRUPTED");
 				checkSpeedSpacing(frame);
-				CHECK(has(frame,"Successful: 3/3 | Verified: 1/3") && has(frame,"PASS") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
+				CHECK(has(frame,"Written: 3/3 | Verified: 1/3") && has(frame,"PASS") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
 				CHECK(has(frame,"▇▇▇▇▇"));
 				CHECK(has(frame,"51.2 KB/s (avg)") && !has(frame,"100.0 MB/s (avg)"));
 				start=term.output.size(); term.resize(20,100);
-				frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Successful: 3/3 | Verified: 1/3"));
+				frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Written: 3/3 | Verified: 1/3"));
 				term.send("\n"); term.waitFor("TEST-PROGRESS-PASS",start); term.waitForExit();
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: live and final USB progress rows, glyphs, speeds, cancellation and terminal resizing\n";
