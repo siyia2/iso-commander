@@ -827,8 +827,8 @@ private:
 		bool half = (steps % 2) != 0;
 
 		std::string bar, empty;
-		for (int j = 0; j < full; ++j) bar += (verificationActive ? "⣶" : "▇");
-		if (half)                      bar += (verificationActive ? "⡆" : "▄");
+		for (int j = 0; j < full; ++j) bar += (verificationActive ? "⠶" : "▇");
+		if (half)                      bar += (verificationActive ? "⠆" : "▄");
 		for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += (verificationActive ? " " : "░");
 
 		return {std::move(bar), std::move(empty)};
@@ -867,18 +867,28 @@ private:
 		const std::string& name = rowShortNames_[i];
 		const std::string namePad(maxNameWidth_ - utf8Width(name), ' ');
 
-		// Writing uses half blocks; active verification uses Braille
-		// patterns with half-cell glyphs. Both advance in 10% steps.
+		// Writing uses half blocks; verification uses Braille patterns.
+		// Both advance in 10% steps. Successful verification retains
+		// the full Braille bar.
 		const bool failed = prog.failed.load();
 		const bool cancelled = isUsbWriteCancelled(prog.cancelToken);
+		const bool verifying = prog.verifying.load();
+
 		const bool verificationActive = phase_ == Phase::Running &&
-		    prog.verifying.load() && !speed.completed && !failed && !cancelled;
-		// Verification reuses the progress counter. On failure or cancellation
-		// after a completed write, restore the write percentage instead.
+            verifying && !speed.completed && !failed && !cancelled;
+
+		const bool verificationPassed = speed.completed && verifying;
+
+		// On failure or cancellation after a completed write,
+		// restore the full write bar.
 		const bool restoreWriteProgress = !speed.completed &&
-		    (failed || cancelled) && prog.writeCompleted.load();
-		int pct = restoreWriteProgress ? 100 : std::clamp(prog.progress.load(), 0, 100);
-		const auto [bar, empty] = buildProgressBar(pct, verificationActive);
+            (failed || cancelled) && prog.writeCompleted.load();
+
+		const int pct = (restoreWriteProgress || verificationPassed)
+            ? 100 : std::clamp(prog.progress.load(), 0, 100);
+
+		const auto [bar, empty] =
+        buildProgressBar(pct, verificationActive || verificationPassed);
 
 		std::ostringstream row;
 		row << wt_.fileCol << paddedFilename
