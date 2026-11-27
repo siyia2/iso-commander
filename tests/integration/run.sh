@@ -16,6 +16,7 @@ TERM=xterm timeout -k 5s 40s "$binary" --menu-test "$menu"
 TERM=xterm timeout -k 5s 95s "$binary" --workflow-test "$menu"
 TERM=xterm timeout -k 5s 95s "$binary" --write-ui-test
 TERM=xterm timeout -k 5s 95s "$binary" --progress-test
+TERM=xterm timeout -k 5s 45s "$binary" --shared-progress-test
 
 # Each workflow has its own HOME/database/config, even when run after another.
 workflow_status=0

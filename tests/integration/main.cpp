@@ -38,6 +38,8 @@ namespace isocmd_tests {
 	int conversionWorkflowTest(const char* binary);
 	int writeUiChild();
 	int progressScreenChild();
+	int sharedProgressChild();
+	int sharedProgressTest(const char* binary);
 	int writeUiTest(const char* binary);
 	int progressScreenTest(const char* binary);
 }
@@ -53,6 +55,7 @@ int main(int argc, char** argv) {
 			{"--editor-guards-child", lineEditorGuardsChild},
 			{"--write-ui-child", writeUiChild},
 			{"--progress-child", progressScreenChild},
+			{"--shared-progress-child", sharedProgressChild},
 		};
 		for (const auto& [option, run] : children)
 			if (argv[1] == option) return run();
@@ -62,6 +65,7 @@ int main(int argc, char** argv) {
 		{"--editor-guards-test", lineEditorGuardsTest},
 		{"--write-ui-test", writeUiTest},
 		{"--progress-test", progressScreenTest},
+		{"--shared-progress-test", sharedProgressTest},
 	};
 	const std::pair<std::string_view, int(*)(const char*)> menuTests[] = {
 		{"--menu-test", menuTest},

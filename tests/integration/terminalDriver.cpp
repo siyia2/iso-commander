@@ -1414,4 +1414,53 @@ namespace isocmd_tests {
 		} catch (const std::exception& e) { std::cerr<<"FAIL: USB progress screen: "<<e.what()<<'\n'; return 1; }
 
 	}
+
+	/// Checks that cancellation and subsequent resizes retain the last live values.
+	static void checkInterruptedProgress(TerminalSession& term, std::size_t& start, bool trackBytes) {
+
+		constexpr std::string_view progress = "] 50% (3/10)";
+		auto frame = screenFrame(term, start, progress);
+		if (trackBytes) CHECK(has(frame, "Processed: 200.00 B/1000.00 B"));
+		const auto cancelStart = start;
+		term.send("\x03");
+		frame = screenFrame(term, start, "INTERRUPTED");
+		CHECK(has(frame, progress));
+		if (trackBytes) CHECK(has(frame, "Processed: 200.00 B/1000.00 B"));
+		const auto prompt = waitForNewInput(term, start);
+		const auto output = plain(std::string_view(term.output).substr(cancelStart, prompt-cancelStart));
+		CHECK(!has(output, "100%") && !has(output, "(4/10)"));
+		start = term.output.size();
+		term.resize(24, trackBytes ? 120 : 100);
+		frame = screenFrame(term, start, "INTERRUPTED");
+		CHECK(has(frame, progress));
+		if (trackBytes) CHECK(has(frame, "Processed: 200.00 B/1000.00 B"));
+		term.send("n\n");
+
+	}
+
+	int sharedProgressTest(const char* binary) {
+
+		try {
+			TerminalSession term(binary, "--shared-progress-child", 120);
+			try {
+				std::size_t start = 0;
+				checkInterruptedProgress(term, start, false);
+				checkInterruptedProgress(term, start, true);
+				auto frame = screenFrame(term, start, "INTERRUPTED");
+				CHECK(has(frame, "] 0% (0/10)"));
+				start = waitForNewInput(term, start);
+				term.send("n\n");
+				frame = screenFrame(term, start, "COMPLETED");
+				CHECK(has(frame, "] 100% (10/10)"));
+				start = waitForNewInput(term, start);
+				term.send("n\n");
+				term.waitFor("TEST-SHARED-PROGRESS-PASS", start);
+				term.waitForExit();
+			} catch (...) { printOutput(term.output); throw; }
+			std::cout << "PASS: shared progress cancellation snapshots and final report resizing\n";
+			return 0;
+		} catch (const std::exception& e) { std::cerr << "FAIL: shared progress: " << e.what() << '\n'; return 1; }
+
+	}
+
 } // namespace isocmd_tests

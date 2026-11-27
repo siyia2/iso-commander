@@ -389,6 +389,7 @@ namespace {
 				frame += resizeHeaderText();
 			}
 
+			captureLiveCounters();
 			frame += render(false, false, false);
 
 			lastSize_ = curSize_;
@@ -430,14 +431,6 @@ namespace {
 
 		Counters readCounters() const {
 
-			if (countersFrozen_) {
-				return {
-					frozenCompletedTasks_,
-					frozenFailedTasks_,
-					frozenCompletedBytes_
-				};
-			}
-
 			return {
 				completedTasks_->load(std::memory_order_acquire),
 				failedTasks_->load(std::memory_order_acquire),
@@ -445,6 +438,18 @@ namespace {
 				    ? completedBytes_->load(std::memory_order_acquire)
 				    : 0
 			};
+
+		}
+
+		/// Retains the last visible counters once cancellation begins. Check on
+		/// both sides of the counter reads to reject updates made during cleanup.
+		void captureLiveCounters() {
+
+			if (GlobalState::g_operationCancelled.load(std::memory_order_acquire)) return;
+			const Counters next = readCounters();
+			if (!GlobalState::g_operationCancelled.load(std::memory_order_acquire)) {
+				visibleCounters_ = next;
+			}
 
 		}
 
@@ -459,31 +464,19 @@ namespace {
 
 		}
 
-		double overallProgress(
-		    const Counters& c,
-		    bool forceFull,
-		    bool cancelled) const {
+		/// Uses the same progress metric for live and interrupted reports.
+		double overallProgress(const Counters& c, bool forceFull) const {
 
-			const double tasksProgress = cancelled
-			    ? static_cast<double>(c.completed) / totalTasks_
-			    : static_cast<double>(c.completed + c.failed) / totalTasks_;
+			if (forceFull) return 1.0;
 
-			double overall = tasksProgress;
+			const double tasksProgress = totalTasks_ > 0
+			    ? (static_cast<double>(c.completed) + c.failed) / totalTasks_
+			    : 0.0;
+			const double bytesProgress = bytesTrackingEnabled_ && totalBytes_ > 0
+			    ? static_cast<double>(c.bytes) / totalBytes_
+			    : 0.0;
 
-			if (bytesTrackingEnabled_) {
-				const double bytesProgress =
-				    static_cast<double>(c.bytes) / totalBytes_;
-
-				overall = cancelled
-				    ? bytesProgress
-				    : std::max(bytesProgress, tasksProgress);
-			}
-
-			if (forceFull && !cancelled) {
-				overall = 1.0;
-			}
-
-			return overall;
+			return std::clamp(std::max(tasksProgress, bytesProgress), 0.0, 1.0);
 
 		}
 
@@ -625,8 +618,8 @@ namespace {
 		    bool useFinalLayout,
 		    bool cancelled) {
 
-			const Counters c = readCounters();
-			const double overall = overallProgress(c, forceFull, cancelled);
+			const Counters& c = visibleCounters_;
+			const double overall = overallProgress(c, forceFull);
 			const double elapsed = elapsedSeconds();
 
 			updateSpeedCache(c.bytes, elapsed);
@@ -700,32 +693,25 @@ namespace {
 			        std::chrono::high_resolution_clock::now() - startTime_
 			    ).count() / 1000.0;
 
-			frozenCompletedTasks_ =
-			    completedTasks_->load(std::memory_order_acquire);
-
-			frozenFailedTasks_ =
-			    failedTasks_->load(std::memory_order_acquire);
-
-			frozenCompletedBytes_ = bytesTrackingEnabled_
-			    ? completedBytes_->load(std::memory_order_acquire)
-			    : 0;
-
-			countersFrozen_ = true;
-
 			finalCancelled_ =
 			    GlobalState::g_operationCancelled.load(std::memory_order_acquire);
 
-			finalSnapTo100_ = (!finalCancelled_ && frozenFailedTasks_ == 0);
+			// Successful/failed batches report their actual final counters. An
+			// interrupted batch retains the last painted progress, even if workers
+			// recorded additional successes or failures while winding down.
+			if (!finalCancelled_) visibleCounters_ = readCounters();
+
+			finalSnapTo100_ = (!finalCancelled_ && visibleCounters_.failed == 0);
 
 		}
 
 		void appendStatusLabel(std::ostream& s) const {
 
-			const bool anyCompleted = frozenCompletedTasks_ > 0;
+			const bool anyCompleted = visibleCounters_.completed > 0;
 
 			if (finalCancelled_) {
 				s << pc_.warning << "INTERRUPTED";
-			} else if (frozenFailedTasks_ > 0) {
+			} else if (visibleCounters_.failed > 0) {
 				s << (anyCompleted ? pc_.warning : pc_.failure)
 				  << (anyCompleted ? "PARTIAL" : "FAILED");
 			} else {
@@ -1019,11 +1005,7 @@ namespace {
 
 		double frozenElapsedSeconds_ = -1.0;
 
-		bool countersFrozen_ = false;
-
-		std::size_t frozenCompletedTasks_ = 0;
-		std::size_t frozenFailedTasks_ = 0;
-		std::size_t frozenCompletedBytes_ = 0;
+		Counters visibleCounters_{};
 
 		bool finalCancelled_ = false;
 		bool finalSnapTo100_ = false;
@@ -1064,6 +1046,14 @@ namespace {
  * "Status:" report overwrites is preserved. The same check runs once more
  * when the operation completes, so a resize between the last frame and the
  * final report is handled.
+ *
+ * @par Cancellation
+ * The last visible task and byte counters are retained when cancellation is
+ * observed, including cancellation before the first frame (zero counters).
+ * The interrupted report uses the same progress metric as the live bar;
+ * cancellation cleanup cannot inflate or reduce its percentage. Elapsed time
+ * still includes cleanup. Actual worker results remain available in verbose
+ * output and are not changed by the renderer.
  *
  * @par Resize at the verbose prompt
  * The watcher keeps running while the "Display verbose output?" prompt waits.

@@ -64,6 +64,14 @@ resetting to application defaults. In particular, the USB mapping guard's
 intentional SIGINT-ignore and disabled-VEOF policy is asserted, not changed.
 No external dependencies or production code changes are required.
 
+### Shared progress-bar cancellation regression coverage
+
+An isolated PTY fixture sends Ctrl+C during task-only and byte-tracked
+operations, changes worker counters during cancellation cleanup, and checks
+that live, interrupted and resized reports preserve the last visible progress.
+It also covers cancellation before the first frame and normal completion.
+The fixture does not mount devices or modify files.
+
 ### Asynchronous USB cancellation regression coverage
 
 The unit and integration suites check that cancellation remains latched after
