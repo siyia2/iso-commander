@@ -1091,23 +1091,25 @@ namespace isocmd_tests {
 				CHECK(has(frame, "2 ISO imported") && has(frame, "Invalid paths omitted from search:"));
 				CHECK(has(frame, missing.string()));
 				CHECK(fileLines(db) == expected);
-				CHECK(fileLines(paths) == std::vector<std::string>{source.string()+";"+nested.string()});
+				CHECK(readFile(paths) == source.string()+";"+nested.string()+"\n");
 				CHECK(!has(readFile(paths), missing.string()));
 				// Repaint the report; must not re-import or duplicate history.
 				const auto start = term.output.size(); term.resize(20, 100);
 				const auto end = term.waitFor(terminal_sync::pause, start);
 				CHECK(has(plain(std::string_view(term.output).substr(start, end-start)), "2 ISO imported"));
 				CHECK(fileLines(db) == expected);
+				CHECK(readFile(paths) == source.string()+";"+nested.string()+"\n");
 				step(term, "\n", inputPrompt);
 				// Clearing a recalled path and moving back to the draft removes it
 				// when the next valid path search saves history.
 				expectStep(term, "\x1b[A\x15\x1b[B"+source.string()+"\n", continuePrompt, "No new ISO found");
 				CHECK(fileLines(db) == expected);
-				CHECK(fileLines(paths) == std::vector<std::string>{source.string()});
+				CHECK(readFile(paths) == source.string()+"\n");
 				step(term, "\n", inputPrompt);
 				// A nonempty edit is retained in place, independently of the new search.
 				expectStep(term, "\x1b[A\x15"+nested.string()+"\x1b[B"+source.string()+"\n", continuePrompt, "No new ISO found");
-				CHECK(fileLines(paths) == (std::vector<std::string>{nested.string(), source.string()}));
+				// History is chronological; fileLines() sorts database entries.
+				CHECK(readFile(paths) == nested.string()+"\n"+source.string()+"\n");
 				CHECK(fileLines(db) == expected);
 				step(term, "\n", inputPrompt);
 				frame = step(term, "*stats\n", returnPrompt);
