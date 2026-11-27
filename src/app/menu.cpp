@@ -375,8 +375,8 @@ void drawMainMenu() {
  *   for MainMenu, @c GlobalState::isAtISOList for IsoList); otherwise the
  *   request is discarded. The publisher-side checks are only an optimization,
  *   since they can go stale before this hook runs.
- * - **Chaining:** When a @c ListResizeWatcher is active, its hook calls this
- *   function as the previously installed hook, so both keep working.
+ * - **Resize independence:** A @c ListResizeWatcher uses a separate fast resize
+ *   hook, leaving this background refresh hook and its cadence unchanged.
  *
  * @return Always 0, per the @c editorEventHook / @c EditorHook contract.
  */

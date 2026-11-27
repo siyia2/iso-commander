@@ -11,12 +11,16 @@
 
 import isocmd.input.lineEditor;
 import isocmd.ui.display.lineEditorResize;
+import isocmd.ui.cli.termSize;
 
 namespace isocmd_tests {
 
 	namespace {
+		int backgroundChecks = 0;
+
 		int previousHook() {
 
+			++backgroundChecks;
 			return 0;
 
 		}
@@ -56,13 +60,23 @@ namespace isocmd_tests {
 			editorEventHook = previousHook;
 			const auto oldTab = editorKeySequenceHandler("\t");
 			const auto oldCatch = editorCatchSigwinch;
+			const auto oldResizeHook = editorResizeHook;
+			const int oldWakeFd = editorResizeWakeFd;
 			const auto oldRedisplay = editorRedisplayHook;
 			struct sigaction oldWinch{}, after{};
 			CHECK(sigaction(SIGWINCH, nullptr, &oldWinch) == 0);
 			int repaints = 0;
-			auto line = editLineWithResize("TEST> ", [&]{ ++repaints; std::cout << "\nTEST-REPAINT\n" << std::flush; }, true);
-			CHECK(line && std::string_view(*line) == "abXcdef"); CHECK(repaints >= 4);
+			bool eventDriven = true;
+			auto line = editLineWithResize("TEST> ", [&] {
+				eventDriven = eventDriven && editorResizeWakeFd >= 0;
+				++repaints;
+				const auto size = terminalSize();
+				std::cout << "\nTEST-REPAINT " << size.rows << ' ' << size.cols << '\n' << std::flush;
+			}, true);
+			CHECK(line && std::string_view(*line) == "abXcdef"); CHECK(repaints >= 4 && eventDriven);
 			CHECK(editorEventHook == previousHook && editorCatchSigwinch == oldCatch);
+			CHECK(editorResizeHook == oldResizeHook && backgroundChecks > 0);
+			CHECK(editorResizeWakeFd == oldWakeFd);
 			CHECK(editorRedisplayHook == oldRedisplay);
 			CHECK(editorKeySequenceHandler("\t") == oldTab);
 			CHECK(sigaction(SIGWINCH, nullptr, &after) == 0 && after.sa_handler == oldWinch.sa_handler);

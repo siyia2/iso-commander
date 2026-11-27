@@ -424,6 +424,14 @@ namespace isocmd_tests {
 					const auto repainted = terminal.waitFor("TEST-REPAINT", start);
 					waitForInputRow(terminal, terminal.waitFor("abc", repainted));
 				}
+				// A burst may coalesce intermediate sizes, but the final dimensions
+				// must be repainted without waiting for another keystroke.
+				const auto burstStart = terminal.output.size();
+				for (unsigned short cols = 55; cols <= 95; cols += 5) {
+					terminal.resize(27, cols);
+				}
+				const auto finalResize = terminal.waitFor("TEST-REPAINT 27 95", burstStart);
+				waitForInputRow(terminal, terminal.waitFor("abc", finalResize));
 				// Move the editing cursor before another character is inserted.
 				terminal.send("\x02X\x06" "def\n");
 				const auto passed = terminal.waitFor("TEST-TERMINAL-PASS");

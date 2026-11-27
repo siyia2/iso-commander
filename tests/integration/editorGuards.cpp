@@ -329,18 +329,27 @@ namespace isocmd_tests {
 		void watcherUnwinding() {
 
 			editorEventHook = sentinelHook;
+			const auto oldResizeHook = editorResizeHook;
+			const int oldWakeFd = editorResizeWakeFd;
+			const auto sentinelResize = +[] {};
+			editorResizeHook = sentinelResize;
 			const TerminalSnapshot before;
 			for (int path = 0; path < 3; ++path) {
 				auto run = [&] {
 					ListResizeWatcher watcher([] {});
-					CHECK(editorEventHook != sentinelHook && editorEventHook != nullptr);
+					CHECK(editorEventHook == sentinelHook);
+					CHECK(editorResizeHook != sentinelResize && editorResizeHook != nullptr);
+					CHECK(editorResizeWakeFd >= 0);
 					CHECK(TerminalSnapshot{}.resize.sa_flags & SA_SIGINFO);
 					if (path == 1) return;
 					leave(path);
 				};
 				try { run(); CHECK(path != 2); } catch (const Unwind&) { CHECK(path == 2); }
-				CHECK(editorEventHook == sentinelHook); sameTerminal(before, TerminalSnapshot{});
+				CHECK(editorEventHook == sentinelHook && editorResizeHook == sentinelResize);
+				CHECK(editorResizeWakeFd == oldWakeFd);
+				sameTerminal(before, TerminalSnapshot{});
 			}
+			editorResizeHook = oldResizeHook;
 
 		}
 
@@ -349,7 +358,7 @@ namespace isocmd_tests {
 		int observeCancellation() {
 
 			cancellationStateObserved = editorCompletionHook == nullptr &&
-			    editorCatchSigwinch == 0 && editorEventHook != sentinelHook &&
+			    editorCatchSigwinch == 0 && editorEventHook == sentinelHook && editorResizeHook != nullptr &&
 			    editorRedisplayHook != editorRedisplay &&
 			    editorKeySequenceHandler("\t") != sentinelKey;
 			return 0;
@@ -366,6 +375,8 @@ namespace isocmd_tests {
 			cancellationStateObserved = false;
 			editorRedisplayHook = editorRedisplay;
 			const auto catchWinch = editorCatchSigwinch;
+			const auto oldResizeHook = editorResizeHook;
+			const int oldWakeFd = editorResizeWakeFd;
 			const TerminalSnapshot before;
 			auto line = editLineWithResize(eof ? "RAII-EOF> " : "RAII-ESC> ", [] {}, true);
 			if (eof) { CHECK(!line); }
@@ -375,7 +386,8 @@ namespace isocmd_tests {
 			CHECK(cancellationStateObserved);
 			CHECK(editorCompletionDisplayHook == sentinelDisplay && editorStartupHook == observeCancellation);
 			CHECK(editorEventHook == sentinelHook && editorRedisplayHook == editorRedisplay);
-			CHECK(editorCatchSigwinch == catchWinch);
+			CHECK(editorCatchSigwinch == catchWinch && editorResizeHook == oldResizeHook);
+			CHECK(editorResizeWakeFd == oldWakeFd);
 			sameTerminal(before, TerminalSnapshot{});
 			editorStartupHook = nullptr;
 

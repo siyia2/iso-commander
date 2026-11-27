@@ -16,14 +16,14 @@ export extern "C++" {
  *
  * While it exists:
  * - a @c SIGWINCH handler is installed;
- * - an @c editorEventHook checks for terminal-size changes;
+ * - a nonblocking wake pipe notifies @c editorResizeHook of terminal-size changes;
  * - the line editor's screen dimensions are updated;
  * - the repaint callback redraws the screen;
  * - the line editor restores the prompt and any half-typed input.
  *
  * All terminal and line editor access stays on the calling thread.
  *
- * @note Only one watcher may be active at a time: the event hook and
+ * @note Only one watcher may be active at a time: the resize hook and
  *       the @c SIGWINCH handler are process-global.
  *
  * @see editLineWithResize
@@ -33,11 +33,11 @@ public:
 	/// Redraws the screen (see the callback contract above).
 	using Repaint = std::function<void()>;
 
-	/// Implementation detail; public only so the event-hook trampoline can name it.
+	/// Implementation detail; public only so the resize-hook trampoline can name it.
 	struct Impl;
 
 	/**
-	 * @brief Installs the @c SIGWINCH handler and the chained event hook.
+	 * @brief Installs the @c SIGWINCH handler and the resize hook.
 	 * @param repaint Repaint callback.
 	 */
 	explicit ListResizeWatcher(Repaint repaint);
@@ -49,7 +49,7 @@ public:
 	ListResizeWatcher& operator=(const ListResizeWatcher&) = delete;
 
 	/**
-	 * @brief Restores the previous SIGWINCH handler and event hook.
+	 * @brief Restores the previous SIGWINCH handler, resize hook and wake descriptor.
 	 *
 	 * Safe to call more than once.
 	 */

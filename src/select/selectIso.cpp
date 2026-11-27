@@ -280,7 +280,7 @@ namespace {
 			/**
 			 * @brief Repaints the list on terminal resize while the prompt waits.
 			 *
-			 * Runs on the line editor thread (@c editorEventHook) and uses the same
+			 * Runs on the line editor thread (@c editorResizeHook) and uses the same
 			 * display step as the main loop. Saves and restores
 			 * @c umountMvRmBreak so the resize repaint cannot clobber loop state.
 			 */

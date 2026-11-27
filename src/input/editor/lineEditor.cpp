@@ -53,6 +53,8 @@ int editorCompletionAppendCharacter = ' ', editorCompletionHandled = 0;
 const char* editorWordBreakCharacters = ";";
 FILE* editorOutputStream = stdout;
 EditorHook *editorEventHook = nullptr, *editorStartupHook = nullptr;
+EditorRedisplay* editorResizeHook = nullptr;
+int editorResizeWakeFd = -1;
 EditorRedisplay* editorRedisplayHook = editorRedisplay;
 EditorCompletion* editorCompletionHook = nullptr;
 EditorCompletionDisplay* editorCompletionDisplayHook = nullptr;
@@ -62,6 +64,8 @@ EditorCommand* editorLastCommand = nullptr;
 namespace native_editor {
 
 	using namespace std::chrono;
+	constexpr auto eventInterval = milliseconds(100);
+	constexpr auto resizeFallbackInterval = milliseconds(16);
 	std::vector<std::string> history;
 	std::array<EditorCommand*, 256> byteKeys{};
 	// Only multibyte terminal sequences need a lookup table.
@@ -78,6 +82,7 @@ namespace native_editor {
 		bool markActive = false, eof = false, firstDraw = true;
 		int draftPoint = 0;
 		steady_clock::time_point nextHook = steady_clock::now();
+		steady_clock::time_point nextResize = nextHook;
 	};
 	Session* current = nullptr;
 	// UI-thread-only typeahead, retained across prompt boundaries.
@@ -513,29 +518,55 @@ namespace native_editor {
 	}
 
 	/**
-	 * @brief Runs periodic event and terminal-size checks.
+	 * @brief Checks the terminal size when no dedicated resize watcher owns repainting.
+	 */
+	void checkTerminalSize() {
+
+		if (!editorCatchSigwinch || (editorInputReader && editorInputReader != editorReadByte)) return;
+		winsize size{};
+		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_row && size.ws_col &&
+		    (current->size.ws_row != size.ws_row || current->size.ws_col != size.ws_col)) {
+			current->size = size;
+			redraw();
+		}
+
+	}
+
+	/**
+	 * @brief Services resize and background events on independent deadlines.
 	 *
-	 * Throttles checks to 100 ms and redraws on a valid size change when using the default input
-	 * reader.
+	 * The resize hook normally runs on notification from the wake pipe.
+	 * A timer is retained only when a wake descriptor is unavailable.
+	 * Ordinary prompts retain the slower fallback size check.
 	 */
 	void idle() {
 
 		const auto now = steady_clock::now();
-		if (now >= current->nextHook) {
-			current->nextHook = now + milliseconds(100);
+		if (editorResizeHook && editorResizeWakeFd < 0 && now >= current->nextResize) {
+			current->nextResize = now + resizeFallbackInterval;
+			editorResizeHook();
+		}
+		if (!editorDone && now >= current->nextHook) {
+			current->nextHook = now + eventInterval;
 			if (editorEventHook) editorEventHook();
-			if (!editorDone && editorCatchSigwinch && (!editorInputReader || editorInputReader == editorReadByte)) {
-				winsize nowSize{};
-				if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &nowSize) == 0 && nowSize.ws_row && nowSize.ws_col &&
-				    (current->size.ws_row != nowSize.ws_row || current->size.ws_col != nowSize.ws_col)) {
-					current->size = nowSize;
-					redraw();
-				}
-			}
+			if (!editorDone && !editorResizeHook) checkTerminalSize();
 		}
 
 	}
+
 	constexpr int timeout = -2;
+
+	/**
+	 * @brief Computes the remaining wait until an absolute deadline.
+	 * @param deadline Absolute deadline for the next event or byte.
+	 * @return Remaining milliseconds, rounded up to avoid premature wakeups.
+	 */
+	int remainingWait(steady_clock::time_point deadline) {
+
+		return static_cast<int>(std::max(milliseconds::zero(),
+		    ceil<milliseconds>(deadline - steady_clock::now())).count());
+
+	}
 
 	/**
 	 * @brief Computes the polling interval for a timed or idle-aware read.
@@ -545,9 +576,14 @@ namespace native_editor {
 	 */
 	int pollInterval(int wait, steady_clock::time_point deadline) {
 
-		if (wait < 0) return (editorEventHook || editorCatchSigwinch) ? 100 : -1;
-		return static_cast<int>(std::max(0LL, static_cast<long long>(
-		    duration_cast<milliseconds>(deadline - steady_clock::now()).count())));
+		if (wait >= 0) {
+			return static_cast<int>(std::max(0LL, static_cast<long long>(
+			    duration_cast<milliseconds>(deadline - steady_clock::now()).count())));
+		}
+		const bool periodic = editorEventHook || (!editorResizeHook && editorCatchSigwinch);
+		if (!editorResizeHook || editorResizeWakeFd >= 0)
+			return periodic ? remainingWait(current->nextHook) : -1;
+		return remainingWait(periodic ? std::min(current->nextResize, current->nextHook) : current->nextResize);
 
 	}
 
@@ -555,6 +591,52 @@ namespace native_editor {
 	EditorInputReader* inputReader() {
 
 		return editorInputReader ? editorInputReader : editorReadByte;
+
+	}
+
+	/**
+	 * @brief Consumes a batch of resize notifications and invokes the resize hook.
+	 * @param fd Borrowed nonblocking descriptor reported readable by poll().
+	 */
+	void serviceResize(int fd) {
+
+		char notifications[256];
+		ssize_t n;
+		do {
+			n = ::read(fd, notifications, sizeof notifications);
+		} while (n < 0 && errno == EINTR);
+		if (n > 0 && editorResizeHook) editorResizeHook();
+		else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) editorResizeWakeFd = -1;
+
+	}
+
+	/**
+	 * @brief Waits for keyboard input or a resize notification.
+	 *
+	 * Timed reads finish decoding a key before repainting. When both sources
+	 * are ready, handle the resize first, then return keyboard readiness.
+	 * @param wait Requested byte timeout, negative for an ordinary wait.
+	 * @param deadline Absolute deadline for timed reads.
+	 * @return Positive for stdin readiness, zero for other events, or -1 on error.
+	 */
+	int pollInput(int wait, steady_clock::time_point deadline) {
+
+		pollfd fds[] = {
+			{STDIN_FILENO, POLLIN, 0},
+			{wait < 0 && editorResizeHook ? editorResizeWakeFd : -1, POLLIN, 0}
+		};
+		const int ready = poll(fds, 2, pollInterval(wait, deadline));
+		if (ready <= 0) return ready;
+		if (fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) editorResizeWakeFd = -1;
+		if (fds[1].revents & POLLIN) {
+			serviceResize(fds[1].fd);
+			// A repaint can collect typeahead through a cursor-position query.
+			// Recheck stdin rather than trusting readiness from before the hook.
+			if (!queued.empty() || editorDone) return 0;
+			fds[0].revents = 0;
+			return poll(fds, 1, 0);
+		}
+		return fds[0].revents != 0 ? 1 : 0;
 
 	}
 
@@ -574,8 +656,8 @@ namespace native_editor {
 			if (pending >= 0) return pending;
 			if (wait < 0 && inputReader() != editorReadByte)
 			    return inputReader()(stdin);
-			pollfd fd{STDIN_FILENO, POLLIN, 0};
-			const int ready = poll(&fd, 1, pollInterval(wait, deadline));
+			const int ready = pollInput(wait, deadline);
+			if (editorDone) return EOF;
 			if (ready > 0) return inputReader()(stdin);
 			if (ready == 0 && wait >= 0) return timeout;
 			if (ready < 0 && errno != EINTR) return EOF;

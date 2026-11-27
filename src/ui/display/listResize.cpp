@@ -4,6 +4,8 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 #include <wchar.h>
@@ -264,9 +266,9 @@ void redisplayPrompt() {
  * @brief Wraps @c editLine() with an optional @ref ListResizeWatcher and
  *        temporary Tab-completion control.
  *
- * Runs @p repaint (on the calling thread, from the line editor's idle hook) whenever
+ * Runs @p repaint (on the calling thread, from the line editor's resize hook) whenever
  * the terminal size changes while the prompt waits. The watcher is stopped
- * and the previous @c editorEventHook restored before this returns.
+ * and the previous @c editorResizeHook restored before this returns.
  *
  * The native editor's fallback terminal-size polling (@c editorCatchSigwinch)
  * is disabled for the watcher's lifetime to avoid duplicate prompt redraws.
@@ -293,7 +295,7 @@ void redisplayPrompt() {
  * @param disableTabCompletion Set to true to temporarily disable Tab completion;
  *                             defaults to false.
  *
- * @return The line read (freed by the returned pointer), or null on EOF
+ * @return The submitted line, or no value on EOF
  *         (Ctrl+D).
  */
 EditorLine editLineWithResize(
@@ -377,19 +379,20 @@ EditorLine editLineWithResize(
 /**
  * @brief State for the SIGWINCH-driven resize watcher.
  *
- * The signal handler only sets an async-signal-safe flag (and forwards to the
- * previously installed handler, if one was installed). Terminal output and
- * Line editor operations happen in @ref tick on the main thread, from the line editor's
- * event hook, where the line editor's line-buffer and cursor state are safe to touch.
+ * The signal handler sets a lock-free flag, wakes the editor through a
+ * nonblocking pipe, and forwards to the previous handler if installed.
+ * Terminal output and editor operations happen in @ref tick on the UI thread,
+ * where the editor buffer and cursor state are safe to touch.
  */
 struct ListResizeWatcher::Impl {
 	explicit Impl(Repaint r) : repaint(std::move(r)), last(terminalSize()) {}
 
 	Repaint           repaint;
 	TermSize          last;                     // last dimensions we repainted for (main thread only)
-	EditorHook* prevHook = nullptr;     // hook installed before ours (chained)
+	EditorRedisplay* prevHook = nullptr;         // resize hook installed before ours
+	int               prevWakeFd = -1;           // previous borrowed wake descriptor
 
-	/// Runs from the line editor's event hook on the main thread. Repaints the list
+	/// Runs from the line editor's resize hook on the main thread. Repaints the list
 	/// after a resize, updates the line editor's screen dimensions, and restores the prompt.
 	void tick();
 };
@@ -398,18 +401,54 @@ namespace {
 
 	/// Atomically set from the signal handler, cleared on the main thread.
 	std::atomic<bool> g_winch{false};
+	static_assert(std::atomic<bool>::is_always_lock_free && std::atomic<int>::is_always_lock_free);
+
+	// Keep the pipe for the process lifetime: a signal handler already running
+	// on another thread must never write to a closed or recycled descriptor.
+	// CLOEXEC prevents inheritance by executed programs. No per-prompt FDs.
+	int g_resizeReadFd = -1;
+	std::atomic<int> g_resizeWriteFd{-1};
+
+	/// Creates the shared nonblocking notification pipe on first use.
+	void ensureResizePipe() {
+
+		if (g_resizeReadFd >= 0) return;
+		int fds[2];
+		if (pipe2(fds, O_NONBLOCK | O_CLOEXEC) != 0) return;
+		g_resizeReadFd = fds[0];
+		g_resizeWriteFd.store(fds[1], std::memory_order_release);
+
+	}
+
+	/// Marks a resize pending and wakes the editor (safe from a signal handler).
+	void notifyResize() noexcept {
+
+		const int savedErrno = errno;
+		g_winch.store(true, std::memory_order_relaxed);
+		const int fd = g_resizeWriteFd.load(std::memory_order_acquire);
+		if (fd >= 0) {
+			const char byte = 1;
+			ssize_t result;
+			do {
+				result = ::write(fd, &byte, 1);
+			} while (result < 0 && errno == EINTR);
+			// EAGAIN means the pipe is already readable; no wakeup is lost.
+		}
+		errno = savedErrno;
+
+	}
 
 	/// Handler installed before ours; preserve its behavior while watching resizes.
 	struct sigaction g_prevWinch {};
 	bool             g_winchInstalled = false;
 
-	/// Active watcher used by the line editor event hook. Accessed only on the
+	/// Active watcher used by the line editor resize hook. Accessed only on the
 	/// thread running line editor; set during construction and cleared by stop().
 	ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
 
 	extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
 
-		g_winch.store(true, std::memory_order_relaxed);
+		notifyResize();
 		if (g_prevWinch.sa_handler == SIG_DFL || g_prevWinch.sa_handler == SIG_IGN) return;
 		if (g_prevWinch.sa_flags & SA_SIGINFO) {
 			if (g_prevWinch.sa_sigaction) g_prevWinch.sa_sigaction(sig, info, ctx);
@@ -419,14 +458,10 @@ namespace {
 
 	}
 
-	/// Handles pending resize repainting, then invokes the hook that was installed
-	/// before this watcher so other line editor event processing remains active.
-	int listResizeHook() {
+	/// Handles pending resize repainting independently of background refreshes.
+	void listResizeHook() {
 
-		ListResizeWatcher::Impl* w = g_activeListWatcher;
-		if (!w) return 0;
-		w->tick();
-		return w->prevHook ? w->prevHook() : 0;
+		if (g_activeListWatcher) g_activeListWatcher->tick();
 
 	}
 
@@ -437,7 +472,8 @@ void ListResizeWatcher::Impl::tick() {
 	// Atomically check if true and reset to false in a single instruction.
 	// If a signal arrives during processing, exchange() will leave/set it to true
 	// so a subsequent tick catches it.
-	if (!g_winch.exchange(false, std::memory_order_relaxed)) return;
+	const bool pending = g_winch.exchange(false, std::memory_order_relaxed);
+	if (g_winchInstalled && !pending) return;
 
 	const TermSize sz = terminalSize();
 	if (sz.cols == 0 || sz.rows == 0) return;
@@ -463,19 +499,23 @@ void ListResizeWatcher::Impl::tick() {
 ListResizeWatcher::ListResizeWatcher(Repaint repaint)
     : impl_(std::make_unique<Impl>(std::move(repaint))) {
 
-	// Only one watcher may be active at a time: hook and signal state are process-global.
+	// Only one watcher may be active at a time: resize hook and signal state are process-global.
 	assert(g_activeListWatcher == nullptr && "only one ListResizeWatcher may be active");
 
-	impl_->prevHook = editorEventHook;
-	if (impl_->prevHook == listResizeHook) impl_->prevHook = nullptr;   // never chain to ourselves
+	impl_->prevHook = editorResizeHook;
+	impl_->prevWakeFd = editorResizeWakeFd;
+	ensureResizePipe();
 	g_activeListWatcher = impl_.get();
-	editorEventHook = listResizeHook;
+	editorResizeHook = listResizeHook;
 
 	struct sigaction sa {};
 	sa.sa_sigaction = onWinch;
 	sa.sa_flags = SA_SIGINFO | SA_RESTART;
 	sigemptyset(&sa.sa_mask);
 	g_winchInstalled = (sigaction(SIGWINCH, &sa, &g_prevWinch) == 0);
+	// Catch a size change between the initial size query and handler installation.
+	editorResizeWakeFd = g_winchInstalled ? g_resizeReadFd : -1;
+	notifyResize();
 
 }
 
@@ -496,6 +536,9 @@ void ListResizeWatcher::stop() {
 
 	g_activeListWatcher = nullptr;
 	// Only undo our own installation; leave it alone if someone replaced the hook since.
-	if (editorEventHook == listResizeHook) editorEventHook = impl_->prevHook;
+	if (editorResizeHook == listResizeHook) {
+		editorResizeHook = impl_->prevHook;
+		editorResizeWakeFd = impl_->prevWakeFd;
+	}
 
 }

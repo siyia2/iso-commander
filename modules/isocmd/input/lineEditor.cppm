@@ -51,6 +51,10 @@ export extern "C++" {
 
 	// Editor hooks and command tracking
 	extern EditorHook *editorEventHook, *editorStartupHook;
+	/// Optional resize callback, invoked on the editor thread.
+	extern EditorRedisplay* editorResizeHook;
+	/// Borrowed nonblocking resize notification pipe; -1 selects timer fallback.
+	extern int editorResizeWakeFd;
 	extern EditorRedisplay* editorRedisplayHook;
 	extern EditorCompletion* editorCompletionHook;
 	extern EditorCompletionDisplay* editorCompletionDisplayHook;

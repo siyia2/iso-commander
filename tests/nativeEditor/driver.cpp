@@ -20,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <poll.h>
+#include <fcntl.h>
 #include <pty.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -36,8 +37,39 @@ namespace {
 
 	}
 	using Line = std::optional<std::string>;
-	int ticks = 0, listings = 0;
+	int ticks = 0, listings = 0, resizeTicks = 0;
+	volatile sig_atomic_t resizeWriteFd = -1;
+	int eventResizeTicks = 0;
+
+	/// Writes a notification from the signal handler, just like the list watcher.
+	void notifyResize(int) {
+
+		const int saved = errno;
+		const char byte = 1;
+		const ssize_t result = write(resizeWriteFd, &byte, 1);
+		(void)result;
+		errno = saved;
+
+	}
+
+	/// Records a signal-driven resize on the editor thread.
+	void eventResizeHook() {
+
+		++eventResizeTicks;
+		std::puts("EVENT-RESIZE-HOOK");
+		std::fflush(stdout);
+
+	}
 	int hook() { if (++ticks == 2) { std::fputs("IDLE-HOOK\n", stdout); std::fflush(stdout); } return 0; }
+	/// Signals that the independent resize callback is running without input.
+	void resizeHook() {
+
+		if (++resizeTicks == 3) {
+			std::fputs("RESIZE-HOOK\n", stdout);
+			std::fflush(stdout);
+		}
+
+	}
 	int prefill() { editorInsertText("prefill"); editorStartupHook = nullptr; return 0; }
 	int throwHook() { throw std::runtime_error("intentional unwind"); }
 	int hotkey(int, int) { editorReplaceLine("page-command"); return editorSubmit(1, '\n'); }
@@ -104,6 +136,33 @@ namespace {
 			editorSetEscapeTimeout(10);
 			readExpected("EDIT> ", "abXcdef", before);
 			editorEventHook = nullptr;
+			// With no background hook or fallback polling, the resize hook must
+			// still wake the editor while stdin remains idle.
+			const int savedCatch = editorCatchSigwinch;
+			editorCatchSigwinch = 0;
+			editorResizeHook = resizeHook;
+			readExpected("RESIZE> ", "kept", before);
+			check(resizeTicks >= 3, "independent resize hook");
+			editorResizeHook = nullptr;
+			int wake[2];
+			check(pipe2(wake, O_NONBLOCK | O_CLOEXEC) == 0, "resize pipe");
+			resizeWriteFd = wake[1];
+			struct sigaction action{}, previous{};
+			action.sa_handler = notifyResize;
+			sigemptyset(&action.sa_mask);
+			action.sa_flags = SA_RESTART;
+			check(sigaction(SIGWINCH, &action, &previous) == 0, "resize signal installation");
+			editorResizeHook = eventResizeHook;
+			editorResizeWakeFd = wake[0];
+			readExpected("EVENT-RESIZE> ", "abXc", before);
+			check(eventResizeTicks == 1, "resize hook runs only when notified");
+			check(sigaction(SIGWINCH, &previous, nullptr) == 0, "resize signal restoration");
+			editorResizeHook = nullptr;
+			editorResizeWakeFd = -1;
+			resizeWriteFd = -1;
+			close(wake[0]);
+			close(wake[1]);
+			editorCatchSigwinch = savedCatch;
 			readExpected("UTF8> ", "aΩz", before);
 			readExpected("EMPTY> ", "", before);
 			editorBindKey('X', hotkey);
@@ -219,6 +278,17 @@ int main() {
 		p.wait("EDIT> ");
 		p.wait("IDLE-HOOK");
 		p.send("abc\002X\006def\n");
+		p.wait("RESIZE> ");
+		p.wait("RESIZE-HOOK");
+		p.send("kept\n");
+		p.step("EVENT-RESIZE> ", "abc\002");
+		p.wait("abc");
+		// Leave the prompt idle long enough to expose accidental periodic hooks.
+		poll(nullptr, 0, 150);
+		check(kill(p.pid, SIGWINCH) == 0, "signal resize");
+		p.wait("EVENT-RESIZE-HOOK");
+		poll(nullptr, 0, 150);
+		p.send("X\n");
 		p.step("UTF8> ", "aéΩz\002\002\177\n");
 		p.step("EMPTY> ", "\n");
 		p.step("BYTE-HOTKEY> ", "X");
@@ -252,7 +322,7 @@ int main() {
 		check(waitpid(p.pid, &status, 0) == p.pid, "waitpid");
 		p.pid = -1;
 		check(WIFEXITED(status) && WEXITSTATUS(status) == 0, "child result");
-		std::cout << "PASS: native editor PTY editing, UTF-8, selection, paste, history, completion, CPR typeahead, callbacks, EOF and terminal restoration\n";
+		std::cout << "PASS: native editor PTY editing, UTF-8, selection, paste, history, completion, CPR typeahead, event-driven resize, callbacks, EOF and terminal restoration\n";
 		return 0;
 	} catch (const std::exception& e) { std::cerr << e.what() << "\n" << p.output.substr(p.output.size() > 2000 ? p.output.size() - 2000:0) << '\n';
 	return 1;

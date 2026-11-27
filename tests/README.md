@@ -287,7 +287,7 @@ tests/
 | Integration: background import | History parsing, nested discovery, duplicate suppression, completion and worker accounting, stopped import, restart and missing history |
 | Native editor: PTY | UTF-8 editing, selection, paste, history, completion, keybindings, hooks, cursor reports, EOF and terminal restoration in C and C.UTF-8 locales |
 | Integration: editor guards | Exact handler and hook restoration, scope unwinding, signal and terminal state, settings and USB mapping guard policies |
-| Integration: PTY | Four terminal resizes during typed input, repaint, preservation of input and line-editor/signal state restoration |
+| Integration: PTY | Terminal resizes and a rapid resize burst during typed input, independent resize/background hooks, repaint, input preservation and line-editor/signal state restoration |
 | Integration: menus | Real application main menu, invalid choice, resize with typed input, ManageISO, Convert2ISO and image search, ImportISO, Settings, Esc/EOF return and normal exit |
 | Integration: interactive workflows | Real PageUp/PageDown and page jumps, live filter scroll, query replacement, resize, no-match retry, cancellation, staged copy, rejected/confirmed delete and move with filesystem checks; compact status-symbol copy, delete and move reports, resize repaint, Enter/Esc/Ctrl+D dismissal and no stale report text |
 | Integration: interactive settings | Real settings editor help, multi-setting PageUp/PageDown and direct jump, invalid numeric value, typed input through resize, persisted update across process restart, skip, Escape and declined/confirmed reset |
