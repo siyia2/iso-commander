@@ -38,18 +38,18 @@ namespace UI {
 		inline constexpr std::string_view BGNavy   = "\033[1;37;48;2;20;20;150m";
 		inline constexpr std::string_view idxGreen    = "\033[1;38;2;120;220;160m";
 
-		inline constexpr std::string_view RL_Blue   = "\001\033[1;38;2;0;115;215m\002";
-		inline constexpr std::string_view RL_Green  = "\001\033[1;38;2;90;215;35m\002";
-		inline constexpr std::string_view RL_Red    = "\001\033[1;38;2;235;40;40m\002";
-		inline constexpr std::string_view RL_Yellow = "\001\033[1;38;2;212;184;0m\002";
-		inline constexpr std::string_view RL_idxGreen = "\001\033[1;38;2;120;220;160m\002";
+		inline constexpr std::string_view PromptBlue   = "\001\033[1;38;2;0;115;215m\002";
+		inline constexpr std::string_view PromptGreen  = "\001\033[1;38;2;90;215;35m\002";
+		inline constexpr std::string_view PromptRed    = "\001\033[1;38;2;235;40;40m\002";
+		inline constexpr std::string_view PromptYellow = "\001\033[1;38;2;212;184;0m\002";
+		inline constexpr std::string_view PromptIndexGreen = "\001\033[1;38;2;120;220;160m\002";
 
 		// --- Dynamic Colors ---
 		extern std::string defaultColor;
 		extern std::string BoldReset;
-		extern std::string RL_BoldAlt;
+		extern std::string PromptBoldAlt;
 
-		/// Updates BoldReset and RL_BoldAlt based on the current 'defaultColor' string.
+		/// Updates BoldReset and PromptBoldAlt based on the current 'defaultColor' string.
 		void updateDefaultColors();
 	}
 
@@ -60,7 +60,7 @@ namespace UI {
 	};
 
 	struct WriteTheme { std::string errLabel, errPath, warnLabel, infoLabel, bold, headerCol, indexCol, pathCol, fileCol, sizeCol, warnCol,
-		colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, rl_labelCol, rl_primaryCol, rl_highlightCol, rl_errorCol, rl_resetCol;
+		colorSuccess, colorFailure, colorWarning, colorStatus, speedCol, deviceCol, editorLabelCol, editorPrimaryCol, editorHighlightCol, editorErrorCol, editorResetCol;
 	};
 
 	struct CpMvRmColors { std::string_view arrow, dir, iso, error_label, error_path, success_label, success_path, dest_path, abort, prompt_green, prompt_blue;
@@ -72,13 +72,13 @@ namespace UI {
 	struct VerboseAndDatabaseTheme { std::string red, yellow, green, purple, magenta, blue, orange, bold, reset;
 	};
 
-	struct ReadlineAndPromptTheme { std::string primary, filter, highlight, reset, iso, accent;
+	struct LineEditorAndPromptTheme { std::string primary, filter, highlight, reset, iso, accent;
 	};
 
 	struct SemanticUIColors { std::string_view label, accent, warning, error, reset, path, highlight, data, str;
 	};
 
-	struct ReadlineColors {
+	struct LineEditorColors {
 		const char* label, *hint, *dir, *file, *reset;
 		const char* warning, *accent;
 	};
@@ -91,11 +91,11 @@ using MainTheme      		  = UI::MainTheme;
 using PrintListTheme 		  = UI::PrintListTheme;
 using WriteTheme     		  = UI::WriteTheme;
 using VerboseAndDatabaseTheme = UI::VerboseAndDatabaseTheme;
-using ReadlineAndPromptTheme  = UI::ReadlineAndPromptTheme;
+using LineEditorAndPromptTheme  = UI::LineEditorAndPromptTheme;
 using CpMvRmColors            = UI::CpMvRmColors;
 using ConversionThemeStrings  = UI::ConversionThemeStrings;
 using SemanticUIColors        = UI::SemanticUIColors;
-using ReadlineColors          = UI::ReadlineColors;
+using LineEditorColors          = UI::LineEditorColors;
 using ProgressBarColors       = UI::ProgressBarColors;
 
 // --- GLOBAL STATE ---
@@ -112,7 +112,7 @@ WriteTheme getWriteTheme();
 PrintListTheme getListColors();
 CpMvRmColors getCpMvRmColors();
 ConversionThemeStrings getConversionThemeStrings();
-ReadlineColors resolveReadlineTheme();
+LineEditorColors resolveLineEditorTheme();
 ProgressBarColors resolveProgressTheme();
 
 SemanticUIColors resolveOptionsTheme();
@@ -122,8 +122,8 @@ SemanticUIColors resolveDatabaseTheme();
 VerboseAndDatabaseTheme getVerboseTheme();
 VerboseAndDatabaseTheme getDatabaseTheme();
 
-ReadlineAndPromptTheme getPromptTheme();
-ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso);
+LineEditorAndPromptTheme getPromptTheme();
+LineEditorAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso);
 
 /// Resolves the current theme structure based on the globalTheme string.
 const UI::MainTheme* getActiveTheme();

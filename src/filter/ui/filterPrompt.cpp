@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.lists;
 import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.filter.filter;
 import isocmd.input.history;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.select.select;
 import isocmd.ui.display.display;
 import isocmd.ui.display.printList;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.display.stringListView;
 import isocmd.ui.display.themes;
 
@@ -29,7 +28,7 @@ namespace AnsiEscape {
 
 // ─── Prompt-row Convention ───────────────────────────────────────────────────
 //
-// Every prompt in this file is a SINGLE line (no leading "\n"), so readline's
+// Every prompt in this file is a SINGLE line (no leading "\n"), so line editor's
 // own cursor bookkeeping never has to cope with a multi-line prompt.
 //
 // The filter prompt REPLACES the select prompt in place: it is drawn on the
@@ -37,7 +36,7 @@ namespace AnsiEscape {
 //
 //  - Entry: the caller's prompt was submitted (Enter or a hotkey, which now
 //    both echo a newline), so the cursor is one row below the prompt row.
-//    runFilterLoop rewinds onto that row once, then calls readline.
+//    runFilterLoop rewinds onto that row once, then calls line editor.
 //  - Every exit (success, Esc, Ctrl+D) leaves the cursor one row below the
 //    filter prompt row, so the caller needs no fix-up and rewinds once.
 //  - A failed commit rewinds onto the prompt row and prompts again.
@@ -48,7 +47,7 @@ namespace AnsiEscape {
 // ─── History Helpers ─────────────────────────────────────────────────────────
 
 /**
- * @brief Saves a search query to readline history.
+ * @brief Saves a search query to line editor history.
  *
  * Sets @p filterHistory to true, optionally loads history first, appends the
  * query, persists it, and clears the in-memory history list.
@@ -67,9 +66,9 @@ static void saveQueryToHistory(
 	if (!alreadyLoaded)
 	    loadHistory(filterHistory);
 
-	add_history(query.c_str());
+	editorAddHistory(query);
 	saveHistory(filterHistory);
-	clear_history();
+	editorClearHistory();
 
 }
 
@@ -87,7 +86,7 @@ static void saveQueryToHistory(
  *   2. Full printList() render when @c ctx has a listType and the pending
  *      selection wiring (pendingIndices / hasPendingProcess / state) is set;
  *      renders @p previewSource with showPendingIndices=true and clearFirst.
- *   3. @c ctx.repaintList callback, if provided. The Readline line buffer and
+ *   3. @c ctx.repaintList callback, if provided. The line-editor buffer and
  *      cursor are saved/restored around the callback so the user's in-progress
  *      input survives the repaint.
  *
@@ -124,14 +123,14 @@ static void repaintOnResize(
 
 	} else if (ctx.repaintList) {
 		const std::string savedLine(
-		    rl_line_buffer ? rl_line_buffer : "");
+		    editorLineBuffer ? editorLineBuffer : "");
 
-		const int savedPoint = rl_point;
+		const int savedPoint = editorCursor;
 
 		ctx.repaintList();
 
-		rl_replace_line(savedLine.c_str(), 1);
-		rl_point = std::min(savedPoint, rl_end);
+		editorReplaceLine(savedLine);
+		editorCursor = std::min(savedPoint, editorBufferEnd);
 	}
 
 }
@@ -143,16 +142,16 @@ static void repaintOnResize(
  *
  * Emits a newline when @p raw is null (Ctrl+D), marks the screen for clearing
  * when a live-preview frame was painted during the session, and clears
- * Readline history.
+ * line-editor history.
  *
  * @note The newline is emitted only for EOF (null @p raw), not for Escape;
  *       Escape already leaves the cursor one row below the prompt.
  *
- * @param raw Raw readline result.
+ * @param raw Raw line editor result.
  * @param ctx Current filter context.
  */
 static void handleFilterCancel(
-    const RlLine& raw,
+    const EditorLine& raw,
     FilterContext& ctx)
 {
 
@@ -162,7 +161,7 @@ static void handleFilterCancel(
 	if (livePreviewWasRepainted())
 	    ctx.needsClrScrn = true;
 
-	clear_history();
+	editorClearHistory();
 
 }
 
@@ -171,23 +170,23 @@ static void handleFilterCancel(
 /**
  * @brief Runs the interactive filter prompt and commits a query on Enter.
  *
- * Manages the Readline preview session, history, resize callback, cancellation,
+ * Manages the Line editor preview session, history, resize callback, cancellation,
  * and filter-commit lifecycle.
  *
  * Loop contract: on each iteration, resetLivePreviewIteration() primes a fresh
- * preview session, readlineWithResize() reads one line, and
- * deactivateLivePreview() ends the session. A null/empty readline result or a
+ * preview session, editLineWithResize() reads one line, and
+ * deactivateLivePreview() ends the session. A null/empty line editor result or a
  * leading Escape (0x1B) cancels via handleFilterCancel(). Otherwise the query
  * is committed by applyFilterCore(); on success the query is saved to history
  * and @p onSuccess runs; on failure the prompt row is rewound and the loop
- * repeats. Readline history is loaded once, before the loop, so the
+ * repeats. line-editor history is loaded once, before the loop, so the
  * alreadyLoaded=true save path is used.
  *
  * @note @p onEmptyInput is currently resolved and cast to void but not
  *       otherwise used inside this function; empty-input handling is owned by
  *       the caller via applyFilterCore/callbacks.
  *
- * @param promptText Single-line prompt displayed by Readline.
+ * @param promptText Single-line prompt displayed by the line editor.
  * @param ctx Mutable filter context.
  * @param onSuccess Callback invoked after a successful filter commit.
  * @param onEmptyInput Optional callback associated with empty-input handling.
@@ -221,8 +220,8 @@ static void runFilterLoop(
 	ctx.filterHistory = true;
 	loadHistory(ctx.filterHistory);
 
-	// Installs the preview Readline hook and restores it on scope exit.
-	LivePreviewReadlineGuard livePreviewGuard;
+	// Installs the preview Line editor hook and restores it on scope exit.
+	LivePreviewLineEditorGuard livePreviewGuard;
 
 	const std::vector<std::string>& previewSource =
 	    ctx.sourceOverride ? *ctx.sourceOverride : ctx.files;
@@ -238,16 +237,16 @@ static void runFilterLoop(
 	while (true) {
 		resetLivePreviewIteration();
 
-		RlLine raw = readlineWithResize(promptText, resizeRepaint);
+		EditorLine raw = editLineWithResize(promptText, resizeRepaint);
 
 		deactivateLivePreview();
 
-		if (!raw || raw.get()[0] == 27) {
+		if (!raw || (*raw)[0] == 27) {
 			handleFilterCancel(raw, ctx);
 			break;
 		}
 
-		std::string query(raw.get());
+		std::string query(*raw);
 
 		if (tryFilter(query)) {
 			saveQueryToHistory(query, ctx.filterHistory, true);
@@ -265,7 +264,7 @@ static void runFilterLoop(
 /**
  * @brief Core implementation shared by all filter entry points.
  *
- * Configures Readline, constructs the filter context, and runs the interactive
+ * Configures Line editor, constructs the filter context, and runs the interactive
  * filter workflow for the requested operation.
  *
  * Only the literal @c "/" input is treated as a filter request; any other
@@ -298,19 +297,19 @@ static bool runSharedFilterFlow(
 
 		});
 
-	rl_bind_keyseq(
+	editorBindKeySequence(
 	    "\x1b[5~",
-	    rl_named_function("previous-history"));
+	    editorPreviousHistory);
 
-	rl_bind_keyseq(
+	editorBindKeySequence(
 	    "\x1b[6~",
-	    rl_named_function("next-history"));
+	    editorNextHistory);
 
 	reset_custom_keybindingsForSelect();
 
-	rl_bind_keyseq("\x1b", exit_handler);
+	editorBindKeySequence("\x1b", exit_handler);
 
-	const ReadlineAndPromptTheme ft = getFilterTheme("", false);
+	const LineEditorAndPromptTheme ft = getFilterTheme("", false);
 
 	std::string prompt(ft.filter);
 	prompt.append("Filter: ").append(ft.reset);

@@ -146,7 +146,7 @@ namespace isocmd_tests {
 				bool eof = false;
 				int status = 0;
 				// Keep consuming output while waiting for the child. A full PTY can
-				// otherwise block Readline cleanup or sanitizer diagnostics indefinitely.
+				// otherwise block Line editor cleanup or sanitizer diagnostics indefinitely.
 				// Drain after waitpid as well so failure diagnostics include the tail.
 				while (!reaped || !eof) {
 					if (!reaped) {
@@ -186,19 +186,31 @@ namespace isocmd_tests {
 
 		}
 
-		// Strip CSI, test OSC markers and Readline delimiters; keep UTF-8 glyphs.
+		/// Advances to the end of a CSI sequence, or the end of the input.
+		void skipCsi(std::string_view raw, std::size_t& i) {
+
+			i += 2;
+			while (i < raw.size() && !(raw[i] >= 0x40 && raw[i] <= 0x7e)) ++i;
+
+		}
+
+		/// Advances to the BEL terminator of a test OSC marker, or the end of the input.
+		void skipOsc(std::string_view raw, std::size_t& i) {
+
+			while (i + 1 < raw.size() && raw[i + 1] != '\a') ++i;
+			if (i + 1 < raw.size()) ++i;
+
+		}
+
+		// Strip CSI, test OSC markers and Line editor delimiters; keep UTF-8 glyphs.
 		std::string plain(std::string_view raw) {
 
 			std::string result;
-			for (std::size_t i=0;i<raw.size();++i) {
-				const unsigned char c=raw[i];
-				if (c==27 && i+1<raw.size() && raw[i+1]=='[') {
-					i+=2;
-					while (i<raw.size() && !(raw[i]>=0x40 && raw[i]<=0x7e)) ++i;
-				} else if (c==27 && i+1<raw.size() && raw[i+1]==']') {
-					while (i+1<raw.size() && raw[i+1]!='\a') ++i;
-					if (i+1<raw.size()) ++i;
-				} else if (c!=1 && c!=2 && c!='\r') result+=raw[i];
+			for (std::size_t i = 0; i < raw.size(); ++i) {
+				const unsigned char c = raw[i];
+				if (c == 27 && i + 1 < raw.size() && raw[i + 1] == '[') skipCsi(raw, i);
+				else if (c == 27 && i + 1 < raw.size() && raw[i + 1] == ']') skipOsc(raw, i);
+				else if (c != 1 && c != 2 && c != '\r') result += raw[i];
 			}
 			return result;
 
@@ -219,9 +231,9 @@ namespace isocmd_tests {
 
 		}
 
-		// The test-only link wrappers distinguish a new Readline session from
+		// The test-only link wrappers distinguish a new line-editor session from
 		// redisplays of the previous one, and a real pause from a progress frame.
-		// Wait for the complete input row as well, not merely entry to readline.
+		// Wait for the complete input row as well, not merely entry to line editor.
 		enum class Prompt { input, filter, pause };
 		constexpr auto inputPrompt = Prompt::input;
 		constexpr auto filterPrompt = Prompt::filter;
@@ -271,7 +283,7 @@ namespace isocmd_tests {
 
 		}
 
-		// A resize does not start a new Readline session. Require a completed
+		// A resize does not start a new line-editor session. Require a completed
 		// input row (and, where appropriate, the caller's repaint evidence).
 		std::size_t waitForRepaintedInput(TerminalSession& term, std::size_t start) {
 
@@ -411,12 +423,18 @@ namespace isocmd_tests {
 				const auto passed = terminal.waitFor("TEST-TERMINAL-PASS");
 				checkLongInput(terminal, passed);
 				checkOverflowSpace(terminal, terminal.waitFor("TEST-LONG-INPUT-PASS", passed));
+				const auto unicode = terminal.waitFor("UNICODE ↵ Ω> ", terminal.waitFor("TEST-OVERFLOW-SPACE-PASS", passed));
+				terminal.send("é界");
+				const auto typed = waitForInputRow(terminal, terminal.waitFor("é界", unicode));
+				CHECK(inputRow(terminal, typed) == "UNICODE ↵ Ω> é界");
+				terminal.send("\n");
+				terminal.waitFor("TEST-UNICODE-PASS", typed);
 				terminal.waitForExit();
 			} catch (...) {
 				printOutput(terminal.output);
 				throw;
 			}
-			std::cout << "PASS: PTY resize, long single-row input, input preservation and Readline restoration\n";
+			std::cout << "PASS: PTY resize, long single-row input, input preservation and Line editor restoration\n";
 			return 0;
 		} catch (const std::exception& e) {
 			std::cerr << "FAIL: PTY resize: " << e.what() << '\n';
@@ -425,10 +443,10 @@ namespace isocmd_tests {
 
 	}
 
-	int readlineGuardsTest(const char* binary) {
+	int lineEditorGuardsTest(const char* binary) {
 
 		try {
-			TerminalSession terminal(binary, "--readline-guards-child");
+			TerminalSession terminal(binary, "--editor-guards-child");
 			try {
 				waitForNewInput(terminal);
 				terminal.send("\x1b");
@@ -1262,6 +1280,17 @@ namespace isocmd_tests {
 			try {
 				auto end=waitForNewInput(term);
 				CHECK(has(listFrame(term, 0, end), "iso2.iso"));
+				// One Tab completes a unique index and the common device prefix.
+				term.send("1\t");
+				end=waitForInputRow(term, term.waitFor("1>/dev/",end));
+				CHECK(inputRow(term,end).ends_with("1>/dev/"));
+				term.send("z\t");
+				end=waitForInputRow(term, term.waitFor("1>/dev/zero",end));
+				CHECK(inputRow(term,end).ends_with("1>/dev/zero"));
+				// Exactly one ISO and device remain: one Tab completes the entire pair.
+				term.send(";\t");
+				end=waitForInputRow(term, term.waitFor("1>/dev/zero;2>/dev/null",end));
+				CHECK(inputRow(term,end).ends_with("1>/dev/zero;2>/dev/null"));
 				term.send("\x1b");
 				end=term.waitFor("TEST-MAPPING-CANCELLED",end);
 				end=waitForNewInput(term, end);
@@ -1289,7 +1318,7 @@ namespace isocmd_tests {
 				term.send("1>/dev/zero;2>/dev/null\n"); end=waitForNewInput(term, end);
 				term.send("y\n");
 				term.waitFor("TEST-WRITE-UI-PASS",end); term.waitForExit();
-				// Exactly eight Readline sessions: two mapping attempts, retry,
+				// Exactly eight line-editor sessions: two mapping attempts, retry,
 				// confirmation, decline/retry, confirmation, and the final pair.
 				std::size_t sessions = 0;
 				for (std::size_t pos = 0; (pos = term.output.find(terminal_sync::input, pos)) != std::string::npos;

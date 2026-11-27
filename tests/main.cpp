@@ -27,6 +27,7 @@ namespace isocmd_tests {
 	void atomicScopeGuards();
 	void selectionScopeGuards();
 	void usbMappingValidation();
+	void usbMappingCompletion();
 }
 
 int main() {
@@ -47,11 +48,12 @@ int main() {
 		{"USB mounted and busy indicators", usbBusyIndicators},
 		{"USB busy rejection in interactive and CLI modes", usbBusyValidation},
 		{"USB in-flight counter parsing", usbInflightParsing},
-		{"Readline history persistence and limits", historyPersistence},
+		{"line-editor history persistence and limits", historyPersistence},
 		{"list rendering, pagination and pending indices", listRendering},
 		{"pagination command boundaries and jumps", paginationCommands},
 		{"USB speed, stall and progress telemetry", writeTelemetry},
 		{"USB mapping grammar and validation", usbMappingValidation},
+		{"USB mapping assignment-aware completion", usbMappingCompletion},
 		{"atomic scope guards, nesting and release", atomicScopeGuards},
 		{"selection scope cleanup and unwinding", selectionScopeGuards},
 	});

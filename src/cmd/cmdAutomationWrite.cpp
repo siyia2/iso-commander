@@ -291,7 +291,7 @@ static bool checkThreadPoolLimit(const WriteTheme& wt,
 	          << wt.colorFailure << " selection limit is "
 	          << wt.colorWarning << pool.threadCount()
 	          << wt.colorFailure << " (thread pool size)."
-	          << wt.rl_resetCol << "\n\n";
+	          << wt.editorResetCol << "\n\n";
 	return false;
 
 }

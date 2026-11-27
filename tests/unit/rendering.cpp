@@ -20,11 +20,11 @@ namespace isocmd_tests {
 		for (const auto& base : ConfigValues::base) {
 			defaultColor = base;
 			updateDefaultColors();
-			CHECK(RL_BoldAlt == "\001" + BoldReset + "\002");
+			CHECK(PromptBoldAlt == "\001" + BoldReset + "\002");
 			for (const auto& theme : ConfigValues::theme) {
 				globalTheme = theme;
 				const auto p = getPromptTheme();
-				CHECK(p.reset == RL_BoldAlt);
+				CHECK(p.reset == PromptBoldAlt);
 				CHECK(p.primary.front() == '\001' && p.primary.back() == '\002');
 				CHECK(getFilterTheme("", false).iso.empty());
 				CHECK(!getFilterTheme("", true).iso.empty());

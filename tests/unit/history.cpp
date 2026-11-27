@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <stdio.h>
-#include <readline/history.h>
 #include "../common/testHarness.h"
+import isocmd.input.lineEditor;
 import isocmd.app.main;
 import isocmd.core.paths;
 import isocmd.input.history;
@@ -18,28 +18,28 @@ namespace isocmd_tests {
 
 			~Restore() {
 
-				clear_history(); GlobalState::MAX_HISTORY_LINES=paths; GlobalState::MAX_HISTORY_PATTERN_LINES=patterns;
+				editorClearHistory(); GlobalState::MAX_HISTORY_LINES=paths; GlobalState::MAX_HISTORY_PATTERN_LINES=patterns;
 
 			}
 		} restore;
-		using_history(); clear_history();
+		editorClearHistory();
 		bool mode=false; GlobalState::MAX_HISTORY_LINES=2;
 		CHECK(isHistoryFileEmpty(path.string()));
-		add_history("/first"); add_history("/second"); add_history("/third"); add_history("/second");
+		editorAddHistory("/first"); editorAddHistory("/second"); editorAddHistory("/third"); editorAddHistory("/second");
 		saveHistory(mode); CHECK(readFile(path)=="/third\n/second\n");
-		clear_history(); add_history("stale"); loadHistory(mode);
-		CHECK(history_length==2 && std::string(history_list()[0]->line)=="/third" && std::string(history_list()[1]->line)=="/second");
+		editorClearHistory(); editorAddHistory("stale"); loadHistory(mode);
+		CHECK(editorHistoryList().size()==2 && std::string(editorHistoryList()[0])=="/third" && std::string(editorHistoryList()[1])=="/second");
 		CHECK(!isHistoryFileEmpty(path.string()));
 		mode=true; GlobalState::MAX_HISTORY_PATTERN_LINES=1;
-		clear_history(); add_history("foo"); add_history("bar"); saveHistory(mode);
+		editorClearHistory(); editorAddHistory("foo"); editorAddHistory("bar"); saveHistory(mode);
 		CHECK(readFile(filter)=="bar\n" && readFile(path)=="/third\n/second\n");
-		loadHistory(mode); CHECK(history_length==1 && std::string(history_list()[0]->line)=="bar");
-		GlobalState::MAX_HISTORY_PATTERN_LINES=0; add_history("ignored"); saveHistory(mode);
-		CHECK(history_length==0 && readFile(filter)=="bar\n");
-		add_history("ignored"); loadHistory(mode); CHECK(history_length==0);
+		loadHistory(mode); CHECK(editorHistoryList().size()==1 && std::string(editorHistoryList()[0])=="bar");
+		GlobalState::MAX_HISTORY_PATTERN_LINES=0; editorAddHistory("ignored"); saveHistory(mode);
+		CHECK(editorHistoryList().size()==0 && readFile(filter)=="bar\n");
+		editorAddHistory("ignored"); loadHistory(mode); CHECK(editorHistoryList().size()==0);
 		mode=false; writeFile(path," \nrelative\n /leading-space\n"); CHECK(isHistoryFileEmpty(path.string()));
-		clear_history(); saveHistory(mode); CHECK(readFile(path).empty());
-		fs::remove(path); fs::remove(filter); add_history("stale"); loadHistory(mode); CHECK(history_length==0);
+		editorClearHistory(); saveHistory(mode); CHECK(readFile(path).empty());
+		fs::remove(path); fs::remove(filter); editorAddHistory("stale"); loadHistory(mode); CHECK(editorHistoryList().size()==0);
 
 	}
 }

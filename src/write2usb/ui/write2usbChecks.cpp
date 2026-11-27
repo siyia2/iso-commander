@@ -27,7 +27,7 @@ namespace WriteValidation {
 	 */
 	std::string plainErr(const WriteTheme& wt, const std::string& msg) {
 
-		return std::string(wt.errLabel) + msg + wt.rl_resetCol;
+		return std::string(wt.errLabel) + msg + wt.editorResetCol;
 
 	}
 
@@ -46,8 +46,8 @@ namespace WriteValidation {
 
 		std::string s;
 		s.append(wt.errPath).append("'").append(path).append("'")
-		 .append(wt.rl_resetCol).append(wt.errLabel).append(msg)
-		 .append(wt.rl_resetCol);
+		 .append(wt.editorResetCol).append(wt.errLabel).append(msg)
+		 .append(wt.editorResetCol);
 		return s;
 
 	}
@@ -63,10 +63,10 @@ namespace WriteValidation {
 	 */
 	void printValidationErrors(const WriteTheme& wt, const std::vector<std::string>& errs) {
 
-		std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.rl_resetCol << wt.bold << "\n";
+		std::cerr << "\n" << wt.errLabel << "Validation errors:" << wt.editorResetCol << wt.bold << "\n";
 		for (const auto& e : errs)
 		    std::cerr << " \u2022 " << e << wt.bold << "\n";
-		std::cerr << wt.rl_resetCol << (GlobalState::isNonInteractive ? "\n" : "");
+		std::cerr << wt.editorResetCol << (GlobalState::isNonInteractive ? "\n" : "");
 
 	}
 
@@ -142,7 +142,7 @@ namespace WriteValidation {
 			std::string e;
 			e.append(wt.errLabel).append("Failed to get size for ")
 			 .append(wt.errPath).append("'").append(shown).append("'")
-			 .append(wt.rl_resetCol);
+			 .append(wt.editorResetCol);
 			return e;
 		}
 		return std::nullopt;
@@ -175,15 +175,15 @@ namespace WriteValidation {
 		std::string e;
 		e.append(wt.errLabel).append("ISO exceeds target drive capacity:\n")
 		 .append(wt.errLabel).append(isoLabelPadded)
-		 .append(wt.sizeCol).append(iso.sizeStr).append(" ").append(wt.rl_resetCol)
+		 .append(wt.sizeCol).append(iso.sizeStr).append(" ").append(wt.editorResetCol)
 		 .append(UI::Palette::DimGray).append("(").append(wt.fileCol).append(iso.filename)
 		 .append(UI::Palette::DimGray).append(")\n")
 		 .append(wt.errLabel).append(driveLabelPadded)
-		 .append(wt.sizeCol).append(deviceSizeStr).append(" ").append(wt.rl_resetCol)
+		 .append(wt.sizeCol).append(deviceSizeStr).append(" ").append(wt.editorResetCol)
 		 .append(UI::Palette::DimGray).append("(").append(wt.warnLabel).append(device)
 		 .append(wt.infoLabel).append(" <").append(driveName).append(">")
 		 .append(UI::Palette::DimGray).append(")")
-		 .append(wt.rl_resetCol);
+		 .append(wt.editorResetCol);
 
 		return e;
 

@@ -4,17 +4,16 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.display.display;
 import isocmd.ui.interface.pausePrompts;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
@@ -67,15 +66,15 @@ namespace MappingPrompt {
 
 		std::string prompt("\n");
 		prompt
-		    .append(UI::Palette::RL_idxGreen)
+		    .append(UI::Palette::PromptIndexGreen)
 		    .append("IDX>DEVICE")
-		    .append(wt.rl_primaryCol)
+		    .append(wt.editorPrimaryCol)
 		    .append(" ↵ for ")
-		    .append(UI::Palette::RL_Yellow)
+		    .append(UI::Palette::PromptYellow)
 		    .append("write2usb")
-		    .append(wt.rl_primaryCol)
+		    .append(wt.editorPrimaryCol)
 		    .append(", ? for help: ")
-		    .append(wt.rl_resetCol);
+		    .append(wt.editorResetCol);
 		return prompt;
 
 	}
@@ -179,23 +178,23 @@ namespace MappingPrompt {
 			       << UI::Palette::DimGray << ")\n";
 		}
 
-		stream << "\n" << color << "Removable USB Flash Devices:" << wt.rl_resetCol << "\n\n";
+		stream << "\n" << color << "Removable USB Flash Devices:" << wt.editorResetCol << "\n\n";
 		usbDevices = discover();
 		auto deviceInfos = collectAndSortDeviceInfos(usbDevices);
 
 		if (deviceInfos.empty()) {
-			stream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.rl_resetCol << "\n";
+			stream << " " << wt.colorFailure << "No USB flash drives detected!" << wt.editorResetCol << "\n";
 		} else {
 			for (const auto& dev : deviceInfos) {
 				if (dev.error) {
-					stream << " " << wt.colorFailure << dev.path << " (error)" << wt.rl_resetCol << "\n";
+					stream << " " << wt.colorFailure << dev.path << " (error)" << wt.editorResetCol << "\n";
 				} else {
 					stream << wt.deviceCol << " " << dev.path
 					       << wt.infoLabel << " <" << dev.driveName
 					       << "> " << UI::Palette::DimGray << "(" << wt.sizeCol << dev.sizeStr
 					       << UI::Palette::DimGray << ")";
 					if (!dev.status.empty())
-					    stream << wt.colorFailure << " " << dev.status << wt.rl_resetCol;
+					    stream << wt.colorFailure << " " << dev.status << wt.editorResetCol;
 					stream << "\n";
 				}
 			}
@@ -266,11 +265,11 @@ namespace MappingPrompt {
 
 		std::cout << wt.colorWarning << "WARNING: This will "
 		          << UI::Palette::Red << "*ERASE ALL DATA*"
-		          << wt.colorWarning << " on:" << wt.rl_resetCol << "\n\n";
+		          << wt.colorWarning << " on:" << wt.editorResetCol << "\n\n";
 		widths.push_back(0);
 		widths.push_back(utf8Width("WARNING: This will *ERASE ALL DATA* on:"));
 		widths.push_back(0);
-		rl_bind_keyseq("?", rl_insert);
+		editorBindKeySequence("?", editorInsertKey);
 		for (const auto& r : warnRows) {
 			const std::size_t fixedWidth = 17 + r.device.size() + utf8Width(r.driveName)
 			                        + utf8Width(r.deviceSizeStr) + utf8Width(r.isoSizeStr);
@@ -315,7 +314,7 @@ namespace MappingPrompt {
 		clearScrollBuffer();
 		std::cout << promptHeaderForRepaint(devicePrompt);
 		std::cout << buildIdxPrompt(wt) << mainInputString << "\n";
-		std::cerr << "\n" << wt.rl_errorCol << "Errors:" << wt.rl_resetCol << "\n";
+		std::cerr << "\n" << wt.editorErrorCol << "Errors:" << wt.editorResetCol << "\n";
 		for (const auto& e : errors) {
 			std::cerr << color << " • " << e << "\n";
 		}
@@ -355,10 +354,9 @@ namespace MappingPrompt {
 		confirmPrompt.append(color)
 		             .append("\002")
 		             .append(promptText)
-		             .append(wt.rl_resetCol);
+		             .append(wt.editorResetCol);
 
-		std::unique_ptr<char, decltype(&std::free)> confirmation(
-		    nullptr, &std::free);
+		EditorLine confirmation;
 
 		{
 			ConfirmationModeGuard confirmGuard;
@@ -372,14 +370,14 @@ namespace MappingPrompt {
 				},
 			    drawnCols, drawnWidths);
 
-			confirmation = readlineWithResize(confirmPrompt);
+			confirmation = editLineWithResize(confirmPrompt);
 			watcher.stop();
 		}
 
 		std::string ans;
 
 		if (confirmation) {
-			ans = confirmation.get();
+			ans = *confirmation;
 
 			while (!ans.empty() &&
 			       std::isspace(static_cast<unsigned char>(ans.back())))
@@ -399,20 +397,20 @@ namespace MappingPrompt {
 namespace {
 
 	/**
-	 * @brief Installs a temporary GNU Readline startup hook to prefill the next input line.
+	 * @brief Installs a temporary the native line editor startup hook to prefill the next input line.
 	 *
-	 * Restores any previously registered `rl_startup_hook` before inserting the prefilled text.
+	 * Restores any previously registered `editorStartupHook` before inserting the prefilled text.
 	 * If `prefill` is empty, no hook is installed.
 	 *
-	 * @param prefill Text to insert into the Readline buffer when Readline starts.
+	 * @param prefill Text to insert into the line-editor buffer when the line editor starts.
 	 */
 	void installPrefillStartupHook(const std::string& prefill)
 	{
 
 		static std::string activePrefillText;
-		static rl_hook_func_t* previousStartupHook = nullptr;
+		static EditorHook* previousStartupHook = nullptr;
 
-		rl_startup_hook = nullptr;
+		editorStartupHook = nullptr;
 		previousStartupHook = nullptr;
 		activePrefillText.clear();
 
@@ -421,24 +419,24 @@ namespace {
 		}
 
 		activePrefillText = prefill;
-		previousStartupHook = rl_startup_hook;
-		rl_startup_hook = +[]() -> int {
+		previousStartupHook = editorStartupHook;
+		editorStartupHook = +[]() -> int {
 			if (previousStartupHook) {
 				previousStartupHook();
 			}
 			if (!activePrefillText.empty()) {
-				rl_insert_text(activePrefillText.c_str());
+				editorInsertText(activePrefillText);
 			}
 			return 0;
 		};
 
 	}
 
-	/// Clears any temporary Readline startup hook installed for input prefilling.
+	/// Clears any temporary Line editor startup hook installed for input prefilling.
 	void clearPrefillStartupHook()
 	{
 
-		rl_startup_hook = nullptr;
+		editorStartupHook = nullptr;
 
 	}
 
@@ -465,7 +463,7 @@ namespace {
 	 *
 	 * Disables `SIGINT` and `Ctrl+D` before waiting for acknowledgement when validation fails.
 	 *
-	 * @param devicePrompt Rendered Readline prompt string.
+	 * @param devicePrompt Rendered Line editor prompt string.
 	 * @param rawInput Raw user input string to re-display alongside the error message.
 	 * @param messages List of parse or validation error messages to render.
 	 * @param wt Active write theme configuration.
@@ -514,7 +512,7 @@ namespace {
 /**
  * @brief Interactive loop to collect, parse, validate, and confirm mappings between ISO images and USB storage targets.
  *
- * Manages the interactive terminal session using GNU Readline, displaying available ISOs and USB devices,
+ * Manages the interactive terminal session using the native line editor, displaying available ISOs and USB devices,
  * parsing user mapping inputs, validating device permissions and constraints, displaying warnings, and prompting
  * for final user confirmation before returning confirmed association pairs.
  *
@@ -526,7 +524,7 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
     const std::vector<IsoInfo>& selectedIsos, Discover discover, Validate validate, bool noPermissions)
 {
 
-	PendingReadlineTextClearGuard pendingTextGuard;
+	PendingLineEditorTextClearGuard pendingTextGuard;
 	const WriteTheme wt = getWriteTheme();
 	std::string pendingInput;
 
@@ -556,14 +554,14 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
 		installPrefillStartupHook(pendingInput);
 		pendingInput.clear();
 
-		RlLine deviceInput = readlineWithResize(devicePrompt, repaintDevices);
+		EditorLine deviceInput = editLineWithResize(devicePrompt, repaintDevices);
 		clearPrefillStartupHook();
 
 		if (!deviceInput) {
 			return {};
 		}
 
-		std::string mainInputString(deviceInput.get());
+		std::string mainInputString(*deviceInput);
 		if (mainInputString.empty()) {
 			continue;
 		}
@@ -575,10 +573,10 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
 			continue;
 		}
 
-		add_history(deviceInput.get());
+		editorAddHistory(*deviceInput);
 
 		std::vector<std::string> parseErrors;
-		auto deviceMap = parseDeviceMappings(deviceInput.get(), extractIsoFilenames(sortedIsos), parseErrors);
+		auto deviceMap = parseDeviceMappings(*deviceInput, extractIsoFilenames(sortedIsos), parseErrors);
 		if (!parseErrors.empty()) {
 			handlePromptErrors(devicePrompt, mainInputString, parseErrors, wt, false, false);
 			continue;
@@ -602,7 +600,7 @@ std::vector<std::pair<IsoInfo, std::string>> WriteMapping::collectWithDevices(
 			return validPairs;
 		}
 
-		rl_bind_keyseq("?", help_handler);
+		editorBindKeySequence("?", help_handler);
 		pendingInput = mainInputString;
 	}
 

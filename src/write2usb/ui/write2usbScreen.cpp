@@ -10,14 +10,14 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.write2usb.ui.textWidth;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
@@ -29,8 +29,8 @@ namespace write_screen_detail {
 	/// Write end of the self-pipe the SIGWINCH handler pokes. -1 = no watcher active.
 	inline std::atomic<int> g_fd{-1};
 
-	/// Handler that was installed before ours; forwarded to so Readline's own
-	/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+	/// Handler that was installed before ours; forwarded to so the line editor's own
+	/// SIGWINCH handling (editorCatchSigwinch) keeps working.
 	inline struct sigaction g_prev {};
 	inline bool             g_installed = false;
 
@@ -138,7 +138,7 @@ namespace confirm_resize_detail {
 		if (cols == 0 || rows == 0 || cols == s.lastCols) return;
 		s.lastCols = cols;
 
-		rl_set_screen_size(static_cast<int>(rows), static_cast<int>(cols));
+		editorSetScreenSize(static_cast<int>(rows), static_cast<int>(cols));
 
 		std::size_t warningRows = 0;
 		for (std::size_t w : s.lineWidths)
@@ -151,12 +151,11 @@ namespace confirm_resize_detail {
 		s.lineWidths = s.paint(cols);
 		std::cout.flush();
 
-		rl_on_new_line();
 		redisplayPrompt();
 
 	}
 
-	/// Readline's getc hook waits on stdin and the self-pipe, with no idle polling.
+	/// the line editor's getc hook waits on stdin and the self-pipe, with no idle polling.
 	static int confirmResizeGetc(FILE* stream) {
 
 		ResizeRepaintState& s = g_confirmResize;
@@ -170,7 +169,7 @@ namespace confirm_resize_detail {
 
 			if (::poll(fds, 2, -1) < 0) {
 				if (errno == EINTR) continue;
-				return rl_getc(stream);
+				return editorReadByte(stream);
 			}
 
 			if (fds[1].revents & POLLIN) {
@@ -180,7 +179,7 @@ namespace confirm_resize_detail {
 			}
 
 			if (fds[0].revents & (POLLIN | POLLHUP | POLLERR))
-			    return rl_getc(stream);
+			    return editorReadByte(stream);
 		}
 
 	}
@@ -218,10 +217,10 @@ struct ConfirmResizeWatcher::Impl {
 		}
 		g_installed = true;
 
-		savedEventHook_  = rl_event_hook;
-		savedGetc_       = rl_getc_function;
-		rl_event_hook    = nullptr;
-		rl_getc_function = confirmResizeGetc;
+		savedEventHook_  = editorEventHook;
+		savedGetc_       = editorInputReader;
+		editorEventHook    = nullptr;
+		editorInputReader = confirmResizeGetc;
 		active_ = true;
 
 	}
@@ -238,8 +237,8 @@ struct ConfirmResizeWatcher::Impl {
 		if (!active_) return;
 		active_ = false;
 
-		rl_getc_function = savedGetc_;
-		rl_event_hook    = savedEventHook_;
+		editorInputReader = savedGetc_;
+		editorEventHook    = savedEventHook_;
 
 		if (g_installed) {
 			sigaction(SIGWINCH, &g_prev, nullptr);
@@ -260,8 +259,8 @@ struct ConfirmResizeWatcher::Impl {
 	confirm_resize_detail::ResizeRepaintState& state_;
 	bool active_ = false;
 	int wakeWr_ = -1;
-	rl_hook_func_t* savedEventHook_ = nullptr;
-	rl_getc_func_t* savedGetc_ = nullptr;
+	EditorHook* savedEventHook_ = nullptr;
+	EditorInputReader* savedGetc_ = nullptr;
 };
 
 ConfirmResizeWatcher::ConfirmResizeWatcher(
@@ -285,7 +284,7 @@ void ConfirmResizeWatcher::stop() {
  * - Finished — after finish() it shows the final rows, the status line and
  *   the summary. The keeper keeps running and repaints on terminal resize,
  *   unless a prompt was registered with setPrompt(): then the program's
- *   resize hook owns repainting (it calls repaint() and lets Readline redraw
+ *   resize hook owns repainting (it calls repaint() and lets Line editor redraw
  *   the prompt and typed input), so the keeper stays out of the way.
  *
  * @par Rendering
@@ -429,7 +428,7 @@ public:
 		const bool   cancelled = isUsbWriteCancelled(syncPtr_->cancellation.get_token());
 
 		const std::string operation =
-		    std::string(UI::Palette::Yellow) + "write2usb" + wt_.rl_resetCol;
+		    std::string(UI::Palette::Yellow) + "write2usb" + wt_.editorResetCol;
 
 		const std::string word =
 		    !cancelled
@@ -441,7 +440,7 @@ public:
 		        : wt_.colorWarning + "INTERRUPTED";
 
 		std::ostringstream st;
-		st << color << "Status: " << operation << color << " → " << word << wt_.rl_resetCol;
+		st << color << "Status: " << operation << color << " → " << word << wt_.editorResetCol;
 		statusLine_ = st.str();
 
 		const double secs = std::chrono::duration<double>(elapsed).count();
@@ -470,7 +469,7 @@ public:
 
 	/// Registers the program's "press Enter" prompt. Once set, the keeper no
 	/// longer repaints on resize by itself: the program's resize hook calls
-	/// repaint() instead and Readline redraws the prompt and typed input.
+	/// repaint() instead and Line editor redraws the prompt and typed input.
 	void setPrompt(std::string prompt) {
 
 		std::lock_guard<std::mutex> rl(renderMutex_);
@@ -815,6 +814,46 @@ private:
 		bool completed;
 	};
 
+	/**
+	 * @brief Builds the filled and empty parts of a USB progress bar.
+	 * @param pct Progress percentage, clamped to 0–100 by the caller.
+	 * @param verificationActive Selects Braille glyphs for active verification.
+	 * @return Filled and empty portions, kept separate for coloring.
+	 */
+	static std::pair<std::string, std::string> buildProgressBar(int pct, bool verificationActive) {
+
+		int steps = (pct * BAR_STEPS) / 100;
+		int full  = steps / 2;
+		bool half = (steps % 2) != 0;
+
+		std::string bar, empty;
+		for (int j = 0; j < full; ++j) bar += (verificationActive ? "⣶" : "▇");
+		if (half)                      bar += (verificationActive ? "⡆" : "▄");
+		for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += (verificationActive ? " " : "░");
+
+		return {std::move(bar), std::move(empty)};
+
+	}
+
+	/**
+	 * @brief Appends the terminal status or active percentage of a USB task.
+	 *
+	 * Preserves completion, failure and cancellation precedence and the existing status colors.
+	 */
+	void appendRowStatus(std::ostringstream& row, const ProgressInfo& prog, bool isCompleted,
+	                     bool failed, bool cancelled, int pct) {
+
+		if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
+		else if (failed)                                   row << wt_.colorFailure << "FAIL ";
+		else if (cancelled)                                row << wt_.colorWarning << "CXL  ";
+		else {
+			std::string pctStr = std::to_string(pct) + "%";
+			pctStr.resize(5, ' ');
+			row << color << pctStr;
+		}
+
+	}
+
 	std::string buildRowString(std::size_t i, const std::string& shortFile, const RowSpeed& speed,
 	                           std::size_t maxFilenameWidth, std::size_t maxSpeedWidth, std::size_t usableCols) {
 
@@ -839,14 +878,7 @@ private:
 		const bool restoreWriteProgress = !speed.completed &&
 		    (failed || cancelled) && prog.writeCompleted.load();
 		int pct = restoreWriteProgress ? 100 : std::clamp(prog.progress.load(), 0, 100);
-		int steps = (pct * BAR_STEPS) / 100;
-		int full  = steps / 2;
-		bool half = (steps % 2) != 0;
-
-		std::string bar, empty;
-		for (int j = 0; j < full; ++j) bar += (verificationActive ? "⣶" : "▇");
-		if (half)                      bar += (verificationActive ? "⡆" : "▄");
-		for (int j = 0; j < BAR_WIDTH - full - (half ? 1 : 0); ++j) empty += (verificationActive ? " " : "░");
+		const auto [bar, empty] = buildProgressBar(pct, verificationActive);
 
 		std::ostringstream row;
 		row << wt_.fileCol << paddedFilename
@@ -859,14 +891,7 @@ private:
 		const bool isCompleted = speed.completed;
 		const auto& speedStr = speed.text;
 
-		if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
-		else if (failed)                                   row << wt_.colorFailure << "FAIL ";
-		else if (cancelled)                                row << wt_.colorWarning << "CXL  ";
-		else {
-			std::string pctStr = std::to_string(pct) + "%";
-			pctStr.resize(5, ' ');
-			row << color << pctStr;
-		}
+		appendRowStatus(row, prog, isCompleted, failed, cancelled, pct);
 
 		const std::string speedPad(maxSpeedWidth - utf8Width(speedStr), ' ');
 		row << color << speedPad << speedStr;

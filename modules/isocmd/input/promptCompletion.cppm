@@ -1,26 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export module isocmd.input.readline;
+export module isocmd.input.promptCompletion;
 
 import std;
 
 // C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-/**
- * C-LINKAGE INTERFACE
- * Required for callbacks passed to the GNU Readline C library.
- */
-extern "C" {
+// Native C++ prompt callbacks.
+// Bridge function for line-editor tab-completion
+std::vector<std::string> my_special_completion_entry(std::string_view text, int start, int end);
 
-// Bridge function for Readline tab-completion
-char** my_special_completion_entry(const char* text, int start, int end);
-
-// Callback invoked by Readline for context-aware completions
-char** completion_cb(const char* text, int start, int end);
+// Callback invoked by the line editor for context-aware completions
+std::vector<std::string> completion_cb(std::string_view text, int start, int end);
 
 // Keybinding utility functions
-int prevent_readline_keybindings(int count, int key);
+int ignoreEditorKeybinding(int count, int key);
 int clear_screen_and_buffer(int count, int key);
 
 /**
@@ -37,8 +32,6 @@ int clear_screen_and_buffer(int count, int key);
  * keeps @c clear_screen_and_buffer on <kbd>Ctrl+L</kbd>.
  */
 int clear_list_and_screen(int count, int key);
-
-}
 
 /**
  * C++ DATA STRUCTURES
@@ -58,30 +51,30 @@ struct CompleterData {
 	const std::vector<std::string>* usbDevices;
 };
 
-/** @brief Global access point for the completion data used by the Readline callback. */
+/** @brief Global access point for the completion data used by the line-editor callback. */
 extern CompleterData g_completerData;
 
 /**
- * @namespace RetainAndRestoreReadlineBuffer
- * @brief Global state management for Readline buffer persistence during completion cycles.
+ * @namespace RetainAndRestoreLineEditorBuffer
+ * @brief Global state management for line-editor buffer persistence during completion cycles.
  */
-namespace RetainAndRestoreReadlineBuffer {
-	/// Mode flag to determine if completion text should be persisted across Readline calls.
-	inline int g_rl_complete_mode = 0;
+namespace RetainAndRestoreLineEditorBuffer {
+	/// Mode flag to determine if completion text should be persisted across line-editor calls.
+	inline int g_editorCompletionMode = 0;
 	/// Storage for the completed line text to be restored after a reset.
-	extern std::string g_rl_pending_text;
+	extern std::string g_editorPendingText;
 }
 
-/// Clears pending Readline text when the guard goes out of scope.
-struct PendingReadlineTextClearGuard {
-	~PendingReadlineTextClearGuard();
+/// Clears pending line-editor text when the guard goes out of scope.
+struct PendingLineEditorTextClearGuard {
+	~PendingLineEditorTextClearGuard();
 };
 
 /**
  * @brief Active candidate list for Settings Editor value completion.
  *
  * Populated by the Settings Editor (see @c editSetting) immediately before a
- * value-entry @c readlineWithResize call and cleared afterwards. When non-null
+ * value-entry @c editLineWithResize call and cleared afterwards. When non-null
  * and non-empty, @c setting_value_completion_entry consumes it as the match
  * source. Using a pointer keeps switching per setting cheap.
  */
@@ -90,40 +83,40 @@ inline std::vector<std::string>* g_activeSettingValues;
 /**
  * @brief Completion entry point for Settings Editor value prompts.
  *
- * Sets @c rl_attempted_completion_over and a single-space append character,
- * then delegates to @c rl_completion_matches over @c g_activeSettingValues.
- * Returns nullptr (leaving Readline's default completion in place) when the
+ * Sets @c editorCompletionHandled and a single-space append character,
+ * then delegates to @c editorCompletionMatches over @c g_activeSettingValues.
+ * Returns an empty vector (leaving the line editor's default completion in place) when the
  * active list is null or empty.
  *
  * @param text  The partial value text.
  * @param start Start index in the line buffer (unused).
  * @param end   End index in the line buffer (unused).
- * @return Array of matches, or nullptr.
+ * @return Vector of matches (empty if no match).
  */
-char** setting_value_completion_entry(const char* text, int start, int end);
+std::vector<std::string> setting_value_completion_entry(std::string_view text, int start, int end);
 
 /**
  * @namespace SettingsEditorRepaint
- * @brief Body-repaint hook for the Settings Editor's readline prompts.
+ * @brief Body-repaint hook for the Settings Editor's line editor prompts.
  *
  * The completion subsystem's <kbd>Esc</kbd> / <kbd>Ctrl+L</kbd> path
  * (@c clear_screen_and_buffer, reached through @c clear_list_and_screen)
- * normally only clears the terminal and redraws the readline prompt line. On
+ * normally only clears the terminal and redraws the line editor prompt line. On
  * the Settings Editor screens that is not enough: the header, current value,
  * description and navigation footer are printed by the editor's own draw
- * lambdas (passed to @c readlineWithRepaint, which also forwards them to
- * @c readlineWithResize as the resize repaint callback), so a bare clear would
+ * lambdas (passed to @c editLineWithRepaint, which also forwards them to
+ * @c editLineWithResize as the resize repaint callback), so a bare clear would
  * leave only the "Value …" prompt visible after dismissing a Tab completion
  * list.
  *
- * While a @c readlineWithRepaint call in the Settings Editor is active, the
+ * While a @c editLineWithRepaint call in the Settings Editor is active, the
  * draw lambda that was supplied as its repaint callback is stored in
  * @c g_fn. @c clear_screen_and_buffer consults it before clearing and — when
  * set — uses it to repaint the whole screen body instead of just clearing.
  *
  * The hook is installed and removed around each Settings Editor prompt by
- * @c readlineWithRepaint (settingsEditor.cpp), so it is only ever live on
- * those screens. The callback and accessors are defined once in readline.cpp.
+ * @c editLineWithRepaint (settingsEditor.cpp), so it is only ever live on
+ * those screens. The callback and accessors are defined once in promptCompletion.cpp.
  *
  * @par Repaint callback contract
  * The stored callback is the same one the resize watcher runs, so it must end
@@ -145,13 +138,13 @@ namespace SettingsEditorRepaint {
 	const std::function<void()>& get();
 }
 
-/** Hook for reloading readline async style. */
+/** Hook for reloading line editor async style. */
 int checkPendingRefresh();
 
-/** @brief Clears readline list completions on exact matches. */
-int my_rl_complete(int ignore, int invoking_key);
+/** @brief Clears line editor list completions on exact matches. */
+int completePrompt(int ignore, int invoking_key);
 
-/** @brief Custom hook for GNU Readline to display completions with pagination and color themes. */
+/** @brief Custom hook for the native line editor to display completions with pagination and color themes. */
 
 /**
  * KEYBINDING MANAGEMENT
@@ -159,9 +152,9 @@ int my_rl_complete(int ignore, int invoking_key);
  */
 
 // --- Restore Prompt After Completions ---
-void RestoreReadlineBuffer();
+void RestoreLineEditorBuffer();
 
-//--- Arms a one-shot readline startup hook that restores stashed input ---
+//--- Arms a one-shot line editor startup hook that restores stashed input ---
 void armPendingInputRestore();
 
 // --- Exit Handler ---
@@ -187,9 +180,9 @@ void setup_custom_keybindingsForSearches(void);
 void reset_custom_keybindingsForSearches(void);
 
 /**
- * READLINE COMPLETION SUBSYSTEM
+ * PROMPT COMPLETION SUBSYSTEM
  * Declarations for the pagination, settings-value completion, and completion
- * listing functions implemented in readline_completion.cpp.
+ * listing functions implemented in promptCompletion.cpp.
  */
 
 /**
@@ -199,7 +192,7 @@ void reset_custom_keybindingsForSearches(void);
  * detect the start of a new completion session, and drops the saved
  * completion-repaint snapshot. Invoked by @c completion_cb at the beginning of
  * each completion attempt, after a screen wipe via @c clear_screen_and_buffer
- * and @c my_rl_complete, and at the top of the Settings Editor's per-setting
+ * and @c completePrompt, and at the top of the Settings Editor's per-setting
  * loop so a list from a previous prompt can never be repainted on a different
  * screen. It does not touch any other Settings Editor state — no such flag
  * exists in the completion TU.
@@ -211,7 +204,7 @@ void reset_custom_keybindingsForSearches(void);
  * Populates the candidate list from the setting's allowed values and, when
  * candidates exist, installs the value-completion entry point
  * (@c setting_value_completion_entry) and the shared listing display hook
- * (@c customListingsFunction), binds <kbd>Tab</kbd> to @c my_rl_complete, and
+ * (@c customListingsFunction), binds <kbd>Tab</kbd> to @c completePrompt, and
  * resets pagination so the listing starts on page 1.
  *
  * The Settings Editor listing is labelled "Valid Completion Matches" and uses

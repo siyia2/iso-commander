@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "../common/testHarness.h"
+import isocmd.input.lineEditor;
+import isocmd.input.promptCompletion;
 import isocmd.write2usb.util.telemetry;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
@@ -48,6 +50,49 @@ namespace isocmd_tests {
 		CHECK(formatSpeed(0.05)=="51.2 KB/s");
 		CHECK(formatSpeed(0.1)=="0.1 MB/s");
 		CHECK(formatSpeed(12.34)=="12.3 MB/s");
+
+	}
+
+	void usbMappingCompletion() {
+
+		const std::vector<IsoInfo> isos(2);
+		std::vector<std::string> devices{"/dev/sde", "/dev/sdc"};
+		struct Restore {
+			CompleterData data = g_completerData;
+			const char* buffer = editorLineBuffer;
+			int append = editorCompletionAppendCharacter, handled = editorCompletionHandled;
+			~Restore() {
+				g_completerData = data;
+				editorLineBuffer = buffer;
+				editorCompletionAppendCharacter = append;
+				editorCompletionHandled = handled;
+			}
+		} restore;
+		g_completerData = {&isos, &devices};
+		auto complete = [](const std::string& line, int start, int end) {
+			editorLineBuffer = line.c_str();
+			auto result = completion_cb(std::string_view(line).substr(start, end - start), start, end);
+			editorLineBuffer = nullptr;
+			CHECK(editorCompletionHandled == 1);
+			return result;
+		};
+		auto tail = [&](const std::string& line) {
+			const auto start = line.rfind(';') + 1;
+			return complete(line, static_cast<int>(start), static_cast<int>(line.size()));
+		};
+		CHECK(tail("1") == std::vector<std::string>({"1>/dev/sd", "1>/dev/sdc", "1>/dev/sde"}));
+		CHECK(tail("1>/dev/sde;") == std::vector<std::string>{"2>/dev/sdc"});
+		CHECK(tail("2>/dev/sdc;") == std::vector<std::string>{"1>/dev/sde"});
+		CHECK(tail("1>/dev/sde;2>/dev/sd") == std::vector<std::string>{"2>/dev/sdc"});
+		CHECK(tail("1>/dev/sde;1") == std::vector<std::string>{"1>/dev/sdc"});
+		CHECK(tail("1>/dev/sde;2>/dev/sdc;").empty());
+		CHECK(tail(" 1 > /dev/sde ;") == std::vector<std::string>{"2>/dev/sdc"});
+		CHECK(complete(";1>/dev/sde", 0, 0) == std::vector<std::string>{"2>/dev/sdc"});
+		devices.push_back("/dev/sdf");
+		CHECK(tail("1>/dev/sde;") == std::vector<std::string>({"2>/dev/sd", "2>/dev/sdc", "2>/dev/sdf"}));
+		CHECK(tail("1>/dev/sde;2>/dev/sdc;1") == std::vector<std::string>{"1>/dev/sdf"});
+		devices = {"/dev/null", "/dev/zero"};
+		CHECK(tail("1>/dev/../dev/null;") == std::vector<std::string>{"2>/dev/zero"});
 
 	}
 

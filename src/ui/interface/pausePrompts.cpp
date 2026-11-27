@@ -7,9 +7,9 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.input.inputHandling;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.ui.cli.syncOutput;
@@ -149,12 +149,12 @@ namespace {
 		}
 	};
 
-	/// Synchronizes Readline's screen dimensions with the current terminal size.
-	void syncReadlineScreenSize() {
+	/// Synchronizes the line editor's screen dimensions with the current terminal size.
+	void syncLineEditorScreenSize() {
 
 		const TermSize sz = terminalSize();
 		if (sz.cols != 0 && sz.rows != 0) {
-			rl_set_screen_size(
+			editorSetScreenSize(
 			    static_cast<int>(sz.rows),
 			    static_cast<int>(sz.cols)
 			);
@@ -174,7 +174,7 @@ namespace {
 	                             const std::function<void()>* repaint,
 	                             bool clearScreen) {
 
-		syncReadlineScreenSize();
+		syncLineEditorScreenSize();
 		{
 			SyncOutput sync;
 			if (clearScreen) {
@@ -216,6 +216,11 @@ namespace {
 	 *         -1 if interrupted by a signal or woken without POLLIN and ready to retry.
 	 */
 	int pollAndReadKey(const sigset_t& waitMask, char& outCh) {
+
+		if (const int pending = editorTakePendingInput(); pending >= 0) {
+			outCh = static_cast<char>(pending);
+			return 1;
+		}
 
 		struct pollfd pfd{STDIN_FILENO, POLLIN, 0};
 		const int r = ppoll(&pfd, 1, nullptr, &waitMask);

@@ -3,17 +3,17 @@
 // Renders and controls the interactive menus, including background status messages.
 
 #include <stdio.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.app.main;
 import isocmd.core.globalMutexes;
 import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.select.select;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;
 
@@ -79,13 +79,13 @@ void selectForIsoFiles(const std::string& operation,
  *
  * - @c isAtISOList is set to @c false on every iteration before drawing
  *   (default memory ordering).
- * - A null readline return (Ctrl+D) or Esc breaks the loop.
- * - @c \\f and @c \\t are bound to no-ops each iteration so default Readline
+ * - A null line editor return (Ctrl+D) or Esc breaks the loop.
+ * - @c \\f and @c \\t are bound to no-ops each iteration so default Line editor
  *   bindings cannot corrupt the menu.
  * - The menu is drawn by a lambda (@c drawMenu) that wraps output in
  *   @c SyncOutput and calls @c clearScrollBuffer() before each draw, so every
  *   draw (including resize repaints) starts from a cleared screen. The same
- *   lambda is passed to @c readlineWithResize(), so it repaints on
+ *   lambda is passed to @c editLineWithResize(), so it repaints on
  *   terminal-width changes while the prompt waits. The lambda stops one line
  *   short of the blank line before the prompt: the loop body prints that line
  *   itself on the normal path, and the resize watcher prints it after a
@@ -133,25 +133,25 @@ void submenu1(std::atomic<bool>& isAtISOList,
 	};
 
 	while (true) {
-		rl_bind_key('\f', prevent_readline_keybindings);
-		rl_bind_key('\t', prevent_readline_keybindings);
+		editorBindKey('\f', ignoreEditorKeybinding);
+		editorBindKey('\t', ignoreEditorKeybinding);
 
 		isAtISOList.store(false);
 		drawMenu();
 		std::cout << "\n";   // blank line before the prompt
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const LineEditorAndPromptTheme pt = getPromptTheme();
 		const std::string prompt = std::string(pt.primary) +
 		                           "Enter choice [1-6]: " +
 		                           std::string(pt.reset);
 
-		RlLine input = readlineWithResize(prompt, drawMenu);
+		EditorLine input = editLineWithResize(prompt, drawMenu);
 
-		if (!input || input.get()[0] == 27) {
+		if (!input || (*input)[0] == 27) {
 			break;
 		}
 
-		std::string choice(input.get());
+		std::string choice(*input);
 		if (choice.length() == 1) {
 			switch (choice[0]) {
 				case '1':
@@ -198,11 +198,11 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
  * ("bin", "chd", "daa", "mdf", "nrg"). Multi-character input is ignored and
  * the menu redraws.
  *
- * - A null readline return (Ctrl+D) or Esc breaks the loop.
+ * - A null line editor return (Ctrl+D) or Esc breaks the loop.
  * - @c \\f and @c \\t are bound to no-ops each iteration.
  * - The menu is drawn by a lambda that wraps output in @c SyncOutput and
  *   calls @c clearScrollBuffer() before each draw, and is passed to
- *   @c readlineWithResize(), so it repaints on terminal-width changes while
+ *   @c editLineWithResize(), so it repaints on terminal-width changes while
  *   the prompt waits. The lambda stops one line short of the blank line
  *   before the prompt (the prompt has no leading newline): the loop body
  *   prints that line itself, and the resize watcher prints it after a
@@ -240,24 +240,24 @@ void submenu2(std::shared_ptr<RefreshState> state) {
 	};
 
 	while (true) {
-		rl_bind_key('\f', prevent_readline_keybindings);
-		rl_bind_key('\t', prevent_readline_keybindings);
+		editorBindKey('\f', ignoreEditorKeybinding);
+		editorBindKey('\t', ignoreEditorKeybinding);
 
 		drawMenu();
 		std::cout << "\n";   // blank line before the prompt
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const LineEditorAndPromptTheme pt = getPromptTheme();
 		const std::string prompt = std::string(pt.primary) +
 		                           "Enter choice [1-5]: " +
 		                           std::string(pt.reset);
 
-		RlLine input = readlineWithResize(prompt, drawMenu);
+		EditorLine input = editLineWithResize(prompt, drawMenu);
 
-		if (!input || input.get()[0] == 27) {
+		if (!input || (*input)[0] == 27) {
 			break;
 		}
 
-		std::string choice(input.get());
+		std::string choice(*input);
 		std::string operation;
 		if (choice.length() == 1) {
 			switch (choice[0]) {
@@ -320,10 +320,10 @@ void printMenu() {
  * @c clearScrollBuffer(), then calls @c print_ascii() and @c printMenu().
  * Ends right after the menu's last line, so the caller (or the resize watcher)
  * supplies the blank line before the prompt. Shared by the main prompt's
- * resize repaint (@c readlineWithResize) and @c checkPendingRefresh().
+ * resize repaint (@c editLineWithResize) and @c checkPendingRefresh().
  *
- * Must not call @c readline() and must not block: it is invoked from the
- * resize-watcher and Readline event-hook contexts.
+ * Must not call @c editLine() and must not block: it is invoked from the
+ * resize-watcher and Line editor event-hook contexts.
  */
 void drawMainMenu() {
 
@@ -335,16 +335,16 @@ void drawMainMenu() {
 }
 
 /**
- * @brief Readline event hook that performs deferred UI refreshes on the main
+ * @brief Line editor event hook that performs deferred UI refreshes on the main
  * thread.
  *
- * Readline is not thread-safe, so no background thread may call Readline
- * functions (@c rl_on_new_line, @c rl_redisplay, ...) or write to the terminal
- * while a @c readline() call may be active. Background threads instead publish
+ * the line editor is not thread-safe, so no background thread may call Line editor
+ * functions (@c editorRedisplay, ...) or write to the terminal
+ * while a @c editLine() call may be active. Background threads instead publish
  * a @c PendingRefreshKind via @c GlobalState::g_pendingRefreshKind (see
  * @c monitorAndClearMessage, @c clearMessageAfterTimeoutInMain,
  * @c refreshListAfterAutoUpdate). This function is installed as
- * @c rl_event_hook and invoked periodically by Readline itself, on the main
+ * @c editorEventHook and invoked periodically by the line editor itself, on the main
  * thread, while idle and waiting for input. It drains any pending request
  * atomically via @c g_pendingRefreshKind.exchange(PendingRefreshKind::None)
  * and performs the corresponding redraw before restoring the user's current
@@ -352,24 +352,23 @@ void drawMainMenu() {
  *
  * - **Suppression:** If @c GlobalState::g_suppressPendingRefresh is set, the
  *   hook returns immediately without consuming or acting on any pending
- *   request. Nested Readline prompts (e.g. the FilterTerms prompt in
+ *   request. Nested line-editor prompts (e.g. the FilterTerms prompt in
  *   @c runSharedFilterFlow) use a different prompt/keybinding context, and
- *   redrawing over them mid-call would desync Readline's internal cursor/line
+ *   redrawing over them mid-call would desync the line editor's internal cursor/line
  *   state and crash. The pending request is left intact in
  *   @c g_pendingRefreshKind and retried on a later poll — refreshes are
  *   deferred, not dropped.
  * - **MainMenu:** Re-renders the main menu screen via @c drawMainMenu()
  *   (clear screen/scrollback, banner, menu), then prints a blank line and
- *   flushes before calling @c rl_on_new_line() and @c redisplayPrompt().
+ *   flushes before calling @c redisplayPrompt().
  * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under
- *   @c GlobalMutexes::readLineMutex (the pointer handoff is not otherwise
+ *   @c GlobalMutexes::editorMutex (the pointer handoff is not otherwise
  *   thread-safe), then re-renders the ISO list via @c loadAndDisplayIso using
- *   that state. If the copied state is null, no repaint or Readline restore
+ *   that state. If the copied state is null, no repaint or Line editor restore
  *   is performed.
  * - **None:** No-op.
  * - In the MainMenu branch, and in the IsoList branch only when the copied
- *   state is non-null, the hook finishes by calling @c rl_on_new_line() and
- *   @c redisplayPrompt() to repaint the user's prompt/input line beneath the new
+ *   state is non-null, the hook finishes by calling @c redisplayPrompt() to repaint the user's prompt/input line beneath the new
  *   output without discarding what they've typed.
  * - **Staleness:** After consuming a request, the hook verifies on the main
  *   thread that the target screen is still active (@c GlobalState::isAtMain
@@ -379,7 +378,7 @@ void drawMainMenu() {
  * - **Chaining:** When a @c ListResizeWatcher is active, its hook calls this
  *   function as the previously installed hook, so both keep working.
  *
- * @return Always 0, per the @c rl_event_hook / @c rl_hook_func_t contract.
+ * @return Always 0, per the @c editorEventHook / @c EditorHook contract.
  */
 int checkPendingRefresh() {
 
@@ -396,12 +395,12 @@ int checkPendingRefresh() {
 	if (kind == PendingRefreshKind::MainMenu) {
 		drawMainMenu();
 		std::cout << "\n" << std::flush;
-		rl_on_new_line();
+
 		redisplayPrompt();
 	} else if (kind == PendingRefreshKind::IsoList) {
 		std::shared_ptr<RefreshState> state;
 		{
-			std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
+			std::lock_guard<std::mutex> lk(GlobalMutexes::editorMutex);
 			state = GlobalState::g_pendingRefreshState;
 		}
 		if (state) {
@@ -410,7 +409,7 @@ int checkPendingRefresh() {
 			                  state->umountMvRmBreak, state->pendingIndices, state->hasPendingProcess,
 			                  state->currentPage, state->originalPage, state);
 			std::cout << "\n" << std::flush;
-			rl_on_new_line();
+
 			redisplayPrompt();
 		}
 	}
@@ -432,10 +431,10 @@ int checkPendingRefresh() {
  * without publishing anything.
  *
  * The actual redraw — clearing the "Auto-Update" status line, re-rendering the
- * banner and menu, and restoring the user's input prompt via Readline's
- * @c rl_on_new_line() / @c redisplayPrompt() — happens later, on the main thread,
- * in @c checkPendingRefresh. This function makes no Readline calls and writes
- * nothing to the terminal, since Readline is not thread-safe.
+ * banner and menu, and restoring the user's input prompt via the line editor's
+ * @c redisplayPrompt() — happens later, on the main thread,
+ * in @c checkPendingRefresh. This function makes no line-editor calls and writes
+ * nothing to the terminal, since the line editor is not thread-safe.
  *
  * @param state         Shared state with the import flag. The wait ends when
  *                      @c isImportRunning becomes false or @c stopSignal is
@@ -477,7 +476,7 @@ void monitorAndClearMessage(std::shared_ptr<RefreshState> state, std::atomic<boo
  * @c PendingRefreshKind::MainMenu via @c GlobalState::g_pendingRefreshKind so
  * @c checkPendingRefresh performs the actual redraw on the main thread. If a
  * stop is observed on the final tick, it returns without publishing. Makes no
- * Readline calls and writes nothing to the terminal itself.
+ * line-editor calls and writes nothing to the terminal itself.
  *
  * @param timeoutTicks  Number of 500 ms ticks to wait before clearing
  *                      (e.g. 2 = 1s, 8 = 4s).
@@ -519,7 +518,7 @@ void clearMessageAfterTimeoutInMain(int timeoutTicks, std::atomic<bool>& isAtMai
  * scrollback clear is terminal-dependent: some terminals support it, others
  * ignore or interpret \033[3J differently, so it should not be relied on as a
  * guaranteed reset. Writes via std::cout without flushing and does not touch
- * Readline state; calling it while Readline is active may leave the prompt /
+ * line-editor state; calling it while the line editor is active may leave the prompt /
  * line-editing state inconsistent.
  */
 void clearScrollBuffer() {

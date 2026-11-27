@@ -6,15 +6,15 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.filter.filter;
 import isocmd.ui.display.display;
 import isocmd.ui.display.printList;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.display.stringListView;
 import isocmd.ui.display.themes;
 import isocmd.util.stringManipulation;
@@ -66,7 +66,7 @@ namespace {
 	 *
 	 * Session lifecycle: resetLivePreviewIteration() clears the incremental
 	 * narrowing/windowing fields and sets @c active; deactivateLivePreview()
-	 * clears @c active; ~LivePreviewReadlineGuard() zeroes the whole struct.
+	 * clears @c active; ~LivePreviewLineEditorGuard() zeroes the whole struct.
 	 * The caches (@c hasDerivedCache/@c derivedCache/@c lowerCache) are primed by
 	 * configureLivePreview() and are reused across keystrokes within one prompt.
 	 */
@@ -88,7 +88,7 @@ namespace {
 		std::vector<std::string> derivedCache;
 		std::vector<std::string> lowerCache;
 
-		// Incremental-narrowing state, reset at the start of every readline().
+		// Incremental-narrowing state, reset at the start of every editLine().
 		std::string lastQuery;
 		std::vector<std::size_t> lastMatches;
 
@@ -896,7 +896,7 @@ namespace {
 	/**
 	 * @brief Computes matches and paints one windowed live-preview frame.
 	 *
-	 * Does not interact with Readline or print the blank separator row.
+	 * Does not interact with Line editor or print the blank separator row.
 	 *
 	 * When the query changed since the last frame, resets the preview cursor and
 	 * scroll offset to the top before computing the window. Updates
@@ -935,12 +935,12 @@ namespace {
 
 	}
 
-	// ─── Readline Integration ────────────────────────────────────────────────────
+	// ─── Line editor Integration ────────────────────────────────────────────────────
 
 	/**
-	 * @brief Readline redisplay hook that repaints the live preview when needed.
+	 * @brief Line editor redisplay hook that repaints the live preview when needed.
 	 *
-	 * Repaints the list, prints its separator row, and forces Readline to redraw
+	 * Repaints the list, prints its separator row, and forces Line editor to redraw
 	 * the prompt and current input after the screen has been repainted.
 	 *
 	 * The hook skips repainting (drawing only the input row) when:
@@ -958,7 +958,7 @@ namespace {
 			return;
 		}
 
-		const std::string query(rl_line_buffer ? rl_line_buffer : "");
+		const std::string query(editorLineBuffer ? editorLineBuffer : "");
 
 		const bool isFirstFrameOfThisCall = !g_livePreview.primed;
 		g_livePreview.primed = true;
@@ -993,7 +993,7 @@ namespace {
 		std::cout << "\n" << std::flush;
 
 		// The list was repainted; draw the input without re-entering this hook.
-		rl_on_new_line();
+
 		redisplayPrompt();
 
 	}
@@ -1064,12 +1064,12 @@ namespace {
 	}
 
 	/**
-	 * @brief Readline PageUp handler for preview-window scrolling.
+	 * @brief Line editor PageUp handler for preview-window scrolling.
 	 *
-	 * Readline passes (count, key) but the preview ignores both; the action is
-	 * always a single page up. Returns 0 to signal success to Readline.
+	 * Line editor passes (count, key) but the preview ignores both; the action is
+	 * always a single page up. Returns 0 to signal success to Line editor.
 	 */
-	int rlPreviewPageUp(int /*count*/, int /*key*/)
+	int editorPreviewPageUp(int /*count*/, int /*key*/)
 	{
 
 		movePreviewWindowCursor(-1);
@@ -1078,12 +1078,12 @@ namespace {
 	}
 
 	/**
-	 * @brief Readline PageDown handler for preview-window scrolling.
+	 * @brief Line editor PageDown handler for preview-window scrolling.
 	 *
-	 * Readline passes (count, key) but the preview ignores both; the action is
-	 * always a single page down. Returns 0 to signal success to Readline.
+	 * Line editor passes (count, key) but the preview ignores both; the action is
+	 * always a single page down. Returns 0 to signal success to Line editor.
 	 */
-	int rlPreviewPageDown(int /*count*/, int /*key*/)
+	int editorPreviewPageDown(int /*count*/, int /*key*/)
 	{
 
 		movePreviewWindowCursor(1);
@@ -1099,7 +1099,7 @@ namespace {
  * @return True if a preview frame has been rendered during the current
  *         preview session; otherwise false. The flag is set by
  *         paintLivePreviewFrame() and is not cleared by
- *         resetLivePreviewIteration() — only by the LivePreviewReadlineGuard
+ *         resetLivePreviewIteration() — only by the LivePreviewLineEditorGuard
  *         destructor (which zeroes the whole preview state).
  */
 bool livePreviewWasRepainted()
@@ -1152,8 +1152,8 @@ void configureLivePreview(
  * @brief Repaints the active live preview after a terminal resize.
  *
  * Refreshes the window height from the new terminal dimensions and paints a
- * frame using the current Readline line buffer. Does not print the separator
- * row or force Readline to redraw the prompt (the resize path handles that).
+ * frame using the current line-editor buffer. Does not print the separator
+ * row or force Line editor to redraw the prompt (the resize path handles that).
  *
  * @return True if the live preview handled the repaint; otherwise false (the
  *         caller should fall back to its own resize handling).
@@ -1165,14 +1165,14 @@ bool repaintLivePreviewOnResizeIfConfigured()
 	    return false;
 
 	refreshPreviewWindowHeight();
-	paintLivePreviewFrame(rl_line_buffer ? rl_line_buffer : "");
+	paintLivePreviewFrame(editorLineBuffer ? editorLineBuffer : "");
 
 	return true;
 
 }
 
 /**
- * @brief Resets incremental matching and windowing state before readline().
+ * @brief Resets incremental matching and windowing state before editLine().
  *
  * Clears @c lastQuery, @c lastMatches, cursor/offset, and @c forceRepaint;
  * refreshes the window height from the terminal; clears @c primed and sets
@@ -1194,7 +1194,7 @@ void resetLivePreviewIteration()
 
 }
 
-/// Marks the live-preview session inactive after readline() returns.
+/// Marks the live-preview session inactive after editLine() returns.
 void deactivateLivePreview()
 {
 
@@ -1203,40 +1203,40 @@ void deactivateLivePreview()
 }
 
 /**
- * @brief Installs and restores the Readline live-preview hooks and keybindings.
+ * @brief Installs and restores the Line editor live-preview hooks and keybindings.
  *
  * Construction installs the preview redisplay callback and scrolling keys.
  * Destruction restores history navigation bindings, resets preview state,
- * and restores the default Readline redisplay callback.
+ * and restores the default Line editor redisplay callback.
  *
  * Page Up/Page Down are bound to previous/next history by default; the
  * constructor rebinds them to preview scrolling, and the destructor restores
- * those named functions and sets @c rl_redisplay_function back to
- * @c rl_redisplay.
+ * those named functions and sets @c editorRedisplayHook back to
+ * @c editorRedisplay.
  */
-LivePreviewReadlineGuard::LivePreviewReadlineGuard()
+LivePreviewLineEditorGuard::LivePreviewLineEditorGuard()
 {
 
-	rl_redisplay_function = liveFilterRedisplayHook;
+	editorRedisplayHook = liveFilterRedisplayHook;
 
-	rl_bind_keyseq("\x1b[5~", rlPreviewPageUp);   // PageUp
-	rl_bind_keyseq("\x1b[6~", rlPreviewPageDown); // PageDown
+	editorBindKeySequence("\x1b[5~", editorPreviewPageUp);   // PageUp
+	editorBindKeySequence("\x1b[6~", editorPreviewPageDown); // PageDown
 
 }
 
-LivePreviewReadlineGuard::~LivePreviewReadlineGuard()
+LivePreviewLineEditorGuard::~LivePreviewLineEditorGuard()
 {
 
-	rl_bind_keyseq(
+	editorBindKeySequence(
 	    "\x1b[5~",
-	    rl_named_function("previous-history"));
+	    editorPreviousHistory);
 
-	rl_bind_keyseq(
+	editorBindKeySequence(
 	    "\x1b[6~",
-	    rl_named_function("next-history"));
+	    editorNextHistory);
 
 	g_livePreview = LiveFilterPreview{};
 
-	rl_redisplay_function = rl_redisplay;
+	editorRedisplayHook = editorRedisplay;
 
 }

@@ -2,10 +2,9 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.globalMutexes;
 import isocmd.core.lists;
@@ -13,11 +12,11 @@ import isocmd.core.paths;
 import isocmd.database.databaseOps;
 import isocmd.input.history;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.search.search;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.interface.pausePrompts;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
@@ -729,7 +728,7 @@ static const std::unordered_map<std::string, FileTypeConfig>& getFileTypeMap() {
  *
  * @param dt            The active verbose and database theme styling colors.
  * @param fileExtension The target file extension/category string (e.g., ".bin/.img").
- * @return std::string  The formatted and ANSI-coded readline prompt string.
+ * @return std::string  The formatted and ANSI-coded line editor prompt string.
  */
 static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const std::string& fileExtension) {
 
@@ -761,7 +760,7 @@ static std::string buildSearchPrompt(const VerboseAndDatabaseTheme& dt, const st
  * Strips out trailing ANSI codes and marker characters cleanly to ensure output starts on a fresh line.
  *
  * @param header     The formatted prompt header string.
- * @param typedLine  The exact string currently typed into the readline buffer by the user.
+ * @param typedLine  The exact string currently typed into the line editor buffer by the user.
  * @param resetColor The theme color reset code.
  */
 static void printRepaintedCallerPrompt(const std::string& header, const std::string& typedLine, const std::string& resetColor) {
@@ -770,7 +769,7 @@ static void printRepaintedCallerPrompt(const std::string& header, const std::str
 
 	// Make sure the typed line starts on a new line: find the last
 	// visible character of the header, skipping trailing ANSI SGR
-	// sequences (e.g. "\033[0m") and readline's \001/\002 markers.
+	// sequences (e.g. "\033[0m") and line editor's \001/\002 markers.
 	std::size_t end = header.size();
 	while (end > 0) {
 		const char c = header[end - 1];
@@ -795,19 +794,19 @@ static void printRepaintedCallerPrompt(const std::string& header, const std::str
  *
  * Enables Ctrl+D handling, installs the completion and keybinding hooks,
  * clears the cancellation flag, clears the scroll buffer, and reloads
- * readline history.
+ * line editor history.
  */
 static void initializeIterationState() {
 
 	enable_ctrl_d();
 	setupSignalHandlerCancellations();
-	rl_attempted_completion_function = my_special_completion_entry;
+	editorCompletionHook = my_special_completion_entry;
 	setup_custom_keybindingsForSearches();
 	GlobalState::g_operationCancelled.store(false);
 	clearScrollBuffer();
 	bool filterHistory = false;
 	loadHistory(filterHistory);
-	RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
+	RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = 1;
 
 }
 
@@ -852,7 +851,7 @@ static void parseAndValidateDirectories(
  * Tokens are not trimmed before validation. Special commands provide help,
  * statistics, history clearing, cache clearing, and cached-file listing.
  *
- * Only valid directory tokens are added to readline history, preserving
+ * Only valid directory tokens are added to line editor history, preserving
  * their entered text and order. If new files are found and the scan was not
  * cancelled, the user is taken to the file-selection interface.
  *
@@ -861,7 +860,7 @@ static void parseAndValidateDirectories(
  */
 void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shared_ptr<RefreshState> state) {
 
-	PendingReadlineTextClearGuard pendingTextGuard;
+	PendingLineEditorTextClearGuard pendingTextGuard;
 
 	const auto& fileTypeMap = getFileTypeMap();
 	const auto configIt = fileTypeMap.find(fileTypeChoice);
@@ -891,8 +890,8 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 		bool filterHistory = false;
 
 		initializeIterationState();
-		SearchReadlineGuard guard;
-		RestoreReadlineBuffer();
+		SearchLineEditorGuard guard;
+		RestoreLineEditorBuffer();
 
 		const std::string prompt = buildSearchPrompt(dt, fileExtension);
 
@@ -913,15 +912,15 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
 		};
 
-		RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
+		EditorLine searchQuery = editLineWithResize(prompt, repaintPrompt);
 		if (!searchQuery) return;
 
-		typedLine = searchQuery.get();
+		typedLine = *searchQuery;
 
 		armPendingInputRestore();
-		rl_startup_hook = nullptr;
+		editorStartupHook = nullptr;
 
-		const std::string inputSearch = trimWhitespace(searchQuery.get());
+		const std::string inputSearch = trimWhitespace(*searchQuery);
 		if (inputSearch == "\x1b") return;
 		if (inputSearch.find_first_not_of(" \t\n\r") == std::string::npos) continue;
 
@@ -951,7 +950,7 @@ void promptSearchBinImgChdDaaMdfNrg(const std::string& fileTypeChoice, std::shar
 
 		try {
 			if (!directoryPaths.empty()) {
-				add_history(cleanedInput.c_str());
+				editorAddHistory(cleanedInput);
 				saveHistory(filterHistory);
 			}
 		} catch (const std::exception& e) {

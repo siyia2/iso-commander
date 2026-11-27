@@ -7,7 +7,7 @@ import isocmd.ui.display.themes;
 namespace UI::Palette {
 	std::string defaultColor = "white";
 	std::string BoldReset = "\033[1;38;2;222;222;222m";
-	std::string RL_BoldAlt = "\001\033[1;38;2;222;222;222m\002";
+	std::string PromptBoldAlt = "\001\033[1;38;2;222;222;222m\002";
 }
 
 std::string globalTheme = "original";
@@ -66,7 +66,7 @@ void UI::Palette::updateDefaultColors() {
 
 	BoldReset = std::string(code);
 
-	RL_BoldAlt =
+	PromptBoldAlt =
 	    "\001" + std::string(code.substr(0, code.size() - 1)) + "m\002";
 
 }
@@ -120,7 +120,7 @@ const UI::MainTheme* getActiveTheme() {
 //  Interactive Prompts & Input
 // ============================================================
 
-ReadlineAndPromptTheme getPromptTheme() {
+LineEditorAndPromptTheme getPromptTheme() {
 
 	const MainTheme* t = getActiveTheme();
 	const bool orig = (globalTheme == "original");
@@ -131,7 +131,7 @@ ReadlineAndPromptTheme getPromptTheme() {
 
 	};
 
-	ReadlineAndPromptTheme pt;
+	LineEditorAndPromptTheme pt;
 
 	if (orig) {
 		pt.accent    = wrap(UI::Palette::Green);
@@ -153,7 +153,7 @@ ReadlineAndPromptTheme getPromptTheme() {
 
 }
 
-ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
+LineEditorAndPromptTheme getFilterTheme(const std::string& operationColor, bool includeIso) {
 
 	const MainTheme* t = getActiveTheme();
 	const bool orig = (globalTheme == "original");
@@ -164,7 +164,7 @@ ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool in
 
 	};
 
-	ReadlineAndPromptTheme ft;
+	LineEditorAndPromptTheme ft;
 
 	if (orig) {
 		ft.primary   = wrap(UI::Palette::Blue);
@@ -186,7 +186,7 @@ ReadlineAndPromptTheme getFilterTheme(const std::string& operationColor, bool in
 
 }
 
-ReadlineColors resolveReadlineTheme() {
+LineEditorColors resolveLineEditorTheme() {
 
 	const MainTheme* theme = getActiveTheme();
 	const bool isOrig = (globalTheme == "original");
@@ -313,11 +313,11 @@ WriteTheme getWriteTheme() {
 		wt.deviceCol    = UI::Palette::Yellow;
 		wt.speedCol     = UI::Palette::BoldReset;
 
-		wt.rl_labelCol     = "\001" + std::string(UI::Palette::Green)     + "\002";
-		wt.rl_primaryCol   = "\001" + std::string(UI::Palette::Blue)      + "\002";
-		wt.rl_highlightCol = "\001" + std::string(UI::Palette::Yellow)    + "\002";
-		wt.rl_errorCol     = "\001" + std::string(UI::Palette::Red)       + "\002";
-		wt.rl_resetCol     = "\001" + std::string(UI::Palette::BoldReset) + "\002";
+		wt.editorLabelCol     = "\001" + std::string(UI::Palette::Green)     + "\002";
+		wt.editorPrimaryCol   = "\001" + std::string(UI::Palette::Blue)      + "\002";
+		wt.editorHighlightCol = "\001" + std::string(UI::Palette::Yellow)    + "\002";
+		wt.editorErrorCol     = "\001" + std::string(UI::Palette::Red)       + "\002";
+		wt.editorResetCol     = "\001" + std::string(UI::Palette::BoldReset) + "\002";
 	} else {
 		wt.errLabel     = t->secondary;
 		wt.errPath      = t->warning;
@@ -339,11 +339,11 @@ WriteTheme getWriteTheme() {
 		wt.deviceCol    = t->warning;
 		wt.speedCol     = UI::Palette::BoldReset;
 
-		wt.rl_labelCol     = "\001" + std::string(t->accent)               + "\002";
-		wt.rl_primaryCol   = "\001" + std::string(t->muted)                + "\002";
-		wt.rl_highlightCol = "\001" + std::string(t->warning)              + "\002";
-		wt.rl_errorCol     = "\001" + std::string(t->secondary)            + "\002";
-		wt.rl_resetCol     = "\001" + std::string(UI::Palette::BoldReset)  + "\002";
+		wt.editorLabelCol     = "\001" + std::string(t->accent)               + "\002";
+		wt.editorPrimaryCol   = "\001" + std::string(t->muted)                + "\002";
+		wt.editorHighlightCol = "\001" + std::string(t->warning)              + "\002";
+		wt.editorErrorCol     = "\001" + std::string(t->secondary)            + "\002";
+		wt.editorResetCol     = "\001" + std::string(UI::Palette::BoldReset)  + "\002";
 	}
 
 	return wt;

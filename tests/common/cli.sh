@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Source after setup_sandbox; caller sets app to an absolute executable path.
-# Preserve raw streams for diagnostics and strip ANSI CSI and Readline nonprinting delimiters for assertions.
+# Preserve raw streams for diagnostics and strip ANSI CSI and line-editor nonprinting delimiters for assertions.
 cli_fail() {
     printf 'FAIL: %s: %s\n' "$cli_case" "$*" >&2
     printf '%s\n' '--- stdout ---' >&2; cat cli.stdout.raw >&2

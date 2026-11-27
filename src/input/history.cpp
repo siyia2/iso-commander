@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <readline/history.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.app.main;
 import isocmd.core.paths;
 import isocmd.input.history;
@@ -73,9 +73,9 @@ bool isHistoryFileEmpty(const std::string& filePath) {
 }
 
 /**
- * @brief Loads history from a file into the GNU Readline buffer.
+ * @brief Loads history from a file into the native line editor buffer.
  *
- * Always calls clear_history() on entry, so the in-memory list is reset
+ * Always calls editorClearHistory() on entry, so the in-memory list is reset
  * regardless of the max-lines setting. Selects the path-history or
  * filter-history file based on @p filterHistory and reads it under a shared
  * advisory lock (flock). If the configured max lines for this history type
@@ -84,13 +84,13 @@ bool isHistoryFileEmpty(const std::string& filePath) {
  * returns after the in-memory clear.
  *
  * Lines longer than 4095 bytes are effectively split across multiple
- * add_history() calls because fgets() reads at most sizeof(buf)-1 bytes.
+ * editorAddHistory() calls because fgets() reads at most sizeof(buf)-1 bytes.
  *
  * @param filterHistory True for filter history, false for path history.
  */
 void loadHistory(bool& filterHistory) {
 
-	clear_history();
+	editorClearHistory();
 	std::string targetFilePath = !filterHistory ? GlobalState::historyFilePath : GlobalState::filterHistoryFilePath;
 	std::size_t maxLines = !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 	if (maxLines == 0) return;
@@ -115,7 +115,7 @@ void loadHistory(bool& filterHistory) {
 			if (!line.empty() && line.back() == '\n')
 			    line.pop_back();
 			if (!line.empty()) {
-				add_history(line.c_str());
+				editorAddHistory(line);
 			}
 		}
 		flock(fd, LOCK_UN);
@@ -180,7 +180,7 @@ static int openAndLockTruncatedFile(const std::string& filePath) {
 /**
  * @brief Collects deduplicated history entries in oldest-first order.
  *
- * Reads the current Readline history list from newest to oldest, skips null or
+ * Reads the current line-editor history list from newest to oldest, skips null or
  * empty entries, deduplicates lines, stops once @p maxLines unique entries are
  * gathered, and reverses the result to oldest-first order.
  *
@@ -190,31 +190,24 @@ static int openAndLockTruncatedFile(const std::string& filePath) {
 static std::vector<std::string> collectUniqueHistoryLines(std::size_t maxLines) {
 
 	std::vector<std::string> finalLines;
-	HIST_ENTRY** histList = history_list();
-	if (!histList || maxLines == 0) {
+	const auto& histList = editorHistoryList();
+	if (histList.empty() || maxLines == 0) {
 		return finalLines;
 	}
 
-	int count = 0;
-	while (histList[count]) {
-		++count;
-	}
+	const auto count = histList.size();
 
 	std::unordered_set<std::string> seen;
 	seen.reserve(maxLines);
 
-	for (int i = count - 1; i >= 0; --i) {
-		if (!histList[i] || !histList[i]->line) {
-			continue;
-		}
-
-		std::string line(histList[i]->line);
+	for (std::size_t i = count; i > 0; --i) {
+		const auto& line = histList[i - 1];
 		if (line.empty()) {
 			continue;
 		}
 
 		if (seen.insert(line).second) {
-			finalLines.push_back(std::move(line));
+			finalLines.push_back(line);
 			if (finalLines.size() >= maxLines) {
 				break;
 			}
@@ -256,17 +249,17 @@ static void writeLinesAndUnlock(int fd, const std::vector<std::string>& lines) {
 }
 
 /**
- * @brief Saves the current Readline history to a persistent file.
+ * @brief Saves the current line-editor history to a persistent file.
  *
  * Selects the path-history or filter-history file based on @p filterHistory.
  * If the configured max lines for this history type is 0, history is
  * disabled: the in-memory list is cleared and the file on disk is left
  * untouched. Otherwise creates the parent directory if absent, opens the
  * file with O_WRONLY | O_CREAT (mode 0644), takes an exclusive advisory lock
- * (flock), and truncates it via ftruncate(). Iterates history_list() from
+ * (flock), and truncates it via ftruncate(). Iterates editorHistoryList() from
  * newest to oldest, deduplicating entries and stopping once maxLines unique
  * entries have been collected; the collected list is then reversed to
- * oldest-first file order and written. If history_list() is empty or null,
+ * oldest-first file order and written. If editorHistoryList() is empty,
  * the file is still truncated to zero, so an empty in-memory history
  * legitimately wipes the file.
  *
@@ -283,7 +276,7 @@ void saveHistory(bool& filterHistory) {
 	    !filterHistory ? GlobalState::MAX_HISTORY_LINES : GlobalState::MAX_HISTORY_PATTERN_LINES;
 
 	if (maxLines == 0) {
-		clear_history();
+		editorClearHistory();
 		return;
 	}
 
@@ -313,12 +306,12 @@ void saveHistory(bool& filterHistory) {
  * than GlobalState::historyFilePath / filterHistoryFilePath; this is a
  * hardcoded path that assumes those globals point at the same location.
  * The file is truncated via std::ofstream with trunc; on success
- * clear_history() is called immediately (not from inside the render lambda),
+ * editorClearHistory() is called immediately (not from inside the render lambda),
  * and on failure nothing in memory is cleared.
  *
  * The success or failure message is rendered via a `render` lambda so it can
  * be replayed by the resize watcher and the press-Enter prompt without drift.
- * The side effects (file truncation and, on success, clear_history) happen
+ * The side effects (file truncation and, on success, editorClearHistory) happen
  * exactly once before the render lambda is first invoked; subsequent replays
  * only redraw. repaintHeader is skipped on the first draw because the prompt
  * is still visible, and invoked on later (resize) redraws.
@@ -373,7 +366,7 @@ void clearHistory(const std::string& inputSearch,
 		pressEnterToContinueWithRepaint(render);
 	} else {
 		ofs.close();
-		clear_history();
+		editorClearHistory();
 
 		auto render = [&] {
 

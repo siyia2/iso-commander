@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export module isocmd.ui.display.readlineResize;
+export module isocmd.ui.display.lineEditorResize;
 
 import std;
 
@@ -8,25 +8,25 @@ import std;
 export extern "C++" {
 
 /**
- * @brief Repaints a screen when the terminal size changes while a Readline
+ * @brief Repaints a screen when the terminal size changes while a Line editor
  *        prompt waits.
  *
- * Construct it immediately before @c readline() and let it go out of scope
- * immediately after (or use @ref readlineWithResize).
+ * Construct it immediately before @c editLine() and let it go out of scope
+ * immediately after (or use @ref editLineWithResize).
  *
  * While it exists:
  * - a @c SIGWINCH handler is installed;
- * - an @c rl_event_hook checks for terminal-size changes;
- * - Readline's screen dimensions are updated;
+ * - an @c editorEventHook checks for terminal-size changes;
+ * - the line editor's screen dimensions are updated;
  * - the repaint callback redraws the screen;
- * - Readline restores the prompt and any half-typed input.
+ * - the line editor restores the prompt and any half-typed input.
  *
- * All terminal and Readline access stays on the calling thread.
+ * All terminal and Line editor access stays on the calling thread.
  *
  * @note Only one watcher may be active at a time: the event hook and
  *       the @c SIGWINCH handler are process-global.
  *
- * @see readlineWithResize
+ * @see editLineWithResize
  */
 class ListResizeWatcher {
 public:
@@ -60,14 +60,14 @@ private:
 };
 
 /// Draw only the prompt/input row, without invoking a live-preview hook.
-/// Falls back to native Readline when no fixed prompt is active.
+/// Falls back to native Line editor when no fixed prompt is active.
 void redisplayPrompt();
 
-/// Owning pointer for a line returned by @c readline() (freed with @c std::free).
-using RlLine = std::unique_ptr<char, decltype(&std::free)>;
+/// A submitted line, or no value on EOF.
+using EditorLine = std::optional<std::string>;
 
 /**
- * @brief Wraps @c readline() with terminal resize handling and optional
+ * @brief Wraps @c editLine() with terminal resize handling and optional
  *        Tab-completion control.
  *
  * The prompt remains visible while the editable input scrolls horizontally,
@@ -75,7 +75,7 @@ using RlLine = std::unique_ptr<char, decltype(&std::free)>;
  * custom redisplay hooks (such as the live Filter preview) can retain control
  * of list repainting and delegate the input row to @c redisplayPrompt().
  *
- * @param prompt               Prompt passed to @c readline().
+ * @param prompt               Prompt passed to @c editLine().
  * @param repaint              Callback invoked on terminal resize; pass
  *                             nullptr to disable resize handling.
  * @param disableTabCompletion When true, suppresses Tab completion for the
@@ -83,7 +83,7 @@ using RlLine = std::unique_ptr<char, decltype(&std::free)>;
  *
  * @return The line read, or null on EOF (Ctrl+D).
  */
-RlLine readlineWithResize(
+EditorLine editLineWithResize(
     const std::string& prompt,
     ListResizeWatcher::Repaint repaint = nullptr,
     bool disableTabCompletion = false);

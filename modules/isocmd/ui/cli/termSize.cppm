@@ -122,10 +122,10 @@ void fitRowToWidth(
 /**
  * @brief Visible text of every prompt line except the last.
  *
- * Removes Readline's \001/\002 invisible-text markers and returns the
+ * Removes the line editor's \001/\002 invisible-text markers and returns the
  * text before the last newline without that newline.
  *
- * @param prompt Full prompt string passed to @c readline().
+ * @param prompt Full prompt string passed to @c editLine().
  * @return Header text, or empty if the prompt contains no newline.
  */
 std::string promptHeaderForRepaint(const std::string& prompt);

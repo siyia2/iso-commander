@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.globalMutexes;
 import isocmd.core.lists;
@@ -13,10 +12,10 @@ import isocmd.core.uiState;
 import isocmd.database.databaseOps;
 import isocmd.filter.filter;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.select.select;
 import isocmd.select.selectShared;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.display.themes;
 import isocmd.ui.info.verbose;
 
@@ -36,7 +35,7 @@ namespace {
 		 * Resolves the active list (filtered view unless @p useSourceList is true),
 		 * dispatches to the mount/umount, write2usb, or cp/mv/rm pipeline, then
 		 * invokes handleSelectIsoFilesResults() to print the outcome and possibly
-		 * clear readline history.
+		 * clear line editor history.
 		 *
 		 * @param inputString   Raw user input containing 1-based indices or ranges.
 		 * @param isFiltered    Whether a filter is currently active.
@@ -47,7 +46,7 @@ namespace {
 		 *                      "write2usb").
 		 * @param umountMvRmBreak Set true for unmount and forwarded/updated by the
 		 *                      cp/mv/rm and mount/umount pipelines.
-		 * @param filterHistory Whether to load/save readline history for cp/mv/rm.
+		 * @param filterHistory Whether to load/save line editor history for cp/mv/rm.
 		 * @param useSourceList When true, indices refer to the full source list even
 		 *                      if a filter is active (used for "P", whose indices are
 		 *                      source indices).
@@ -89,18 +88,18 @@ namespace {
 		 *
 		 * Waits on a condition variable until the import thread signals completion,
 		 * then publishes a pending refresh request instead of touching the terminal or
-		 * Readline. The actual redraw happens later, on the main thread, inside
-		 * Readline's event hook @c checkPendingRefresh — the only thread permitted to
-		 * call Readline functions or write to the terminal.
+		 * Line editor. The actual redraw happens later, on the main thread, inside
+		 * the line editor's event hook @c checkPendingRefresh — the only thread permitted to
+		 * call Line editor functions or write to the terminal.
 		 *
 		 * - **Thread safety:** holds the shared @c RefreshState alive via
 		 *   @c std::shared_ptr; the handoff to @c GlobalState::g_pendingRefreshState is
 		 *   itself guarded by a mutex, since a bare @c shared_ptr is not safe to read
 		 *   and write concurrently.
 		 * - **Event-driven:** blocks on @c RefreshState::importCV rather than polling.
-		 * - **No direct Readline access:** only stores the target state and publishes
-		 *   @c PendingRefreshKind::IsoList; the redraw (including @c rl_on_new_line()
-		 *   and @c rl_redisplay()) happens later in @c checkPendingRefresh.
+		 * - **No direct Line editor access:** only stores the target state and publishes
+		 *   @c PendingRefreshKind::IsoList; the redraw (including @c redisplayPrompt()
+		 *   and @c editorRedisplay()) happens later in @c checkPendingRefresh.
 		 * - **Pending selection:** the watcher never touches the staged selection.
 		 *   Staged paths survive the reload by construction; the index display is
 		 *   recomputed by the loader on the main thread when it redraws (see
@@ -134,7 +133,7 @@ namespace {
 			}
 			if (isAtISOList.load()) {
 				{
-					std::lock_guard<std::mutex> lk(GlobalMutexes::readLineMutex);
+					std::lock_guard<std::mutex> lk(GlobalMutexes::editorMutex);
 					GlobalState::g_pendingRefreshState = state;                        // set state first
 				}
 				GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::IsoList); // then publish
@@ -165,7 +164,7 @@ namespace {
 			std::vector<std::thread>&       backgroundThreads;
 			std::shared_ptr<RefreshState>   refreshState;
 			std::vector<std::string>&       isoDirs;
-			ReadlineKeybindingGuard&        keybindingGuard;
+			LineEditorKeybindingGuard&        keybindingGuard;
 			const bool                      isUnmount;
 			const std::string               operationColor;
 
@@ -205,7 +204,7 @@ namespace {
 			              std::vector<std::thread>& threads,
 			              std::shared_ptr<RefreshState> state,
 			              std::vector<std::string>& dirs,
-			              ReadlineKeybindingGuard& guard)
+			              LineEditorKeybindingGuard& guard)
 			    : operation(op),
 			      isAtISOList(atList),
 			      backgroundThreads(threads),
@@ -246,7 +245,7 @@ namespace {
 			 * @param op Operation name ("rm", "cp", "mv", "mount", "write2usb",
 			 *           "umount", or anything else).
 			 * @return ANSI color code string for the operation, defaulting to
-			 *         @c UI::Palette::RL_BoldAlt for unknown operations.
+			 *         @c UI::Palette::PromptBoldAlt for unknown operations.
 			 */
 			static std::string pickOperationColor(const std::string& op) {
 
@@ -256,7 +255,7 @@ namespace {
 				    op == "mv"        ? UI::Palette::Yellow :
 				    op == "mount"     ? UI::Palette::Green  :
 				    op == "write2usb" ? UI::Palette::Yellow :
-				    op == "umount"    ? UI::Palette::Yellow : UI::Palette::RL_BoldAlt
+				    op == "umount"    ? UI::Palette::Yellow : UI::Palette::PromptBoldAlt
 				);
 
 			}
@@ -302,7 +301,7 @@ namespace {
 			/**
 			 * @brief Repaints the list on terminal resize while the prompt waits.
 			 *
-			 * Runs on the Readline thread (@c rl_event_hook) and uses the same
+			 * Runs on the Line editor thread (@c editorEventHook) and uses the same
 			 * display step as the main loop. Saves and restores
 			 * @c umountMvRmBreak so the resize repaint cannot clobber loop state.
 			 */
@@ -320,7 +319,7 @@ namespace {
 			 * @brief Resets per-iteration state at the top of the loop.
 			 *
 			 * Clears verbose sets, re-enables Ctrl+D, reinstalls signal
-			 * handlers, resets the cancellation flag, clears readline
+			 * handlers, resets the cancellation flag, clears line editor
 			 * history, snapshots @c currentPage into @c originalPage while
 			 * unfiltered, and (for non-unmount) prunes database entries whose
 			 * paths have disappeared and marks the list as current.
@@ -332,7 +331,7 @@ namespace {
 				setupSignalHandlerCancellations();
 				GlobalState::g_operationCancelled.store(false);
 				filterHistory = false;
-				clear_history();
+				editorClearHistory();
 
 				if (!isFiltered) originalPage = currentPage;
 
@@ -345,7 +344,7 @@ namespace {
 
 			/**
 			 * @brief Puts the cursor on the prompt row and prepares for the
-			 *        next readline().
+			 *        next editLine().
 			 *
 			 * Redraw path (@c needsClrScrn is true): draw the list, print one
 			 * blank separator row, and reset @c umountMvRmBreak. No-redraw
@@ -399,7 +398,7 @@ namespace {
 			 *        are unused for the current mode.
 			 *
 			 * In unmount mode, "R" (manual refresh) and "*" are rebound to
-			 * @c rl_insert so they can appear as normal characters.
+			 * @c editorInsertKey so they can appear as normal characters.
 			 */
 			void bindPromptKeys() {
 
@@ -407,8 +406,8 @@ namespace {
 
 				// Unbind unused hotkeys for the umount prompt.
 				if (isUnmount) {
-					rl_bind_keyseq("R", rl_insert);
-					rl_bind_keyseq("*", rl_insert);
+					editorBindKeySequence("R", editorInsertKey);
+					editorBindKeySequence("*", editorInsertKey);
 				}
 
 			}
@@ -417,11 +416,11 @@ namespace {
 			 * @brief Builds the colored prompt string for the current operation.
 			 *
 			 * @param pt Theme tokens for primary text and reset.
-			 * @return Formatted prompt string for @c readlineWithResize().
+			 * @return Formatted prompt string for @c editLineWithResize().
 			 */
-			std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
+			std::string buildPrompt(const LineEditorAndPromptTheme& pt) const {
 
-				std::string prompt(UI::Palette::RL_idxGreen);
+				std::string prompt(UI::Palette::PromptIndexGreen);
 				prompt
 				    .append("IDX")
 				    .append(pt.primary)
@@ -876,7 +875,7 @@ bool syncIsoPendingDisplay(std::vector<std::string>& pendingIndices,
  *
  * SelectSession handles input and redraws. Scope guards restore keybindings
  * and UI flags on exit. Background workers request refreshes, but the main
- * Readline thread draws the screen. See selectShared.cppm for cursor rules.
+ * Line editor thread draws the screen. See selectShared.cppm for cursor rules.
  */
 void selectForIsoFiles(const std::string& operation,
                        std::atomic<bool>& isAtISOList,
@@ -886,10 +885,10 @@ void selectForIsoFiles(const std::string& operation,
 	using select_common::LoopAction;
 
 	// --- RAII: keybindings are automatically reset on any exit path ---
-	ReadlineKeybindingGuard keybindingGuard;
+	LineEditorKeybindingGuard keybindingGuard;
 
-	rl_bind_key('\f', prevent_readline_keybindings);
-	rl_bind_key('\t', prevent_readline_keybindings);
+	editorBindKey('\f', ignoreEditorKeybinding);
+	editorBindKey('\t', ignoreEditorKeybinding);
 
 	static std::vector<std::string> isoDirs;
 	isoDirs.reserve(1000);
@@ -913,20 +912,20 @@ void selectForIsoFiles(const std::string& operation,
 
 		s.startWatcherIfNeeded();
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const LineEditorAndPromptTheme pt = getPromptTheme();
 		s.bindPromptKeys();
 		const std::string prompt = s.buildPrompt(pt);
 
 		armPendingInputRestore();
-		RlLine rawInput = readlineWithResize(prompt, [&s] { s.repaintList(); });
-		rl_startup_hook = nullptr;
+		EditorLine rawInput = editLineWithResize(prompt, [&s] { s.repaintList(); });
+		editorStartupHook = nullptr;
 
 		if (!rawInput) {
 			s.onEndOfInput();
 			break;
 		}
 
-		const std::string inputString(rawInput.get());
+		const std::string inputString(*rawInput);
 
 		const LoopAction action = s.dispatch(inputString);
 		if (action == LoopAction::Break)  break;

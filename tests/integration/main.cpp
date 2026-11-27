@@ -2,18 +2,22 @@
 
 #include "../common/testHarness.h"
 
+import isocmd.input.lineEditor;
+
 namespace isocmd_tests {
-	int readlineGuardsChild(); int readlineGuardsTest(const char* binary);
+	int lineEditorGuardsChild(); int lineEditorGuardsTest(const char* binary);
 	void backgroundImport(); void filesystemOperations(); void directoryTraversal(); void cancellation(); void activeCancellation(); void usbWriter(); void windowsIoRecovery(); void windowsDoubleBuffering(); void windowsLatchedCancellation(); void readbackLatchedDuringIo(); void windowsIoFailures(); void windowsCleanupFailures(); void windowsDirectRecovery(); void windowsFilesystemWriteModes(); void windowsBufferedWrites(); int terminalChild(); int terminalTest(const char* binary); int menuTest(const char* binary); int workflowTest(const char* binary); int settingsWorkflowTest(const char* binary); int themeWorkflowTest(const char* binary); int importWorkflowTest(const char* binary); int conversionWorkflowTest(const char* binary); int writeUiChild(); int progressScreenChild(); int writeUiTest(const char* binary); int progressScreenTest(const char* binary);
 }
 
 int main(int argc,char** argv) {
 
+	editorInitializeLocale();
+
 	using namespace isocmd_tests;
 	if (argc == 2) {
 		const std::pair<std::string_view, int(*)()> children[] = {
 			{"--terminal-child", terminalChild},
-			{"--readline-guards-child", readlineGuardsChild},
+			{"--editor-guards-child", lineEditorGuardsChild},
 			{"--write-ui-child", writeUiChild},
 			{"--progress-child", progressScreenChild},
 		};
@@ -22,7 +26,7 @@ int main(int argc,char** argv) {
 	}
 	const std::pair<std::string_view, int(*)(const char*)> selfTests[] = {
 		{"--terminal-test", terminalTest},
-		{"--readline-guards-test", readlineGuardsTest},
+		{"--editor-guards-test", lineEditorGuardsTest},
 		{"--write-ui-test", writeUiTest},
 		{"--progress-test", progressScreenTest},
 	};

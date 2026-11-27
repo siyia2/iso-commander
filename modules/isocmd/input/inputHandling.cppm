@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 export module isocmd.input.inputHandling;
+import std;
 
 // C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
@@ -11,7 +12,7 @@ export extern "C++" {
 
 // --- 1. Signal & OS Interrupt Handling ---
 // Should be initialized first to ensure app stability.
-void setupReadlineToIgnoreCtrlC();
+void setupLineEditorToIgnoreCtrlC();
 void setupSignalHandlerCancellations();
 void signalHandler(int signum);
 
@@ -27,11 +28,11 @@ void clearScrollBuffer();
 void disable_ctrl_d();
 void enable_ctrl_d();
 
-// --- 4. Readline Interface & UI Customization ---
-// High-level wrapper functions for the Readline interactive prompt.
-void customListingsFunction(char **matches, int num_matches, int max_length);
-void resetReadlinePagination();
-void restoreReadline();
-void disableReadlineForConfirmation();
+// --- 4. Line editor Interface & UI Customization ---
+// High-level wrapper functions for the Line editor interactive prompt.
+void customListingsFunction(const std::vector<std::string>& matches, int num_matches, int max_length);
+void resetLineEditorPagination();
+void restoreLineEditor();
+void disableLineEditorForConfirmation();
 
 } // extern "C++"

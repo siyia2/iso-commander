@@ -5,10 +5,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.app.main;
 import isocmd.settings.settings;
 import isocmd.core.cancellation;
@@ -18,9 +17,9 @@ import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.database.databaseOps;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.threadpool.threadpool;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.util.drainingState;
@@ -62,7 +61,7 @@ namespace {
 	}
 
 	/**
-	 * @brief Prepares application state, caches, Readline and signal handling.
+	 * @brief Prepares application state, caches, Line editor and signal handling.
 	 * Ctrl+C is ignored at the main prompt; SIGTERM is handled by signalHandler.
 	 */
 	void initializeEnvironment() {
@@ -77,17 +76,16 @@ namespace {
 		GlobalState::chdFilesCache.reserve(1000);
 		GlobalState::daaGbiFilesCache.reserve(1000);
 
-		setupReadlineToIgnoreCtrlC();
+		setupLineEditorToIgnoreCtrlC();
 
-		// Readline completion behavior.
-		rl_completer_word_break_characters = ";";
-		rl_completion_display_matches_hook = customListingsFunction;
+		// Line editor completion behavior.
+		editorWordBreakCharacters = ";";
+		editorCompletionDisplayHook = customListingsFunction;
 
 		// Esc as universal exit handler; PgUp/PgDn as history navigation.
-		rl_variable_bind("keyseq-timeout", "10");
-		rl_bind_keyseq("\\e", exit_handler);
-		rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-		rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+		editorBindKeySequence("\033", exit_handler);
+		editorBindKeySequence("\033[5~", editorPreviousHistory);
+		editorBindKeySequence("\033[6~", editorNextHistory);
 
 		// Signal Handling
 		signal(SIGINT, SIG_IGN);
@@ -95,8 +93,8 @@ namespace {
 
 		paginationSet(GlobalState::configPath);
 
-		// Readline refresh hook for pending UI refreshes.
-		rl_event_hook = checkPendingRefresh;
+		// Line editor refresh hook for pending UI refreshes.
+		editorEventHook = checkPendingRefresh;
 
 	}
 
@@ -293,7 +291,7 @@ namespace {
  * - No arguments : interactive TUI.
  *
  * The main menu prompt is wrapped in a @c ListResizeWatcher (via
- * @c readlineWithResize), so the menu (banner, status message, menu box) is
+ * @c editLineWithResize), so the menu (banner, status message, menu box) is
  * repainted when the terminal width changes while the prompt waits.
  *
  * @param argc Number of command-line arguments.
@@ -301,6 +299,8 @@ namespace {
  * @return 0 on success, 1 on failure (e.g. lock acquisition failure).
  */
 int main(int argc, char *argv[]) {
+
+	editorInitializeLocale();
 
 	// User-defined folder paths and settings.
 	std::map<std::string, std::string> config = readUserConfigLists(GlobalState::configPath);
@@ -361,9 +361,9 @@ int main(int argc, char *argv[]) {
 	 * processes user input (menu options 1-5).
 	 */
 	while (!exitProgram) {
-		// Prevent default readline keybindings from interfering.
-		rl_bind_key('\f', prevent_readline_keybindings);
-		rl_bind_key('\t', prevent_readline_keybindings);
+		// Prevent default line editor keybindings from interfering.
+		editorBindKey('\f', ignoreEditorKeybinding);
+		editorBindKey('\t', ignoreEditorKeybinding);
 
 		GlobalState::g_operationCancelled.store(false);
 		GlobalState::g_pendingRefreshKind.store(PendingRefreshKind::None);
@@ -389,7 +389,7 @@ int main(int argc, char *argv[]) {
 		// message is active), menu. Ends just after the menu's last line; the
 		// blank line before the prompt comes from the caller / resize watcher.
 		// Used for both the normal draw and the resize repaint; runs on the
-		// Readline thread and must not call readline().
+		// Line editor thread and must not call editLine().
 		auto drawMain = [&] {
 
 			SyncOutput sync;
@@ -404,13 +404,13 @@ int main(int argc, char *argv[]) {
 		drawMain();
 		std::cout << "\n";   // blank line before the prompt
 
-		clear_history();
+		editorClearHistory();
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const LineEditorAndPromptTheme pt = getPromptTheme();
 		const std::string prompt = std::string(pt.primary) +
 		                           "Enter choice [1-5]: " +
 		                           std::string(pt.reset);
-		RlLine input = readlineWithResize(prompt, drawMain);
+		EditorLine input = editLineWithResize(prompt, drawMain);
 		if (!input) break; ///< EOF (Ctrl+D)
 
 		/**
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
 		 * - 4: Settings editor
 		 * - 5: Exit
 		 */
-		dispatchMenuChoice(input.get(), exitProgram, isAtMain, isAtISOList,
+		dispatchMenuChoice(*input, exitProgram, isAtMain, isAtISOList,
 		                   importState, backgroundThreads);
 	}
 

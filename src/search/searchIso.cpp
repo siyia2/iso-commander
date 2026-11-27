@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.globalMutexes;
 import isocmd.database.databaseOps;
 import isocmd.input.history;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.search.search;
 import isocmd.threadpool.threadpool;
 import isocmd.ui.interface.pausePrompts;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
@@ -71,7 +70,7 @@ static bool handleDatabaseCommands(const std::string& input, const std::function
  * Each token is trimmed before validation; empty tokens are skipped and
  * invalid tokens are recorded in @p invalidPaths. Valid tokens are appended
  * (in entered order) to @p cleanedInput, joined with ';'. A non-empty
- * @p cleanedInput is inserted into readline history. The normalized,
+ * @p cleanedInput is inserted into line editor history. The normalized,
  * deduplicated, sorted path list is then filtered so no path is a descendant
  * of an earlier parent entry.
  *
@@ -119,7 +118,7 @@ static std::string parseAndFilterPaths(
 	}
 
 	if (!cleanedInput.empty()) {
-		add_history(cleanedInput.c_str());
+		editorAddHistory(cleanedInput);
 	}
 
 	std::sort(validPaths.begin(), validPaths.end());
@@ -225,7 +224,7 @@ static std::string constructDatabasePrompt(const VerboseAndDatabaseTheme& dt) {
  * @param input              Cleaned and trimmed user input string.
  * @param promptFlag         Passed to traverse() to control progress and error reporting.
  * @param maxDepth           Maximum directory recursion depth (-1 for unlimited).
- * @param filterHistory      Whether to load and save readline history.
+ * @param filterHistory      Whether to load and save line editor history.
  * @param newISOFound        Reference to flag indicating if new ISOs were found.
  * @param repaintCallerPrompt Callback that reprints the caller's prompt header and
  *                           typed line. Forwarded to
@@ -257,7 +256,7 @@ static void processPathTraversalAndReporting(const std::string& input,
 	if (validPaths.empty()) {
 		flushStdin();
 		restoreInput();
-		resetReadlinePagination();
+		resetLineEditorPagination();
 		if (!invalidPaths.empty()) {
 			GlobalState::g_operationCancelled.store(false);
 			DatabaseRefreshResult refreshResult{
@@ -278,7 +277,7 @@ static void processPathTraversalAndReporting(const std::string& input,
 
 	flushStdin();
 	restoreInput();
-	resetReadlinePagination();
+	resetLineEditorPagination();
 
 	std::cout << "\r" << color << "Total files processed: " << totalFiles;
 
@@ -312,7 +311,7 @@ static void processPathTraversalAndReporting(const std::string& input,
  * @p maxDepth. Discovered files and scan errors are passed to
  * saveAndReportResultsForDatabase().
  *
- * The prompt supports readline history, help and database commands. Invalid
+ * The prompt supports line editor history, help and database commands. Invalid
  * paths are excluded from the history entry; valid paths are stored trimmed
  * but otherwise as entered. All scan tasks are joined before the iteration
  * ends, including after cancellation, because they reference iteration-local
@@ -330,34 +329,34 @@ static void processPathTraversalAndReporting(const std::string& input,
  * @param promptFlag    Passed to traverse() to control progress and error
  *                      reporting.
  * @param maxDepth      Maximum directory recursion depth (-1 for unlimited).
- * @param filterHistory Whether to load and save readline history.
+ * @param filterHistory Whether to load and save line editor history.
  * @param newISOFound   Passed to saveAndReportResultsForDatabase(), which
  *                      forwards it to saveToDatabase().
  */
 void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool& newISOFound) {
 
-	PendingReadlineTextClearGuard pendingTextGuard;
+	PendingLineEditorTextClearGuard pendingTextGuard;
 
 	auto rearmSetup = [&]() {
 
 		enable_ctrl_d();
 		setupSignalHandlerCancellations();
 		setup_custom_keybindingsForSearches();
-		rl_attempted_completion_function = my_special_completion_entry;
+		editorCompletionHook = my_special_completion_entry;
 		GlobalState::g_operationCancelled.store(false);
-		RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
+		RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = 1;
 
 	};
 
 	while (true) {
 		rearmSetup();
 		clearScrollBuffer();
-		SearchReadlineGuard guard;
+		SearchLineEditorGuard guard;
 		try {
 			const VerboseAndDatabaseTheme dt = getDatabaseTheme();
 
 			loadHistory(filterHistory);
-			RestoreReadlineBuffer();
+			RestoreLineEditorBuffer();
 
 			const std::string prompt = constructDatabasePrompt(dt);
 
@@ -397,15 +396,15 @@ void refreshForDatabase(bool promptFlag, int maxDepth, bool filterHistory, bool&
 
 			};
 
-			RlLine searchQuery = readlineWithResize(prompt, repaintPrompt);
+			EditorLine searchQuery = editLineWithResize(prompt, repaintPrompt);
 			if (!searchQuery) return;
 
-			typedLine = searchQuery.get();
+			typedLine = *searchQuery;
 
 			armPendingInputRestore();
-			rl_startup_hook = nullptr;
+			editorStartupHook = nullptr;
 
-			std::string input = trimWhitespace(searchQuery.get());
+			std::string input = trimWhitespace(*searchQuery);
 			if (input == "\x1b") return;
 
 			if (handleDatabaseCommands(input, repaintCallerPrompt)) {

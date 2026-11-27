@@ -2,25 +2,25 @@
 
 import std;
 import isocmd.core.uiState;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.select.selectShared;
 
 IsoPending g_isoPending;
 
-ReadlineKeybindingGuard::ReadlineKeybindingGuard() {
+LineEditorKeybindingGuard::LineEditorKeybindingGuard() {
 
 	setup_custom_keybindingsForSelect();
 
 }
 
-ReadlineKeybindingGuard::~ReadlineKeybindingGuard() {
+LineEditorKeybindingGuard::~LineEditorKeybindingGuard() {
 
 	reset_custom_keybindingsForSelect();
-	RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+	RetainAndRestoreLineEditorBuffer::g_editorPendingText.clear();
 
 }
 
-void ReadlineKeybindingGuard::restore() {
+void LineEditorKeybindingGuard::restore() {
 
 	setup_custom_keybindingsForSelect();
 

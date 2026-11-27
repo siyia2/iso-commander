@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Handles interactive Readline hotkeys and turns them into commands for the active screen.
+// Handles interactive Line editor hotkeys and turns them into commands for the active screen.
 
 #include <stdio.h>
-#include <readline/readline.h>
 
+import isocmd.input.lineEditor;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 
 //=============================================================================
 // Event Driven Keys
@@ -15,17 +15,15 @@ import isocmd.input.readline;
 /* --- Hotkey submit helper ---------------------------------------------------
  *
  * Every hotkey submits a command by replacing the line buffer and finishing
- * the line. Finishing it with rl_newline() (what Enter does) instead of just
- * setting rl_done makes readline run its final-update step, which moves to the
- * end of the prompt and prints the newline. As a result a hotkey submit and an
- * Enter submit leave the cursor in the same place: one row below the prompt.
+ * the line. Finishing it with editorSubmit() uses the same native submit path as Enter.
+ * The fixed prompt renderer advances one row after either kind of submission.
  * Callers no longer need any "step below the prompt row" fix-up after a hotkey.
  */
 
 static void stashTypedInput() {
 
-	RetainAndRestoreReadlineBuffer::g_rl_pending_text.assign(
-	    rl_line_buffer ? rl_line_buffer : "", rl_end);
+	RetainAndRestoreLineEditorBuffer::g_editorPendingText.assign(
+	    editorLineBuffer ? editorLineBuffer : "", editorBufferEnd);
 
 }
 
@@ -35,8 +33,8 @@ static void stashTypedInput() {
 static int submitHotkey(const char* command, bool stash) {
 
 	if (stash) stashTypedInput();
-	rl_replace_line(command, 0);
-	return rl_newline(1, '\n');
+	editorReplaceLine(command);
+	return editorSubmit(1, '\n');
 
 }
 
@@ -117,37 +115,37 @@ int exit_handler(int, int) {
 /**
  * @brief Installs the custom completion display hook and restores history navigation keybindings.
  *
- * Sets @c rl_completion_display_matches_hook to @c customListingsFunction,
- * clears @c rl_attempted_completion_function, and rebinds the Up/Down arrows and
+ * Sets @c editorCompletionDisplayHook to @c customListingsFunction,
+ * clears @c editorCompletionHook, and rebinds the Up/Down arrows and
  * Page Up/Page Down to history navigation.
  *
  * @note Ctrl+L (@c '\\f') and Tab (@c '\\t') are bound to
- *       @c prevent_readline_keybindings here, i.e. they are disabled. Use
- *       @c RestoreReadlineBuffer to bind them to @c clear_screen_and_buffer and
- *       @c my_rl_complete for prompts that support completion.
+ *       @c ignoreEditorKeybinding here, i.e. they are disabled. Use
+ *       @c RestoreLineEditorBuffer to bind them to @c clear_screen_and_buffer and
+ *       @c completePrompt for prompts that support completion.
  */
-void restoreReadline() {
+void restoreLineEditor() {
 
-	rl_completion_display_matches_hook = customListingsFunction;
-	rl_attempted_completion_function = nullptr;
-	rl_bind_keyseq("\033[A", rl_get_previous_history);
-	rl_bind_keyseq("\033[B", rl_get_next_history);
-	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
-	rl_bind_key('\f', prevent_readline_keybindings);
-	rl_bind_key('\t', prevent_readline_keybindings);
+	editorCompletionDisplayHook = customListingsFunction;
+	editorCompletionHook = nullptr;
+	editorBindKeySequence("\033[A", editorPreviousHistory);
+	editorBindKeySequence("\033[B", editorNextHistory);
+	editorBindKeySequence("\033[5~", editorPreviousHistory);
+	editorBindKeySequence("\033[6~", editorNextHistory);
+	editorBindKey('\f', ignoreEditorKeybinding);
+	editorBindKey('\t', ignoreEditorKeybinding);
 
 }
 
 /// Disables standard completion and history navigation for confirmation prompts.
-void disableReadlineForConfirmation() {
+void disableLineEditorForConfirmation() {
 
-	rl_bind_key('\f', prevent_readline_keybindings);
-	rl_bind_key('\t', prevent_readline_keybindings);
-	rl_bind_keyseq("\033[A", prevent_readline_keybindings);
-	rl_bind_keyseq("\033[B", prevent_readline_keybindings);
-	rl_bind_keyseq("\\e[5~", prevent_readline_keybindings);
-	rl_bind_keyseq("\\e[6~", prevent_readline_keybindings);
+	editorBindKey('\f', ignoreEditorKeybinding);
+	editorBindKey('\t', ignoreEditorKeybinding);
+	editorBindKeySequence("\033[A", ignoreEditorKeybinding);
+	editorBindKeySequence("\033[B", ignoreEditorKeybinding);
+	editorBindKeySequence("\033[5~", ignoreEditorKeybinding);
+	editorBindKeySequence("\033[6~", ignoreEditorKeybinding);
 
 }
 
@@ -161,38 +159,38 @@ void disableReadlineForConfirmation() {
 void setup_custom_keybindingsForSelect(void) {
 
 	// Navigation
-	rl_bind_keyseq("\\e[5~", pgup_handler);
-	rl_bind_keyseq("\\e[6~", pgdn_handler);
+	editorBindKeySequence("\033[5~", pgup_handler);
+	editorBindKeySequence("\033[6~", pgdn_handler);
 
 	// Commands
-	rl_bind_keyseq("*", toggleFlno_handler);
-	rl_bind_keyseq("/", filter_handler);
-	rl_bind_keyseq("P", proc_handler);
-	rl_bind_keyseq("C", clr_handler);
-	rl_bind_keyseq("R", refresh_handler);
-	rl_bind_keyseq("~", toggleList_handler);
-	rl_bind_keyseq("\\e", exit_handler);
-	rl_bind_keyseq("?", help_handler);
+	editorBindKeySequence("*", toggleFlno_handler);
+	editorBindKeySequence("/", filter_handler);
+	editorBindKeySequence("P", proc_handler);
+	editorBindKeySequence("C", clr_handler);
+	editorBindKeySequence("R", refresh_handler);
+	editorBindKeySequence("~", toggleList_handler);
+	editorBindKeySequence("\033", exit_handler);
+	editorBindKeySequence("?", help_handler);
 
 }
 
 /// Keybindings for the Settings Editor.
 void setup_custom_keybindingsForSettingsEditor(void) {
 
-	rl_bind_keyseq("r", reset_handler);
-	rl_bind_keyseq("?", help_handler);
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("r", reset_handler);
+	editorBindKeySequence("?", help_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
 /// Keybindings for the Search Prompts.
 void setup_custom_keybindingsForSearches(void) {
 
-	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+	editorBindKeySequence("\033[5~", editorPreviousHistory);
+	editorBindKeySequence("\033[6~", editorNextHistory);
 
-	rl_bind_keyseq("?", help_handler);
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("?", help_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
@@ -200,20 +198,20 @@ void setup_custom_keybindingsForSearches(void) {
 void reset_custom_keybindingsForSelect(void) {
 
 	// Restore navigation to history
-	rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-	rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+	editorBindKeySequence("\033[5~", editorPreviousHistory);
+	editorBindKeySequence("\033[6~", editorNextHistory);
 
 	// Restore characters to standard insertion
-	rl_bind_keyseq("*", rl_insert);
-	rl_bind_keyseq("/", rl_insert);
-	rl_bind_keyseq("P", rl_insert);
-	rl_bind_keyseq("C", rl_insert);
-	rl_bind_keyseq("R", rl_insert);
-	rl_bind_keyseq("~", rl_insert);
-	rl_bind_keyseq("?", rl_insert);
+	editorBindKeySequence("*", editorInsertKey);
+	editorBindKeySequence("/", editorInsertKey);
+	editorBindKeySequence("P", editorInsertKey);
+	editorBindKeySequence("C", editorInsertKey);
+	editorBindKeySequence("R", editorInsertKey);
+	editorBindKeySequence("~", editorInsertKey);
+	editorBindKeySequence("?", editorInsertKey);
 
 	// Esc special case
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
@@ -226,12 +224,12 @@ void reset_custom_keybindingsForSelect(void) {
  */
 void reset_custom_keybindingsForCpMvWrite2Usb(void) {
 
-	rl_bind_keyseq("*", rl_insert);
-	rl_bind_keyseq("/", rl_insert);
-	rl_bind_keyseq("P", rl_insert);
-	rl_bind_keyseq("R", rl_insert);
-	rl_bind_keyseq("C", rl_insert);
-	rl_bind_keyseq("~", rl_insert);
+	editorBindKeySequence("*", editorInsertKey);
+	editorBindKeySequence("/", editorInsertKey);
+	editorBindKeySequence("P", editorInsertKey);
+	editorBindKeySequence("R", editorInsertKey);
+	editorBindKeySequence("C", editorInsertKey);
+	editorBindKeySequence("~", editorInsertKey);
 
 }
 
@@ -244,27 +242,27 @@ void reset_custom_keybindingsForCpMvWrite2Usb(void) {
 void reset_custom_keybindingsForRm(void) {
 
 	// Restore characters to standard insertion
-	rl_bind_keyseq("*", rl_insert);
-	rl_bind_keyseq("/", rl_insert);
-	rl_bind_keyseq("P", rl_insert);
-	rl_bind_keyseq("C", rl_insert);
-	rl_bind_keyseq("R", rl_insert);
-	rl_bind_keyseq("~", rl_insert);
-	rl_bind_keyseq("?", rl_insert);
+	editorBindKeySequence("*", editorInsertKey);
+	editorBindKeySequence("/", editorInsertKey);
+	editorBindKeySequence("P", editorInsertKey);
+	editorBindKeySequence("C", editorInsertKey);
+	editorBindKeySequence("R", editorInsertKey);
+	editorBindKeySequence("~", editorInsertKey);
+	editorBindKeySequence("?", editorInsertKey);
 
 	// Esc special case
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
 /// Restores bindings used in the Settings Editor.
 void reset_custom_keybindingsForSettingsEditor(void) {
 
-	rl_bind_keyseq("r", rl_insert);
-	rl_bind_keyseq("?", rl_insert);
+	editorBindKeySequence("r", editorInsertKey);
+	editorBindKeySequence("?", editorInsertKey);
 
 	// Esc special case
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
@@ -275,9 +273,9 @@ void reset_custom_keybindingsForSettingsEditor(void) {
  */
 void reset_custom_keybindingsForSearches(void) {
 
-	rl_bind_keyseq("?", rl_insert);
+	editorBindKeySequence("?", editorInsertKey);
 
 	// Esc special case
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }

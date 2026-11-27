@@ -3,7 +3,7 @@
 
 import isocmd.core.uiState;
 import isocmd.select.selectShared;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 
 namespace isocmd_tests {
@@ -23,19 +23,19 @@ namespace isocmd_tests {
 		void leaveSelection(bool unmount, bool early, bool fail) {
 
 			using namespace GlobalState;
-			using namespace RetainAndRestoreReadlineBuffer;
+			using namespace RetainAndRestoreLineEditorBuffer;
 			const std::vector<std::string> paths{"/first.iso"};
 			bool nowUnmounting = false;
 			IsoListStateGuard listGuard(isAtISOList, [&] { return nowUnmounting; });
 			select_shared::pending::IsoPendingScope pending(&paths);
-			PendingReadlineTextClearGuard textGuard;
-			RlCompleteModeGuard completeGuard;
+			PendingLineEditorTextClearGuard textGuard;
+			EditorCompletionModeGuard completeGuard;
 			CHECK(g_isoPending.source == &paths && g_isoPending.paths.empty());
 			g_isoPending.paths = paths;
 			g_filteringIndicator = true;
 			isAtISOList = false;
-			g_rl_pending_text = "stashed input";
-			g_rl_complete_mode = 1;
+			g_editorPendingText = "stashed input";
+			g_editorCompletionMode = 1;
 			nowUnmounting = unmount; // destructor must check the current state
 			if (fail) throw Unwind{};
 			if (early) return;
@@ -82,19 +82,19 @@ namespace isocmd_tests {
 	void selectionScopeGuards() {
 
 		using namespace GlobalState;
-		using namespace RetainAndRestoreReadlineBuffer;
+		using namespace RetainAndRestoreLineEditorBuffer;
 		for (bool unmount : {false, true}) {
 			for (int exit = 0; exit < 3; ++exit) {
 				isAtISOList = true;
 				g_filteringIndicator = false;
-				g_rl_complete_mode = 0;
+				g_editorCompletionMode = 0;
 				g_isoPending.paths = {"stale.iso"};
 				try { leaveSelection(unmount, exit == 1, exit == 2); CHECK(exit != 2); }
 				catch (const Unwind&) { CHECK(exit == 2); }
 				CHECK(isAtISOList.load() == !unmount);
 				CHECK(!g_filteringIndicator.load());
 				CHECK(g_isoPending.source == nullptr && g_isoPending.paths.empty());
-				CHECK(g_rl_pending_text.empty() && g_rl_complete_mode == 0);
+				CHECK(g_editorPendingText.empty() && g_editorCompletionMode == 0);
 			}
 		}
 		// A list which was already inactive must remain inactive.

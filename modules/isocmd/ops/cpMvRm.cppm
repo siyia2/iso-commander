@@ -96,44 +96,44 @@ struct DestinationCheckParams {
 };
 
 /**
- * @struct RlFormFeedGuard
- * @brief scope guard to restore the '\f' key binding to @c prevent_readline_keybindings.
+ * @struct EditorFormFeedGuard
+ * @brief scope guard to restore the '\f' key binding to @c ignoreEditorKeybinding.
  *
  * Use in functions that bind '\f' but do not modify '\t' to ensure scope integrity.
  */
-struct RlFormFeedGuard {
-	~RlFormFeedGuard();
+struct EditorFormFeedGuard {
+	~EditorFormFeedGuard();
 };
 
 /**
- * @struct RlKeyBindGuard
+ * @struct EditorKeyBindGuard
  * @brief scope guard that restores the '\f' and '\t' bindings and rebinds Esc to
  *        @c exit_handler, undoing the Esc hijack left by a completion list.
  *
  * Fires only when the guarded call returns, not on in-loop page turns.
  */
-struct RlKeyBindGuard {
-	~RlKeyBindGuard();
+struct EditorKeyBindGuard {
+	~EditorKeyBindGuard();
 };
 
 /**
- * @struct RlCompleteModeGuard
- * @brief scope guard to preserve the state of @c g_rl_complete_mode.
+ * @struct EditorCompletionModeGuard
+ * @brief scope guard to preserve the state of @c g_editorCompletionMode.
  */
-struct RlCompleteModeGuard {
-	int saved; ///< Saved value of @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode
-	RlCompleteModeGuard();
-	~RlCompleteModeGuard();
+struct EditorCompletionModeGuard {
+	int saved; ///< Saved value of @c RetainAndRestoreLineEditorBuffer::g_editorCompletionMode
+	EditorCompletionModeGuard();
+	~EditorCompletionModeGuard();
 };
 
 /**
- * @struct RlStartupHookGuard
- * @brief scope guard to clear @c rl_startup_hook on scope exit.
+ * @struct EditorStartupHookGuard
+ * @brief scope guard to clear @c editorStartupHook on scope exit.
  *
- * Prevents stale hooks from persisting into subsequent Readline calls.
+ * Prevents stale hooks from persisting into subsequent line-editor calls.
  */
-struct RlStartupHookGuard {
-	~RlStartupHookGuard();
+struct EditorStartupHookGuard {
+	~EditorStartupHookGuard();
 };
 
 // ======================================================================

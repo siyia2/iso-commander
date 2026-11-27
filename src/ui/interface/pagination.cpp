@@ -7,11 +7,11 @@ import isocmd.core.lists;
 import isocmd.core.uiState;
 import isocmd.filter.filter;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.ui.interface.pagination;
 import isocmd.select.select;
 import isocmd.ui.display.display;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
@@ -336,7 +336,7 @@ static bool handleNavigation(const std::string& userInput,
  * Draws the current page, reads a line, and handles in-loop navigation
  * ('PgDn' / 'PgUp' / 'g<num>'); anything else is returned to the caller.
  *
- * Optionally disables Readline Tab completion for the duration of input,
+ * Optionally disables Line editor Tab completion for the duration of input,
  * preventing completion matches from being displayed. The previous Tab
  * binding and completion callback are restored automatically afterward.
  *
@@ -389,13 +389,13 @@ std::string handlePaginatedDisplay(const std::vector<std::string>& entries,
 
 		};
 
-		RlLine input = readlineWithResize(
+		EditorLine input = editLineWithResize(
 		    finalPrompt, repaint, disableTabCompletion
 		);
 
-		if (!input.get()) return "EOF_SIGNAL";
+		if (!input) return "EOF_SIGNAL";
 
-		std::string userInput = trimWhitespace(input.get());
+		std::string userInput = trimWhitespace(*input);
 
 		if (handleNavigation(userInput, totalPages, currentPage, isPageTurn)) {
 			continue;

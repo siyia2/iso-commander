@@ -2,21 +2,20 @@
 #include <stdio.h>
 #include <signal.h>
 #include <termios.h>
-#include <readline/readline.h>
-#include <readline/history.h>
 #include "../common/testHarness.h"
 #include "../common/terminalSync.h"
 
+import isocmd.input.lineEditor;
 import isocmd.filter.filter;
 import isocmd.core.sharedRefreshState;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 import isocmd.search.search;
 import isocmd.select.selectShared;
 import isocmd.settings.settings;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.interface.pausePrompts;
 import isocmd.write2usb.util.terminalGuards;
 
@@ -32,8 +31,8 @@ int reset_handler(int, int);
 
 namespace isocmd_tests {
 	namespace {
-		using namespace RetainAndRestoreReadlineBuffer;
-		using Binding = rl_command_func_t*;
+		using namespace RetainAndRestoreLineEditorBuffer;
+		using Binding = EditorCommand*;
 		constexpr const char* up = "\033[A";
 		constexpr const char* down = "\033[B";
 		constexpr const char* pgUp = "\033[5~";
@@ -42,23 +41,14 @@ namespace isocmd_tests {
 
 		int sentinelKey(int, int) { return 0; }
 		int sentinelHook() { return 0; }
-		char** sentinelCompletion(const char*, int, int) { return nullptr; }
-		void sentinelDisplay(char**, int, int) {}
+		std::vector<std::string> sentinelCompletion(std::string_view, int, int) { return {}; }
+		void sentinelDisplay(const std::vector<std::string>&, int, int) {}
 		void sentinelSignal(int) {}
 		struct Unwind {};
 
 		Binding binding(const char* key) {
 
-			int type = -1;
-			auto fn = rl_function_of_keyseq(key, rl_get_keymap(), &type);
-			// Esc is both a standalone binding and an escape-sequence prefix.
-			if (type == ISKMAP) {
-				const auto map = reinterpret_cast<Keymap>(fn);
-				CHECK(map && map[ANYOTHERKEY].type == ISFUNC);
-				return map[ANYOTHERKEY].function;
-			}
-			CHECK(type == ISFUNC);
-			return fn;
+			return editorKeySequenceHandler(key);
 
 		}
 
@@ -70,8 +60,8 @@ namespace isocmd_tests {
 
 		void historyKeys() {
 
-			key(pgUp, rl_named_function("previous-history"));
-			key(pgDown, rl_named_function("next-history"));
+			key(pgUp, editorPreviousHistory);
+			key(pgDown, editorNextHistory);
 
 		}
 
@@ -86,7 +76,7 @@ namespace isocmd_tests {
 		}
 
 		// The actual guards are exercised on normal fallthrough, early return,
-		// and C++ exception unwinding (never throw through Readline C callbacks).
+		// and C++ exception unwinding (never throw through Line editor C callbacks).
 		void leave(int path) {
 
 			if (path == 2) throw Unwind{};
@@ -111,55 +101,55 @@ namespace isocmd_tests {
 			checkSelectionBindings(commands);
 			reset_custom_keybindingsForSelect();
 			allExitPaths([&](int exit) {
-				for (auto k : keys) key(k, rl_insert);
+				for (auto k : keys) key(k, editorInsertKey);
 				historyKeys(); key(esc, exit_handler);
-				ReadlineKeybindingGuard guard;
+				LineEditorKeybindingGuard guard;
 				checkSelectionBindings(commands);
 				reset_custom_keybindingsForCpMvWrite2Usb();
-				for (auto k : {"*", "/", "P", "C", "R", "~"}) key(k, rl_insert);
+				for (auto k : {"*", "/", "P", "C", "R", "~"}) key(k, editorInsertKey);
 				key("?", help_handler);
 				guard.restore(); checkSelectionBindings(commands);
 				reset_custom_keybindingsForRm();
-				for (auto k : keys) key(k, rl_insert);
+				for (auto k : keys) key(k, editorInsertKey);
 				guard.restore(); checkSelectionBindings(commands);
-				g_rl_pending_text = "selection input";
+				g_editorPendingText = "selection input";
 				if (exit == 1) return;
 				leave(exit);
 			}, [&] {
-				for (auto k : keys) key(k, rl_insert);
+				for (auto k : keys) key(k, editorInsertKey);
 				historyKeys(); key(esc, exit_handler);
-				CHECK(g_rl_pending_text.empty());
+				CHECK(g_editorPendingText.empty());
 			});
 			setup_custom_keybindingsForSettingsEditor();
 			key("r", reset_handler);
 			key("?", help_handler); key(esc, exit_handler);
 			reset_custom_keybindingsForSettingsEditor();
-			key("r", rl_insert); key("?", rl_insert); key(esc, exit_handler);
+			key("r", editorInsertKey); key("?", editorInsertKey); key(esc, exit_handler);
 
 		}
 
 		void searchBindings() {
 
 			for (int path = 0; path < 3; ++path) {
-				rl_attempted_completion_function = sentinelCompletion;
-				key("?", rl_insert);
+				editorCompletionHook = sentinelCompletion;
+				key("?", editorInsertKey);
 				auto run = [&] {
-					SearchReadlineGuard guard;
+					SearchLineEditorGuard guard;
 					setup_custom_keybindingsForSearches();
-					rl_attempted_completion_function = my_special_completion_entry;
-					RestoreReadlineBuffer();
+					editorCompletionHook = my_special_completion_entry;
+					RestoreLineEditorBuffer();
 					historyKeys(); key("?", help_handler); key(esc, exit_handler);
-					key("\t", my_rl_complete); key("\f", clear_screen_and_buffer);
-					CHECK(rl_attempted_completion_function == my_special_completion_entry);
-					add_history("temporary search");
+					key("\t", completePrompt); key("\f", clear_screen_and_buffer);
+					CHECK(editorCompletionHook == my_special_completion_entry);
+					editorAddHistory("temporary search");
 					if (path == 1) return;
 					leave(path);
 				};
 				try { run(); CHECK(path != 2); } catch (const Unwind&) { CHECK(path == 2); }
-				CHECK(rl_attempted_completion_function == sentinelCompletion);
-				key("\t", prevent_readline_keybindings); key("\f", rl_insert);
-				key("?", rl_insert); key(esc, exit_handler); historyKeys();
-				CHECK(history_length == 0);
+				CHECK(editorCompletionHook == sentinelCompletion);
+				key("\t", ignoreEditorKeybinding); key("\f", editorInsertKey);
+				key("?", editorInsertKey); key(esc, exit_handler); historyKeys();
+				CHECK(editorHistoryList().size() == 0);
 			}
 
 		}
@@ -167,46 +157,46 @@ namespace isocmd_tests {
 		void operationBindings() {
 
 			for (int path = 0; path < 3; ++path) {
-				g_rl_complete_mode = 0;
+				g_editorCompletionMode = 0;
 				auto run = [&] {
-					RlKeyBindGuard keys;
-					RlCompleteModeGuard mode;
-					RlStartupHookGuard startup;
-					RestoreReadlineBuffer();
-					rl_bind_keyseq("\\e", sentinelKey);
-					rl_startup_hook = sentinelHook;
-					g_rl_complete_mode = 1;
-					key("\f", clear_screen_and_buffer); key("\t", my_rl_complete);
-					key(esc, sentinelKey); CHECK(rl_startup_hook == sentinelHook);
+					EditorKeyBindGuard keys;
+					EditorCompletionModeGuard mode;
+					EditorStartupHookGuard startup;
+					RestoreLineEditorBuffer();
+					editorBindKeySequence("\033", sentinelKey);
+					editorStartupHook = sentinelHook;
+					g_editorCompletionMode = 1;
+					key("\f", clear_screen_and_buffer); key("\t", completePrompt);
+					key(esc, sentinelKey); CHECK(editorStartupHook == sentinelHook);
 					if (path == 1) return;
 					leave(path);
 				};
 				try { run(); CHECK(path != 2); } catch (const Unwind&) { CHECK(path == 2); }
-				key("\t", prevent_readline_keybindings); key("\f", prevent_readline_keybindings);
+				key("\t", ignoreEditorKeybinding); key("\f", ignoreEditorKeybinding);
 				key(esc, exit_handler);
-				CHECK(!rl_startup_hook && g_rl_complete_mode == 0);
+				CHECK(!editorStartupHook && g_editorCompletionMode == 0);
 			}
 			// Test form-feed independently: the other guard must not mask a failure.
-			rl_bind_key('\t', sentinelKey);
+			editorBindKey('\t', sentinelKey);
 			allExitPaths([](int exit) {
-				RlFormFeedGuard guard;
-				rl_bind_key('\f', sentinelKey);
+				EditorFormFeedGuard guard;
+				editorBindKey('\f', sentinelKey);
 				key("\f", sentinelKey);
 				if (exit == 1) return;
 				leave(exit);
-			}, [] { key("\f", prevent_readline_keybindings); key("\t", sentinelKey); });
-			g_rl_complete_mode = 1;
-			{ RlCompleteModeGuard outer; g_rl_complete_mode = 0;
-			  { RlCompleteModeGuard inner; g_rl_complete_mode = 1; }
-			  CHECK(g_rl_complete_mode == 0); }
-			CHECK(g_rl_complete_mode == 1); g_rl_complete_mode = 0;
+			}, [] { key("\f", ignoreEditorKeybinding); key("\t", sentinelKey); });
+			g_editorCompletionMode = 1;
+			{ EditorCompletionModeGuard outer; g_editorCompletionMode = 0;
+			  { EditorCompletionModeGuard inner; g_editorCompletionMode = 1; }
+			  CHECK(g_editorCompletionMode == 0); }
+			CHECK(g_editorCompletionMode == 1); g_editorCompletionMode = 0;
 
 		}
 
 		void previewBindings() {
 
 			Binding previewUp = nullptr, previewDown = nullptr;
-			rl_voidfunc_t* previewDisplay = nullptr;
+			EditorRedisplay* previewDisplay = nullptr;
 			for (int path = 0; path < 3; ++path) {
 				std::weak_ptr<RefreshState> owner;
 				const auto pageSize = GlobalState::ITEMS_PER_PAGE;
@@ -220,17 +210,17 @@ namespace isocmd_tests {
 					ctx.pendingIndices = &state->pendingIndices;
 					ctx.hasPendingProcess = &state->hasPendingProcess;
 					ctx.state = state;
-					LivePreviewReadlineGuard guard;
+					LivePreviewLineEditorGuard guard;
 					configureLivePreview(ctx, files);
 					if (!previewUp) {
 						previewUp = binding(pgUp); previewDown = binding(pgDown);
-						previewDisplay = rl_redisplay_function;
+						previewDisplay = editorRedisplayHook;
 					}
-					CHECK(previewUp != pgup_handler && previewUp != rl_get_previous_history);
-					CHECK(previewDown != pgdn_handler && previewDown != rl_get_next_history);
-					CHECK(previewDisplay != rl_redisplay);
+					CHECK(previewUp != pgup_handler && previewUp != editorPreviousHistory);
+					CHECK(previewDown != pgdn_handler && previewDown != editorNextHistory);
+					CHECK(previewDisplay != editorRedisplay);
 					key(pgUp, previewUp); key(pgDown, previewDown);
-					CHECK(rl_redisplay_function == previewDisplay);
+					CHECK(editorRedisplayHook == previewDisplay);
 					resetLivePreviewIteration();
 					CHECK(repaintLivePreviewOnResizeIfConfigured() && livePreviewWasRepainted());
 					CHECK(GlobalState::ITEMS_PER_PAGE == pageSize && filteringStack.empty());
@@ -238,7 +228,7 @@ namespace isocmd_tests {
 					leave(path);
 				};
 				try { run(); CHECK(path != 2); } catch (const Unwind&) { CHECK(path == 2); }
-				historyKeys(); CHECK(rl_redisplay_function == rl_redisplay);
+				historyKeys(); CHECK(editorRedisplayHook == editorRedisplay);
 				CHECK(owner.expired() && !livePreviewWasRepainted());
 				CHECK(!repaintLivePreviewOnResizeIfConfigured());
 			}
@@ -287,9 +277,9 @@ namespace isocmd_tests {
 
 		void mappingKeys() {
 
-			key("\t", rl_complete); key("\f", clear_screen_and_buffer);
-			key(up, rl_get_previous_history); key(down, rl_get_next_history); historyKeys();
-			CHECK(rl_attempted_completion_function == completion_cb);
+			key("\t", editorComplete); key("\f", clear_screen_and_buffer);
+			key(up, editorPreviousHistory); key(down, editorNextHistory); historyKeys();
+			CHECK(editorCompletionHook == completion_cb);
 
 		}
 
@@ -300,24 +290,24 @@ namespace isocmd_tests {
 				auto run = [&] {
 					TerminalStateGuard mapping;
 					mappingKeys();
-					const auto display = rl_completion_display_matches_hook;
+					const auto display = editorCompletionDisplayHook;
 					CHECK(display && display != customListingsFunction);
 					allExitPaths([&](int exit) {
 						ConfirmationModeGuard confirm;
-						for (auto k : {"\t", "\f", up, down, pgUp, pgDown}) key(k, prevent_readline_keybindings);
-						CHECK(rl_attempted_completion_function == completion_cb);
-						CHECK(rl_completion_display_matches_hook == display);
+						for (auto k : {"\t", "\f", up, down, pgUp, pgDown}) key(k, ignoreEditorKeybinding);
+						CHECK(editorCompletionHook == completion_cb);
+						CHECK(editorCompletionDisplayHook == display);
 						if (exit == 1) return;
 						leave(exit);
-					}, [&] { mappingKeys(); CHECK(rl_completion_display_matches_hook == display); });
+					}, [&] { mappingKeys(); CHECK(editorCompletionDisplayHook == display); });
 					if (path == 1) return;
 					leave(path);
 				};
 				try { run(); CHECK(path != 2); } catch (const Unwind&) { CHECK(path == 2); }
-				CHECK(!rl_attempted_completion_function);
-				CHECK(rl_completion_display_matches_hook == customListingsFunction);
-				key("\t", prevent_readline_keybindings); key("\f", prevent_readline_keybindings);
-				key(up, rl_get_previous_history); key(down, rl_get_next_history); historyKeys();
+				CHECK(!editorCompletionHook);
+				CHECK(editorCompletionDisplayHook == customListingsFunction);
+				key("\t", ignoreEditorKeybinding); key("\f", ignoreEditorKeybinding);
+				key(up, editorPreviousHistory); key(down, editorNextHistory); historyKeys();
 				// The USB guard deliberately leaves SIGINT ignored and VEOF disabled.
 				// Assert this documented policy, then restore the PTY test baseline.
 				const TerminalSnapshot after;
@@ -331,18 +321,18 @@ namespace isocmd_tests {
 
 		void watcherUnwinding() {
 
-			rl_event_hook = sentinelHook;
+			editorEventHook = sentinelHook;
 			const TerminalSnapshot before;
 			for (int path = 0; path < 3; ++path) {
 				auto run = [&] {
 					ListResizeWatcher watcher([] {});
-					CHECK(rl_event_hook != sentinelHook && rl_event_hook != nullptr);
+					CHECK(editorEventHook != sentinelHook && editorEventHook != nullptr);
 					CHECK(TerminalSnapshot{}.resize.sa_flags & SA_SIGINFO);
 					if (path == 1) return;
 					leave(path);
 				};
 				try { run(); CHECK(path != 2); } catch (const Unwind&) { CHECK(path == 2); }
-				CHECK(rl_event_hook == sentinelHook); sameTerminal(before, TerminalSnapshot{});
+				CHECK(editorEventHook == sentinelHook); sameTerminal(before, TerminalSnapshot{});
 			}
 
 		}
@@ -351,36 +341,36 @@ namespace isocmd_tests {
 
 		int observeCancellation() {
 
-			cancellationStateObserved = rl_attempted_completion_function == nullptr &&
-			    rl_catch_sigwinch == 0 && rl_event_hook != sentinelHook &&
-			    rl_redisplay_function != rl_redisplay &&
-			    rl_function_of_keyseq("\t", rl_get_keymap(), nullptr) != sentinelKey;
+			cancellationStateObserved = editorCompletionHook == nullptr &&
+			    editorCatchSigwinch == 0 && editorEventHook != sentinelHook &&
+			    editorRedisplayHook != editorRedisplay &&
+			    editorKeySequenceHandler("\t") != sentinelKey;
 			return 0;
 
 		}
 
 		void cancellationPrompt(bool eof) {
 
-			rl_bind_key('\t', sentinelKey);
-			rl_attempted_completion_function = sentinelCompletion;
-			rl_completion_display_matches_hook = sentinelDisplay;
-			rl_event_hook = sentinelHook;
-			rl_startup_hook = observeCancellation;
+			editorBindKey('\t', sentinelKey);
+			editorCompletionHook = sentinelCompletion;
+			editorCompletionDisplayHook = sentinelDisplay;
+			editorEventHook = sentinelHook;
+			editorStartupHook = observeCancellation;
 			cancellationStateObserved = false;
-			rl_redisplay_function = rl_redisplay;
-			const auto catchWinch = rl_catch_sigwinch;
+			editorRedisplayHook = editorRedisplay;
+			const auto catchWinch = editorCatchSigwinch;
 			const TerminalSnapshot before;
-			auto line = readlineWithResize(eof ? "RAII-EOF> " : "RAII-ESC> ", [] {}, true);
+			auto line = editLineWithResize(eof ? "RAII-EOF> " : "RAII-ESC> ", [] {}, true);
 			if (eof) { CHECK(!line); }
-			else { CHECK(line && std::string_view(line.get()) == "\033"); }
+			else { CHECK(line && std::string_view(*line) == "\033"); }
 			key("\t", sentinelKey);
-			CHECK(rl_attempted_completion_function == sentinelCompletion);
+			CHECK(editorCompletionHook == sentinelCompletion);
 			CHECK(cancellationStateObserved);
-			CHECK(rl_completion_display_matches_hook == sentinelDisplay && rl_startup_hook == observeCancellation);
-			CHECK(rl_event_hook == sentinelHook && rl_redisplay_function == rl_redisplay);
-			CHECK(rl_catch_sigwinch == catchWinch);
+			CHECK(editorCompletionDisplayHook == sentinelDisplay && editorStartupHook == observeCancellation);
+			CHECK(editorEventHook == sentinelHook && editorRedisplayHook == editorRedisplay);
+			CHECK(editorCatchSigwinch == catchWinch);
 			sameTerminal(before, TerminalSnapshot{});
-			rl_startup_hook = nullptr;
+			editorStartupHook = nullptr;
 
 		}
 		int settingsStage = 0;
@@ -393,38 +383,38 @@ namespace isocmd_tests {
 
 			key("\f", clear_list_and_screen);
 			key(pgUp, pgup_handler); key(pgDown, pgdn_handler);
-			CHECK(g_rl_complete_mode == 0);
+			CHECK(g_editorCompletionMode == 0);
 			if (settingsStage == 1) {
-				CHECK(rl_attempted_completion_function == setting_value_completion_entry);
-				key("\t", my_rl_complete);
+				CHECK(editorCompletionHook == setting_value_completion_entry);
+				key("\t", completePrompt);
 			} else {
-				CHECK(!rl_attempted_completion_function);
+				CHECK(!editorCompletionHook);
 				numericTab = binding("\t");
-				CHECK(numericTab && numericTab != my_rl_complete && numericTab != rl_complete);
+				CHECK(numericTab && numericTab != completePrompt && numericTab != editorComplete);
 			}
 
 		}
 
 		void checkSettingsMenu() {
 
-			CHECK(!g_activeSettingValues && !rl_attempted_completion_function);
-			CHECK(g_rl_complete_mode == 1);
-			historyKeys(); key("\f", prevent_readline_keybindings);
-			key("?", settingsStage == 4 ? rl_insert : help_handler);
-			key("r", settingsStage == 4 ? rl_insert : reset_handler);
+			CHECK(!g_activeSettingValues && !editorCompletionHook);
+			CHECK(g_editorCompletionMode == 1);
+			historyKeys(); key("\f", ignoreEditorKeybinding);
+			key("?", settingsStage == 4 ? editorInsertKey : help_handler);
+			key("r", settingsStage == 4 ? editorInsertKey : reset_handler);
 			if (numericTab) key("\t", numericTab);
 
 		}
 
 		int observeSettings() {
 
-			const auto session = terminal_sync::readlineSession();
+			const auto session = terminal_sync::lineEditorSession();
 			if (session == lastSettingsSession) return 0;
 			lastSettingsSession = session;
 			try {
 				CHECK(settingsStage < 6);
-				CHECK(rl_completion_display_matches_hook == customListingsFunction);
-				CHECK(!rl_startup_hook && SettingsEditorRepaint::get());
+				CHECK(editorCompletionDisplayHook == customListingsFunction);
+				CHECK(!editorStartupHook && SettingsEditorRepaint::get());
 				key(esc, exit_handler);
 				if (settingsStage == 1 || settingsStage == 2) {
 					CHECK((g_activeSettingValues != nullptr) == (settingsStage == 1));
@@ -442,34 +432,31 @@ namespace isocmd_tests {
 			TempDir temp;
 			const auto config = temp.path / "config";
 			writeFile(config, "pagination = 2\nfilenames_only = off\n");
-			restoreReadline();
-			g_rl_complete_mode = 1;
-			lastSettingsSession = terminal_sync::readlineSession();
-			rl_event_hook = observeSettings;
+			restoreLineEditor();
+			g_editorCompletionMode = 1;
+			lastSettingsSession = terminal_sync::lineEditorSession();
+			editorEventHook = observeSettings;
 			interactiveConfigEditor(config.string());
 			if (!settingsFailure.empty()) throw std::runtime_error(settingsFailure);
 			CHECK(settingsStage == 6);
-			CHECK(!g_activeSettingValues && !rl_attempted_completion_function);
-			CHECK(rl_completion_display_matches_hook == customListingsFunction);
-			CHECK(!rl_startup_hook && g_rl_pending_text.empty() && g_rl_complete_mode == 1);
+			CHECK(!g_activeSettingValues && !editorCompletionHook);
+			CHECK(editorCompletionDisplayHook == customListingsFunction);
+			CHECK(!editorStartupHook && g_editorPendingText.empty() && g_editorCompletionMode == 1);
 			CHECK(!SettingsEditorRepaint::get());
-			key("r", rl_insert); key("?", rl_insert); key(esc, exit_handler);
-			historyKeys(); key("\t", numericTab); key("\f", prevent_readline_keybindings);
-			CHECK(rl_event_hook == observeSettings);
-			g_rl_complete_mode = 0;
-			rl_event_hook = nullptr;
+			key("r", editorInsertKey); key("?", editorInsertKey); key(esc, exit_handler);
+			historyKeys(); key("\t", numericTab); key("\f", ignoreEditorKeybinding);
+			CHECK(editorEventHook == observeSettings);
+			g_editorCompletionMode = 0;
+			editorEventHook = nullptr;
 
 		}
 
 	}
 
-	int readlineGuardsChild() {
+	int lineEditorGuardsChild() {
 
 		try {
-			rl_initialize();
-			rl_set_keymap(rl_get_keymap_by_name("emacs"));
-			rl_variable_bind("keyseq-timeout", "10");
-			using_history(); clear_history();
+			editorClearHistory();
 			enable_ctrl_d();
 			struct sigaction action{};
 			action.sa_handler = sentinelSignal;

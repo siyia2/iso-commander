@@ -2,16 +2,16 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.settings.settings;
 import isocmd.core.paths;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.input.tokenize;
 import isocmd.ui.interface.pausePrompts;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.display.themes;
 import isocmd.ui.info.verbose;
@@ -111,7 +111,7 @@ namespace {
 
 		/**
 		 * @brief Translates special navigation keys or jump commands into an `EditNav` action.
-		 * @param s Raw Readline input string or key token (`"PgUp"`, `"PgDn"`, etc.).
+		 * @param s Raw Line editor input string or key token (`"PgUp"`, `"PgDn"`, etc.).
 		 * @param pos Current 1-based position within the batch queue.
 		 * @param total Total number of items in the batch queue.
 		 * @param newVal Trimmed input text used to detect `g<number>` jump syntax.
@@ -121,7 +121,7 @@ namespace {
 		                                   const std::string& newVal) {
 
 			if (s == "PgUp" || s == "PgDn") {
-				RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+				RetainAndRestoreLineEditorBuffer::g_editorPendingText.clear();
 
 				if (s == "PgDn") {
 					return (pos < total) ? EditNav::Next : EditNav::Handled;
@@ -131,7 +131,7 @@ namespace {
 
 			if (newVal.size() >= 2 && newVal[0] == 'g' &&
 			    std::isdigit(static_cast<unsigned char>(newVal[1]))) {
-				RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+				RetainAndRestoreLineEditorBuffer::g_editorPendingText.clear();
 				try {
 					const std::size_t target = std::stoul(newVal.substr(1));
 					if (target >= 1 && target <= total && target != pos) {
@@ -206,11 +206,11 @@ namespace {
 
 	} // namespace nav
 
-	/// GNU Readline configuration, resize-aware prompting, and RAII state guards.
+	/// the native line editor configuration, resize-aware prompting, and RAII state guards.
 	namespace term {
 
 		/**
-		 * @brief Readline key handler that performs no action and returns success.
+		 * @brief line-editor key handler that performs no action and returns success.
 		 * @return Always `0`.
 		 */
 		int noopTabHandler(int, int) {
@@ -221,15 +221,15 @@ namespace {
 
 		/**
 		 * @brief Reads a line while registering a repaint callback for terminal resize events.
-		 * @param prompt Formatted Readline prompt string.
+		 * @param prompt Formatted Line editor prompt string.
 		 * @param repaint Callback invoked on resize or editor redraw requests.
-		 * @return Readline line wrapper containing the entered line or null on EOF/interrupt.
+		 * @return Line editor line wrapper containing the entered line or null on EOF/interrupt.
 		 */
-		RlLine readlineWithRepaint(const std::string& prompt,
+		EditorLine editLineWithRepaint(const std::string& prompt,
 		                           const std::function<void()>& repaint) {
 
 			SettingsEditorRepaint::set(repaint);
-			RlLine line = readlineWithResize(prompt, repaint);
+			EditorLine line = editLineWithResize(prompt, repaint);
 			SettingsEditorRepaint::set(nullptr);
 			return line;
 
@@ -241,21 +241,21 @@ namespace {
 		 * @param isNumeric `true` if the setting expects a numeric value rather than enumerated choices.
 		 * @param validValues Allowed discrete values for completion when non-empty.
 		 */
-		void setupSettingReadline(std::size_t total, bool isNumeric,
+		void setupSettingLineEditor(std::size_t total, bool isNumeric,
 		                          std::vector<std::string>& validValues) {
 
 			reset_custom_keybindingsForSettingsEditor();
 
 			g_activeSettingValues = validValues.empty() ? nullptr : &validValues;
-			rl_attempted_completion_function = isNumeric ? nullptr : setting_value_completion_entry;
-			rl_completion_display_matches_hook = customListingsFunction;
-			rl_bind_key('\t', isNumeric ? noopTabHandler : my_rl_complete);
-			rl_bind_key('\f', clear_list_and_screen);
+			editorCompletionHook = isNumeric ? nullptr : setting_value_completion_entry;
+			editorCompletionDisplayHook = customListingsFunction;
+			editorBindKey('\t', isNumeric ? noopTabHandler : completePrompt);
+			editorBindKey('\f', clear_list_and_screen);
 
-			rl_bind_keyseq("\\e", exit_handler);
+			editorBindKeySequence("\033", exit_handler);
 			if (total > 1) {
-				rl_bind_keyseq("\\e[5~", pgup_handler);
-				rl_bind_keyseq("\\e[6~", pgdn_handler);
+				editorBindKeySequence("\033[5~", pgup_handler);
+				editorBindKeySequence("\033[6~", pgdn_handler);
 			}
 
 		}
@@ -267,10 +267,10 @@ namespace {
 			~NavBindGuard() {
 
 				if (on) {
-					rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-					rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+					editorBindKeySequence("\033[5~", editorPreviousHistory);
+					editorBindKeySequence("\033[6~", editorNextHistory);
 				}
-				rl_bind_keyseq("\\e", exit_handler);
+				editorBindKeySequence("\033", exit_handler);
 
 			}
 		};
@@ -280,21 +280,21 @@ namespace {
 			~CompletionGuard() {
 
 				g_activeSettingValues = nullptr;
-				rl_attempted_completion_function = nullptr;
-				rl_completion_display_matches_hook = customListingsFunction;
-				rl_bind_key('\t', noopTabHandler);
-				rl_bind_key('\f', prevent_readline_keybindings);
+				editorCompletionHook = nullptr;
+				editorCompletionDisplayHook = customListingsFunction;
+				editorBindKey('\t', noopTabHandler);
+				editorBindKey('\f', ignoreEditorKeybinding);
 
 			}
 		};
 
-		/// scope guard that preserves and restores Readline completion mode flags.
+		/// scope guard that preserves and restores Line editor completion mode flags.
 		struct CompleteModeGuard {
-			int saved = RetainAndRestoreReadlineBuffer::g_rl_complete_mode;
+			int saved = RetainAndRestoreLineEditorBuffer::g_editorCompletionMode;
 
 			~CompleteModeGuard() {
 
-				RetainAndRestoreReadlineBuffer::g_rl_complete_mode = saved;
+				RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = saved;
 
 			}
 		};
@@ -381,7 +381,7 @@ namespace {
 		};
 
 		/**
-		 * @brief Builds the main editor selection prompt with Readline non-printing markers.
+		 * @brief Builds the main editor selection prompt with Line editor non-printing markers.
 		 * @param tc Active theme color palette.
 		 * @return Formatted prompt string.
 		 */
@@ -389,11 +389,11 @@ namespace {
 
 			std::string prompt("\n");
 			prompt
-			    .append(UI::Palette::RL_idxGreen)
+			    .append(UI::Palette::PromptIndexGreen)
 			    .append("IDX\001")
 			    .append(tc.path)
 			    .append("\002 ↵ for ")
-			    .append(UI::Palette::RL_Yellow)
+			    .append(UI::Palette::PromptYellow)
 			    .append("editor\001")
 			    .append(tc.path)
 			    .append("\002, ? for help: \001")
@@ -668,13 +668,13 @@ namespace {
 			drawSettings();
 
 			armPendingInputRestore();
-			RlLine confirmInput = term::readlineWithRepaint(confirmPrompt, drawSettings);
-			rl_startup_hook = nullptr;
+			EditorLine confirmInput = term::editLineWithRepaint(confirmPrompt, drawSettings);
+			editorStartupHook = nullptr;
 
 			if (!confirmInput) {
 				return;
 			}
-			if (!isConfirmed(trim(confirmInput.get()))) {
+			if (!isConfirmed(trim(*confirmInput))) {
 				return;
 			}
 			applyDefaultsAndReport(screen);
@@ -789,7 +789,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 	term::NavBindGuard navGuard{total > 1};
 	term::CompletionGuard completionGuard;
 	term::CompleteModeGuard completeModeGuard;
-	RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
+	RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = 0;
 
 	std::string current = settings_ops::resolveCurrent(key, entry);
 	std::vector<std::string> pendingErrors = inputErrors;
@@ -811,8 +811,8 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 	};
 
 	while (true) {
-		resetReadlinePagination();
-		term::setupSettingReadline(total, isNumeric, validValues);
+		resetLineEditorPagination();
+		term::setupSettingLineEditor(total, isNumeric, validValues);
 
 		{
 			SyncOutput sync;
@@ -821,18 +821,18 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
 		}
 
 		const std::string prompt = view::buildValuePrompt(tc);
-		RlLine rawInput = term::readlineWithRepaint(prompt, repaintEditOnResize);
+		EditorLine rawInput = term::editLineWithRepaint(prompt, repaintEditOnResize);
 
 		armPendingInputRestore();
-		rl_startup_hook = nullptr;
+		editorStartupHook = nullptr;
 
-		if (!rawInput || rawInput.get()[0] == 27) {
+		if (!rawInput || (*rawInput)[0] == 27) {
 			return EditNav::Abort;
 		}
 
-		const std::string newVal = trim(rawInput.get());
+		const std::string newVal = trim(*rawInput);
 
-		if (const auto navAction = nav::handleInput(rawInput.get(), pos, total, newVal); navAction.has_value()) {
+		if (const auto navAction = nav::handleInput(*rawInput, pos, total, newVal); navAction.has_value()) {
 			if (*navAction == EditNav::Next || *navAction == EditNav::Prev || *navAction == EditNav::GoTo) {
 				return *navAction;
 			}
@@ -859,7 +859,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  * Displays settings grouped by section and lets the user edit entries by
  * index or restore all defaults.
  *
- * - **Input:** GNU Readline accepts individual selections and tokenized
+ * - **Input:** the native line editor accepts individual selections and tokenized
  *   multi-selections; per-setting validation is handled by @c editSetting.
  * - **Multi-selection navigation:** when several settings are selected, they
  *   are edited one screen at a time. A blank Enter skips the current setting
@@ -899,7 +899,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  *   confirmation line is re-echoed afterwards.
  * - **Clear handling:** <kbd>Ctrl+L</kbd> is bound only on the per-setting
  *   value prompt in @c editSetting, where it dismisses any completion list and
- *   repaints the edit screen via @c term::readlineWithRepaint. The binding is
+ *   repaints the edit screen via @c term::editLineWithRepaint. The binding is
  *   released when @c editSetting returns, so it is not active on the main
  *   settings prompt or the reset confirmation.
  *
@@ -907,7 +907,7 @@ EditNav editSetting(const std::string& configPath, const std::string& key,
  */
 void interactiveConfigEditor(const std::string& configPath) {
 
-	PendingReadlineTextClearGuard pendingTextGuard;
+	PendingLineEditorTextClearGuard pendingTextGuard;
 
 	struct SettingsGuard {
 		~SettingsGuard() {
@@ -931,14 +931,14 @@ void interactiveConfigEditor(const std::string& configPath) {
 
 		const std::string prompt = view::buildMainPrompt(screen.tc);
 		armPendingInputRestore();
-		RlLine rawInput = term::readlineWithRepaint(prompt, drawSettings);
-		rl_startup_hook = nullptr;
+		EditorLine rawInput = term::editLineWithRepaint(prompt, drawSettings);
+		editorStartupHook = nullptr;
 
 		if (!rawInput) {
 			break;
 		}
 
-		const std::string input = trim(rawInput.get());
+		const std::string input = trim(*rawInput);
 		if (input == "\x1b") {
 			break;
 		}

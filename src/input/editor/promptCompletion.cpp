@@ -10,34 +10,53 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.util.writeTypes;
 
-namespace RetainAndRestoreReadlineBuffer {
-	std::string g_rl_pending_text = "";
+/**
+ * @brief Retains pending editor input across prompt redraws and restoration.
+ */
+namespace RetainAndRestoreLineEditorBuffer {
+	std::string g_editorPendingText = "";
 }
 
-PendingReadlineTextClearGuard::~PendingReadlineTextClearGuard() {
+/**
+ * @brief Clears retained editor input on scope exit.
+ *
+ * Prevents pending text from leaking into subsequent input sessions.
+ */
+PendingLineEditorTextClearGuard::~PendingLineEditorTextClearGuard() {
 
-	RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
+	RetainAndRestoreLineEditorBuffer::g_editorPendingText.clear();
 
 }
 
+/**
+ * @brief Manages the repaint callback for the interactive settings editor.
+ */
 namespace SettingsEditorRepaint {
 	std::function<void()> g_fn;
 
+	/**
+	 * @brief Registers or replaces the settings editor repaint callback.
+	 * @param fn Callback to invoke when repainting is required.
+	 */
 	void set(std::function<void()> fn) {
 
 		g_fn = std::move(fn);
 
 	}
 
+	/**
+	 * @brief Retrieves the currently registered repaint callback.
+	 * @return Constant reference to the callback, which may be empty.
+	 */
 	const std::function<void()>& get() {
 
 		return g_fn;
@@ -46,8 +65,8 @@ namespace SettingsEditorRepaint {
 }
 
 /**
- * @file readline_completion.cpp
- * @brief Custom GNU Readline completion and pagination logic for CLI commands and device mapping.
+ * @file promptCompletion.cpp
+ * @brief Custom line-editor completion and pagination logic for CLI commands and device mapping.
  */
 
 static int current_page = 0;
@@ -60,54 +79,31 @@ const char* special_cmds[] = {
 };
 
 /**
- * @brief Generates completion matches for special commands based on prefix.
- * @param text The partial text to match.
- * @param state Readline state (0 for first call).
- * @return Allocated string of the match or NULL.
- */
-static char* command_generator(const char* text, int state) {
-
-	static int list_index, len;
-	if (!state) {
-		list_index = 0;
-		len = strlen(text);
-	}
-
-	const char* name;
-	while ((name = special_cmds[list_index++])) {
-		if (strncmp(name, text, len) == 0) {
-			return strdup(name);
-		}
-	}
-	return NULL;
-
-}
-
-/**
- * @brief Dispatches completion requests to the command generator if triggers are detected.
+ * @brief Collects matching special commands when a trigger is present.
  *
  * Trigger characters are @c '!' and @c '*' at the start of the current word.
  * This entry point deliberately does @b not set
- * @c rl_attempted_completion_over; when no trigger is present it returns
- * @c nullptr (not an empty array) so Readline falls back to its default
+ * @c editorCompletionHandled; when no trigger is present it returns
+ * an empty vector so the line editor falls back to its default
  * filename completion. This is the opposite of
  * @c setting_value_completion_entry(), which suppresses the default.
  *
  * @param text The partial text.
  * @param start Start index in line buffer (unused).
  * @param end End index in line buffer (unused).
- * @return Array of matches or nullptr.
+ * @return Vector of matches (empty if no match).
  */
-char** my_special_completion_entry(const char* text, int start, int end) {
+std::vector<std::string> my_special_completion_entry(std::string_view text, int start, int end) {
 
 	(void)start;
 	(void)end;
 
-	if (text[0] == '!' || text[0] == '*') {
-		return rl_completion_matches(text, command_generator);
+	if (text.empty() || (text.front() != '!' && text.front() != '*')) return {};
+	std::vector<std::string> candidates;
+	for (const char* name : special_cmds) {
+		if (name && std::string_view(name).starts_with(text)) candidates.emplace_back(name);
 	}
-
-	return nullptr;
+	return editorCompletionMatches(std::move(candidates));
 
 }
 
@@ -115,32 +111,32 @@ char** my_special_completion_entry(const char* text, int start, int end) {
  * @brief Rebinds Esc to @c clear_list_and_screen while a completion list is shown.
  *
  * A first Esc after a completion list clears/repaints, and a second Esc
- * exits. This applies to every prompt that uses @c my_rl_complete, including
+ * exits. This applies to every prompt that uses @c completePrompt, including
  * the Settings Editor's value prompt. @c clear_list_and_screen drops the
  * repaint snapshot before the screen is redrawn, so the Settings Editor's
  * repaint callback cannot redraw the list that is being dismissed.
  */
 static void install_esc_hijack() {
 
-	rl_bind_keyseq("\\e", clear_list_and_screen);
+	editorBindKeySequence("\033", clear_list_and_screen);
 
 }
 
 /// Rebinds Esc back to @c exit_handler.
 static void restore_esc_default() {
 
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
 /**
  * @brief True while @c customListingsFunction is displaying a completion
- *        list for the current @c my_rl_complete() call.
+ *        list for the current @c completePrompt() call.
  *
- * If Readline inserts a common prefix while also displaying matches, the
+ * If the line editor inserts a common prefix while also displaying matches, the
  * subsequent @c clear_screen_and_buffer() call restores the default Esc
  * binding and, because this flag is set, preserves the repaint snapshot.
- * @c my_rl_complete() uses this flag to re-install the Esc hijack so the
+ * @c completePrompt() uses this flag to re-install the Esc hijack so the
  * first Esc still clears the list and the second exits.
  */
 static bool list_shown_during_completion = false;
@@ -168,7 +164,7 @@ namespace {
 
 	struct FormatContext {
 		CompletionKind kind;
-		const ReadlineColors& rc;
+		const LineEditorColors& rc;
 		const char* base_color;     // dynamic color used for setting values
 		int base_len;               // length of the common directory part (file branch only)
 	};
@@ -188,7 +184,7 @@ namespace {
 		int num_matches = 0;
 		int displayed_page = 0;
 		int base_len = 0;
-		int hook_cursor_row = 0;    // 1-based terminal row where Readline invoked the completion hook
+		int hook_cursor_row = 0;    // 1-based terminal row where the line editor invoked the completion hook
 
 		bool valid = false;
 
@@ -204,7 +200,7 @@ namespace {
 		}
 
 		void capture(
-		    char** source,
+		    const std::vector<std::string>& source,
 		    int count,
 		    CompletionKind completion_kind,
 		    int page,
@@ -213,10 +209,7 @@ namespace {
 
 			clear();
 
-			matches.reserve(count + 1);
-
-			for (int i = 0; i <= count; ++i)
-			    matches.emplace_back(source[i] ? source[i] : "");
+			matches = source;
 
 			kind = completion_kind;
 			num_matches = count;
@@ -248,16 +241,16 @@ namespace {
 
 	}
 
-	const char* specialColor(char c, const ReadlineColors& rc) {
+	const char* specialColor(char c, const LineEditorColors& rc) {
 
 		if (!isSpecialPrefix(c)) return rc.reset;
 		return (c == '!') ? rc.warning : rc.accent;
 
 	}
 
-	CompletionKind detectCompletionKind(char** matches, int num_matches) {
+	CompletionKind detectCompletionKind(const std::vector<std::string>& matches, int num_matches) {
 
-		if (num_matches > 0 && matches[1] && isSpecialPrefix(matches[1][0]))
+		if (num_matches > 0 && !matches[1].empty() && isSpecialPrefix(matches[1][0]))
 		    return CompletionKind::Special;
 		if (g_activeSettingValues != nullptr && !g_activeSettingValues->empty())
 		    return CompletionKind::SettingValue;
@@ -323,7 +316,7 @@ namespace {
 	    int total_pages,
 	    int num_matches,
 	    int page_index,
-	    const ReadlineColors& rc) {
+	    const LineEditorColors& rc) {
 
 		if (num_matches <= 1) return;
 
@@ -347,7 +340,7 @@ namespace {
 
 	}
 
-	void printFooter(const PageInfo& page, int num_matches, const ReadlineColors& rc) {
+	void printFooter(const PageInfo& page, int num_matches, const LineEditorColors& rc) {
 
 		if (!needsPagination(num_matches)) return;
 		printf("\n%s[%d/%d matches — press %sTab%s for next page]%s\n",
@@ -418,7 +411,7 @@ namespace {
 	}
 
 	DisplayItem makeItem(const char* raw, const char* text, const char* color,
-	                     const char* suffix, int width, const ReadlineColors& rc) {
+	                     const char* suffix, int width, const LineEditorColors& rc) {
 
 		std::string truncated = smartTruncate(text, width);
 		int vis_len = (int)truncated.length() + (int)strlen(suffix);
@@ -429,7 +422,7 @@ namespace {
 
 	DisplayItem formatItem(const char* raw, const FormatContext& ctx, int width) {
 
-		const ReadlineColors& rc = ctx.rc;
+		const LineEditorColors& rc = ctx.rc;
 
 		if (ctx.kind == CompletionKind::Special)
 		    return makeItem(raw, raw, specialColor(raw[0], rc), "", width, rc);
@@ -449,13 +442,13 @@ namespace {
 
 	}
 
-	std::vector<DisplayItem> formatPageItems(char** matches, const PageInfo& page, const FormatContext& ctx) {
+	std::vector<DisplayItem> formatPageItems(const std::vector<std::string>& matches, const PageInfo& page, const FormatContext& ctx) {
 
 		std::vector<DisplayItem> items;
 		items.reserve(page.items_to_display);
 		for (int i = 0; i < page.items_to_display; ++i)
 		    items.push_back(formatItem(
-		        matches[page.start_index + i],
+		        matches[page.start_index + i].c_str(),
 		        ctx,
 		        kProbeWidth));
 		return items;
@@ -512,119 +505,10 @@ namespace {
 
 	}
 
-	// Parses a completed ANSI Cursor Position Report and returns its 1-based row.
-	// Returns 0 if the response is malformed.
-	int parseCursorRow(const char* buf) {
-
-		int parsed_row = 0, parsed_col = 0;
-		char term_ch = 0;
-
-		const char* esc = strstr(buf, "\033[");
-
-		if (!esc ||
-		    sscanf(esc + 2, "%d;%d%c", &parsed_row, &parsed_col, &term_ch) != 3 ||
-		    term_ch != 'R' ||
-		    parsed_row <= 0 ||
-		    parsed_col <= 0) {
-			return 0;
-		}
-
-		return parsed_row;
-
-	}
-
-	// Drains trailing CPR response bytes after a timeout.
-	void drainCursorResponse(int tty_fd) {
-
-		for (int i = 0; i < 5; ++i) {
-			struct pollfd pfd{};
-			pfd.fd = tty_fd;
-			pfd.events = POLLIN;
-
-			if (poll(&pfd, 1, 20) <= 0) return;
-
-			char ch = 0;
-			if (read(tty_fd, &ch, 1) <= 0 || ch == 'R') return;
-		}
-
-	}
-
-	// Queries the 1-based cursor row via ANSI Cursor Position Report (ESC [ 6 n).
-	// Returns 0 if the terminal is non-interactive, unsupported, or times out.
+	// The native editor owns input and preserves any interleaved typeahead.
 	int queryCursorRow() {
 
-		if (!isatty(STDOUT_FILENO)) return 0;
-
-		int tty_fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-		if (tty_fd < 0) return 0;
-
-		struct termios orig_termios{}, raw_termios{};
-		bool have_termios = (tcgetattr(tty_fd, &orig_termios) == 0);
-
-		if (have_termios) {
-			raw_termios = orig_termios;
-			raw_termios.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
-			raw_termios.c_cc[VMIN] = 0;
-			raw_termios.c_cc[VTIME] = 0;
-			tcsetattr(tty_fd, TCSANOW, &raw_termios);
-		}
-
-		fflush(stdout);
-
-		const char req[] = "\033[6n";
-		ssize_t written = write(tty_fd, req, sizeof(req) - 1);
-
-		int row = 0;
-		bool saw_cpr_terminator = false;
-
-		if (written == static_cast<ssize_t>(sizeof(req) - 1)) {
-			using clock = std::chrono::steady_clock;
-			const auto deadline = clock::now() + std::chrono::milliseconds(100);
-
-			char buf[64];
-			size_t pos = 0;
-
-			while (pos + 1 < sizeof(buf)) {
-				const auto remaining =
-				    std::chrono::duration_cast<std::chrono::milliseconds>(
-				        deadline - clock::now());
-
-				if (remaining.count() <= 0) break;
-
-				struct pollfd pfd{};
-				pfd.fd = tty_fd;
-				pfd.events = POLLIN;
-
-				int pr = poll(&pfd, 1, static_cast<int>(remaining.count()));
-				if (pr <= 0) break;
-
-				if (read(tty_fd, buf + pos, 1) <= 0) break;
-
-				if (buf[pos] == 'R') {
-					buf[pos + 1] = '\0';
-					saw_cpr_terminator = true;
-					row = parseCursorRow(buf);
-					break;
-				}
-
-				++pos;
-			}
-
-			// If a CPR sequence started ("ESC [") but timed out before 'R',
-			// drain any trailing bytes up to 'R' so a late tail doesn't leak.
-			if (!saw_cpr_terminator &&
-			    pos > 0 &&
-			    strstr(buf, "\033[") != nullptr) {
-				drainCursorResponse(tty_fd);
-			}
-		}
-
-		if (have_termios) {
-			tcsetattr(tty_fd, TCSANOW, &orig_termios);
-		}
-
-		close(tty_fd);
-		return row;
+		return editorQueryCursorRow();
 
 	}
 
@@ -677,7 +561,7 @@ namespace {
 		    layout.num_columns;
 
 		// Vertical constraint: never allow the grid to exceed the rows available
-		// below the cursor position where Readline invoked the completion hook.
+		// below the cursor position where the line editor invoked the completion hook.
 		if (max_grid_rows >= 0 && layout.rows > max_grid_rows) {
 			layout.rows = max_grid_rows;
 		}
@@ -739,14 +623,14 @@ namespace {
 	}
 
 	void renderCompletionListing(
-	    char** matches,
+	    const std::vector<std::string>& matches,
 	    int num_matches,
 	    CompletionKind kind,
 	    int displayed_page,
 	    int base_len,
 	    int hook_cursor_row) {
 
-		ReadlineColors rc = resolveReadlineTheme();
+		LineEditorColors rc = resolveLineEditorTheme();
 
 		const PageInfo page =
 		    computePageInfo(num_matches, displayed_page);
@@ -758,7 +642,7 @@ namespace {
 		const int max_grid_rows =
 		    maxGridRowsBelowCursor(effective_cursor_row, term_rows, num_matches, show_footer);
 
-		// If there are no rows below Readline's cursor, do not render.
+		// If there are no rows below the line editor's cursor, do not render.
 		if (effective_cursor_row > 0 && term_rows <= effective_cursor_row) {
 			fflush(stdout);
 			return;
@@ -840,19 +724,13 @@ void repaintCompletionListing() {
 	    return;
 
 	// Re-query the current cursor row on repaint if available, falling back
-	// to the row captured when Readline originally invoked the hook.
+	// to the row captured when the line editor originally invoked the hook.
 	const int current_cursor_row = queryCursorRow();
 	const int cursor_row =
 	    (current_cursor_row > 0) ? current_cursor_row : lastCompletion.hook_cursor_row;
 
-	std::vector<char*> matches;
-	matches.reserve(lastCompletion.matches.size());
-
-	for (auto& match : lastCompletion.matches)
-	    matches.push_back(match.data());
-
 	renderCompletionListing(
-	    matches.data(),
+	    lastCompletion.matches,
 	    lastCompletion.num_matches,
 	    lastCompletion.kind,
 	    lastCompletion.displayed_page,
@@ -862,9 +740,9 @@ void repaintCompletionListing() {
 }
 
 /**
- * @brief Custom hook for GNU Readline to display completions with pagination and color themes.
+ * @brief Custom native-editor hook to display completions with pagination and color themes.
  *
- * @param matches  Array of completion matches in Readline format: matches[0] is the
+ * @param matches  Array of completion matches in line-editor format: matches[0] is the
  *                 common prefix of all completions (used for pagination state tracking,
  *                 not displayed), and matches[1..num_matches] are the actual completion
  *                 candidates. Note that matches[1] is interpreted as a filesystem path
@@ -872,15 +750,15 @@ void repaintCompletionListing() {
  *                 command and settings-value completions it is simply the first
  *                 candidate string.
  * @param num_matches  Total number of completion candidates (excluding matches[0]).
- * @param max_length   Length of the longest match string as provided by Readline.
+ * @param max_length   Length of the longest match string as provided by the line editor.
  *                     Unused by this implementation — column widths are computed
  *                     directly from the match array.
  */
-void customListingsFunction(char **matches, int num_matches, int max_length) {
+void customListingsFunction(const std::vector<std::string>& matches, int num_matches, int max_length) {
 
 	(void)max_length;
 
-	// Capture the cursor position right where Readline invoked the completion hook,
+	// Capture the cursor position right where the line editor invoked the completion hook,
 	// before any output is emitted, to enforce the vertical viewport constraint.
 	const int hook_cursor_row = queryCursorRow();
 
@@ -889,13 +767,13 @@ void customListingsFunction(char **matches, int num_matches, int max_length) {
 
 	const CompletionKind kind = detectCompletionKind(matches, num_matches);
 
-	updatePaginationState(matches[0]);
+	updatePaginationState(matches[0].c_str());
 
 	const int displayed_page = current_page;
 
 	const int base_len =
 	    (kind == CompletionKind::File)
-	        ? computeBaseLen(matches[1])
+	        ? computeBaseLen(matches[1].c_str())
 	        : 0;
 
 	// Preserve the actual displayed matches and page for resize repainting.
@@ -930,42 +808,14 @@ CompleterData g_completerData = {nullptr, nullptr};
 //=============================================================================
 
 /**
- * @brief Generates matches for the active setting's valid values.
- *
- * Iterates over the candidate list in @c g_activeSettingValues, comparing each
- * entry against @p text by prefix. The append character is set to a single
- * space so accepted matches remain editable. Mirrors @c command_generator's
- * static-index contract (state == 0 restarts iteration).
- */
-static char* setting_value_generator(const char* text, int state) {
-
-	static size_t idx;
-	static size_t len;
-	if (!state) {
-		idx = 0;
-		len = strlen(text);
-		rl_completion_append_character = ' ';
-	}
-	if (!g_activeSettingValues) return nullptr;
-	while (idx < g_activeSettingValues->size()) {
-		const std::string& v = (*g_activeSettingValues)[idx++];
-		if (v.compare(0, len, text) == 0) {
-			return strdup(v.c_str());
-		}
-	}
-	return nullptr;
-
-}
-
-/**
  * @brief Completion entry for the Settings Editor.
  *
  * Mirrors @c my_special_completion_entry in shape, but differs in two
- * deliberate ways: it sets @c rl_attempted_completion_over = 1 (so Readline
+ * deliberate ways: it sets @c editorCompletionHandled = 1 (so the line editor
  * does not fall back to filename completion on this prompt) and forces the
- * append character to a single space. When matches exist, Readline hands the
+ * append character to a single space. When matches exist, the line editor hands the
  * list to @c customListingsFunction (installed as
- * @c rl_completion_display_matches_hook by @c restoreReadline), so pagination,
+ * @c editorCompletionDisplayHook by @c restoreLineEditor), so pagination,
  * colors, column layout, resize repaints and the Esc handling (first Esc
  * clears the list, second Esc exits) all behave exactly like the search prompt.
  *
@@ -973,32 +823,106 @@ static char* setting_value_generator(const char* text, int state) {
  *       the Settings Editor (see @c editSetting / the scope guard in
  *       settingsEditor.cpp); this function only consumes it.
  */
-char** setting_value_completion_entry(const char* text, int /*start*/, int /*end*/) {
+std::vector<std::string> setting_value_completion_entry(std::string_view text, int /*start*/, int /*end*/) {
 
-	if (!g_activeSettingValues || g_activeSettingValues->empty()) return nullptr;
-	rl_attempted_completion_over = 1;
-	rl_completion_append_character = ' ';
-	return rl_completion_matches(text, setting_value_generator);
+	if (!g_activeSettingValues || g_activeSettingValues->empty()) return {};
+	editorCompletionHandled = 1;
+	editorCompletionAppendCharacter = ' ';
+	std::vector<std::string> candidates;
+	for (const auto& value : *g_activeSettingValues)
+		if (value.starts_with(text)) candidates.push_back(value);
+	return editorCompletionMatches(std::move(candidates));
+
+}
+
+/// Completed mappings outside the token currently being edited.
+struct MappingAssignments {
+	std::vector<bool> mapped;
+	std::vector<std::string> used;
+};
+
+/// Removes the same surrounding whitespace accepted by the mapping parser.
+static std::string_view trimMappingPart(std::string_view part) {
+
+	constexpr std::string_view whitespace = " \t\n\r\f\v";
+	const auto first = part.find_first_not_of(whitespace);
+	if (first == std::string_view::npos) return {};
+	return part.substr(first, part.find_last_not_of(whitespace) - first + 1);
+
+}
+
+/**
+ * @brief Records a complete mapping to a discovered device, ignoring invalid or duplicate pairs.
+ * @param token Semicolon-delimited mapping token.
+ * @param assignments Assigned ISO indices and device paths.
+ */
+static void recordMapping(std::string_view token, MappingAssignments& assignments) {
+
+	const auto sep = token.find('>');
+	if (sep == std::string_view::npos) return;
+	const auto indexText = trimMappingPart(token.substr(0, sep));
+	if (indexText.empty()) return;
+	std::size_t index = 0;
+	const auto [end, ec] = std::from_chars(indexText.data(), indexText.data() + indexText.size(), index);
+	if (ec != std::errc{} || end != indexText.data() + indexText.size() || index == 0 || index > assignments.mapped.size()) return;
+
+	std::string device(trimMappingPart(token.substr(sep + 1)));
+	if (!device.starts_with("/dev/")) return;
+	const auto& devices = *g_completerData.usbDevices;
+	if (std::find(devices.begin(), devices.end(), device) == devices.end()) {
+		std::error_code error;
+		device = std::filesystem::canonical(device, error).string();
+		if (error || std::find(devices.begin(), devices.end(), device) == devices.end()) return;
+	}
+	if (std::find(assignments.used.begin(), assignments.used.end(), device) != assignments.used.end()) return;
+	assignments.mapped[index - 1] = true;
+	assignments.used.push_back(std::move(device));
+
+}
+
+/**
+ * @brief Collects assignments on either side of the current completion token.
+ * @param line Full editor buffer.
+ * @param start Byte offset of the current token.
+ * @return Existing valid assignments, excluding the token being edited.
+ */
+static MappingAssignments collectMappingAssignments(std::string_view line, std::size_t start) {
+
+	MappingAssignments assignments;
+	if (!g_completerData.sortedIsos || !g_completerData.usbDevices) return assignments;
+	assignments.mapped.resize(g_completerData.sortedIsos->size());
+	for (std::size_t pos = 0; pos < line.size();) {
+		const auto sep = line.find(';', pos);
+		const auto finish = sep == std::string_view::npos ? line.size() : sep;
+		if (start < pos || start > finish) recordMapping(line.substr(pos, finish - pos), assignments);
+		if (sep == std::string_view::npos) break;
+		pos = sep + 1;
+	}
+	return assignments;
 
 }
 
 /**
  * @brief Handles tab-completion for ISO images (numeric indices with '>' separator).
  * @param text The partial text entered by the user.
- * @param start Start index in the Readline line buffer.
- * @param full_line The complete text of the Readline line buffer.
- * @return Allocated array of string matches, or nullptr if no completions exist.
+ * @param start Start index in the line-editor buffer.
+ * @param full_line The complete text of the line-editor buffer.
+ * @param assignments Completed mappings outside the current token.
+ * @return Vector of matches (empty if no match).
  */
-static char** handle_iso_completion(const char* text, int start, const std::string& full_line) {
+static std::vector<std::string> handle_iso_completion(std::string_view text, int start, const std::string& full_line,
+                                                      const MappingAssignments& assignments) {
 
 	if (!g_completerData.sortedIsos) {
-		return nullptr;
+		return {};
 	}
 
 	std::vector<std::string> possible_completions;
-	size_t list_index = 0;
-	while (list_index < g_completerData.sortedIsos->size()) {
-		const std::string opt = std::to_string(++list_index) + ">";
+	// Only implicit (empty-token) completion prioritizes unmapped ISOs.
+	const bool preferUnmapped = text.empty() && std::find(assignments.mapped.begin(), assignments.mapped.end(), false) != assignments.mapped.end();
+	for (size_t i = 0; i < g_completerData.sortedIsos->size(); ++i) {
+		if (preferUnmapped && assignments.mapped[i]) continue;
+		const std::string opt = std::to_string(i + 1) + ">";
 		if (opt.find(text) == 0) {
 			possible_completions.push_back(opt);
 		}
@@ -1014,38 +938,27 @@ static char** handle_iso_completion(const char* text, int start, const std::stri
 	}
 
 	if (all_present || possible_completions.empty()) {
-		return nullptr;
+		return {};
 	}
 
-	return rl_completion_matches(text, [](const char* text, int state) -> char* {
-
-		static size_t list_index;
-		if (!state) {
-			list_index = 0;
-			rl_completion_append_character = '\0';
-		}
-		while (list_index < g_completerData.sortedIsos->size()) {
-			const std::string opt = std::to_string(++list_index) + ">";
-			if (opt.find(text) == 0)
-			    return strdup(opt.c_str());
-		}
-		return nullptr;
-
-	});
+	editorCompletionAppendCharacter = '\0';
+	return editorCompletionMatches(std::move(possible_completions));
 
 }
 
 /**
  * @brief Handles tab-completion for USB target devices following the '>' separator.
  * @param text The partial text entered by the user.
- * @param start Start index in the Readline line buffer.
- * @param full_line The complete text of the Readline line buffer.
- * @return Allocated array of string matches, or nullptr if no completions exist.
+ * @param start Start index in the line-editor buffer.
+ * @param full_line The complete text of the line-editor buffer.
+ * @param assignments Completed mappings outside the current token.
+ * @return Vector of matches (empty if no match).
  */
-static char** handle_device_completion(const char* text, int start, const std::string& full_line) {
+static std::vector<std::string> handle_device_completion(std::string_view text, int start, const std::string& full_line,
+                                                         const MappingAssignments& assignments) {
 
 	if (!g_completerData.usbDevices) {
-		return nullptr;
+		return {};
 	}
 
 	std::string fullText(text);
@@ -1061,6 +974,7 @@ static char** handle_device_completion(const char* text, int start, const std::s
 	std::vector<std::string> possible_device_completions;
 	for (size_t i = 0; i < g_completerData.usbDevices->size(); i++) {
 		const std::string& dev = (*g_completerData.usbDevices)[i];
+		if (std::find(assignments.used.begin(), assignments.used.end(), dev) != assignments.used.end()) continue;
 		if (dev.find(deviceSubText) == 0) {
 			std::string completion = prefix + dev;
 			possible_device_completions.push_back(completion);
@@ -1077,66 +991,59 @@ static char** handle_device_completion(const char* text, int start, const std::s
 	}
 
 	if (all_present || possible_device_completions.empty()) {
-		return nullptr;
+		return {};
 	}
 
-	// Static variables to preserve exact lambda state/capture behavior
-	static std::string s_prefix;
-	static std::string s_deviceSubText;
-	s_prefix = prefix;
-	s_deviceSubText = deviceSubText;
-
-	rl_completion_append_character = '\0';
-	return rl_completion_matches(fullText.c_str(), [](const char* /*unused*/, int state) -> char* {
-
-		static size_t list_index;
-		if (!state) {
-			list_index = 0;
-		}
-		while (list_index < g_completerData.usbDevices->size()) {
-			const std::string& dev = (*g_completerData.usbDevices)[list_index++];
-			if (dev.find(s_deviceSubText) == 0) {
-				std::string completion = s_prefix + dev;
-				return strdup(completion.c_str());
-			}
-		}
-		return nullptr;
-
-	});
+	editorCompletionAppendCharacter = '\0';
+	return editorCompletionMatches(std::move(possible_device_completions));
 
 }
 
 /**
- * @brief Callback for Readline to handle ISO-to-USB mapping completions.
+ * @brief Callback for the line editor to handle ISO-to-USB mapping completions.
  *
  * Resets pagination state and the completion repaint snapshot inline (the same
- * resets @c resetReadlinePagination performs), suppresses Readline's default
+ * resets @c resetLineEditorPagination performs), suppresses the line editor's default
  * filename completion, then dispatches to the ISO-index or USB-device handler
- * depending on whether the current word contains a '>' separator.
+ * depending on whether the current word contains a '>' separator. A unique
+ * ISO-index match continues directly into device completion in the same Tab.
+ * Empty tokens prefer unmapped ISOs, and devices already assigned elsewhere
+ * are excluded. Explicit indices may still be mapped to multiple devices.
  *
  * @param text The partial text currently being completed.
  * @param start Start index of the current word in the line buffer.
  * @param end End index of the current word in the line buffer.
- * @return Array of matched completion strings or nullptr.
+ * @return Vector of matches (empty if no match).
  */
-char** completion_cb(const char* text, int start, int end) {
+std::vector<std::string> completion_cb(std::string_view text, int start, int end) {
 
 	current_page = 0;
 	last_common_prefix[0] = '\0';
 	lastCompletion.clear();
 
-	rl_attempted_completion_over = 1;
+	editorCompletionHandled = 1;
 
-	std::string current_word(rl_line_buffer + start, end - start);
-	std::string full_line(rl_line_buffer);
+	std::string current_word(editorLineBuffer + start, end - start);
+	std::string full_line(editorLineBuffer);
+
+	const auto assignments = collectMappingAssignments(full_line, start);
+	if (text.empty() && g_completerData.usbDevices && !assignments.used.empty() &&
+	    assignments.used.size() == g_completerData.usbDevices->size()) return {};
 
 	bool is_device_completion = (current_word.find('>') != std::string::npos);
 
-	if (!is_device_completion) {
-		return handle_iso_completion(text, start, full_line);
-	} else {
-		return handle_device_completion(text, start, full_line);
+	if (is_device_completion) {
+		return handle_device_completion(text, start, full_line, assignments);
 	}
+
+	auto matches = handle_iso_completion(text, start, full_line, assignments);
+	// Once the ISO index is unambiguous, complete the device in the same Tab.
+	// Keep the index-only match when there are no available devices.
+	if (matches.size() == 1) {
+		auto devices = handle_device_completion(matches.front(), start, full_line, assignments);
+		if (!devices.empty()) return devices;
+	}
+	return matches;
 
 }
 
@@ -1149,13 +1056,13 @@ char** completion_cb(const char* text, int start, int end) {
  *
  * This is the callable form of a reset that is also performed inline elsewhere
  * in this file: @c completion_cb resets all three at the start of each
- * completion attempt, @c my_rl_complete clears the snapshot at the start of each
+ * completion attempt, @c completePrompt clears the snapshot at the start of each
  * attempt, and @c clear_screen_and_buffer resets the page and prefix (and the
  * snapshot, unless a list was just shown during completion). External callers,
  * such as the Settings Editor's per-setting loop, call this function so a
  * snapshot from a previous prompt can never be repainted on a different screen.
  */
-void resetReadlinePagination() {
+void resetLineEditorPagination() {
 
 	current_page = 0;
 	last_common_prefix[0] = '\0';
@@ -1164,10 +1071,10 @@ void resetReadlinePagination() {
 }
 
 /**
- * @brief Dummy function to intercept and disable specific keypresses in Readline.
+ * @brief Dummy function to intercept and disable specific keypresses in the line editor.
  * @return Always 0.
  */
-int prevent_readline_keybindings(int, int) {
+int ignoreEditorKeybinding(int, int) {
 
 	return 0;
 
@@ -1180,15 +1087,15 @@ int prevent_readline_keybindings(int, int) {
  * If a Settings Editor body-repaint hook is installed
  * (@c SettingsEditorRepaint::g_fn), the editor's own draw lambda is invoked
  * instead of @c clearScrollBuffer so the header/value/description/footer are
- * repainted along with the prompt. Otherwise the scrollback is cleared. Readline
+ * repainted along with the prompt. Otherwise the scrollback is cleared. Line editor
  * is then asked to redraw, the page counter and cached common prefix are reset,
  * and the default Esc binding is restored via @c restore_esc_default.
  *
  * The completion snapshot (@c lastCompletion) is cleared only when
- * @c list_shown_during_completion is false. When @c my_rl_complete calls this
- * function after Readline inserted a common prefix and also displayed a list,
+ * @c list_shown_during_completion is false. When @c completePrompt calls this
+ * function after the line editor inserted a common prefix and also displayed a list,
  * the snapshot is deliberately preserved so the repaint hook can redraw the list
- * and later terminal resizes can repaint it. @c my_rl_complete re-installs the
+ * and later terminal resizes can repaint it. @c completePrompt re-installs the
  * Esc hijack right after this returns.
  *
  * @note The snapshot is cleared (when it is) only AFTER the repaint hook runs.
@@ -1196,8 +1103,8 @@ int prevent_readline_keybindings(int, int) {
  *       in the Settings Editor) must drop the snapshot first; use
  *       @c clear_list_and_screen for that.
  *
- * When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is active, the
- * current input line is captured, Readline is forced to exit its loop, and the
+ * When @c RetainAndRestoreLineEditorBuffer::g_editorCompletionMode is active, the
+ * current input line is captured, the line editor is forced to exit its loop, and the
  * completion mode flag is cleared so a subsequent loop iteration can restore
  * the buffer cleanly.
  *
@@ -1214,13 +1121,13 @@ int clear_screen_and_buffer(int, int) {
 		clearScrollBuffer();
 	}
 	fflush(stdout);
-	rl_forced_update_display();
+	editorForcedUpdateDisplay();
 
 	current_page = 0;
 	last_common_prefix[0] = '\0';
 
-	// Preserve the snapshot when my_rl_complete() is refreshing a listing
-	// after Readline inserted a common prefix. It is needed for future
+	// Preserve the snapshot when completePrompt() is refreshing a listing
+	// after the line editor inserted a common prefix. It is needed for future
 	// terminal-resize repaints.
 	//
 	// Ordinary screen clears invalidate the snapshot. Explicit dismissal
@@ -1229,22 +1136,21 @@ int clear_screen_and_buffer(int, int) {
 	    lastCompletion.clear();
 
 	// Always restore the default Esc binding when clearing. If a completion
-	// list is currently visible, my_rl_complete() re-installs the hijack
+	// list is currently visible, completePrompt() re-installs the hijack
 	// right after this returns (tracked by list_shown_during_completion), so
 	// the first Esc still clears the list and the second exits.
 	restore_esc_default();
 
-	char *new_text = rl_copy_text(0, rl_end);
+	const std::string new_text = editorCopyText(0, editorBufferEnd);
 
-	if (RetainAndRestoreReadlineBuffer::g_rl_complete_mode == 1) {
-		RetainAndRestoreReadlineBuffer::g_rl_pending_text = new_text;
-		rl_on_new_line();
-		rl_replace_line("", 0);
-		rl_done = 1;
-		RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 0;
+	if (RetainAndRestoreLineEditorBuffer::g_editorCompletionMode == 1) {
+		RetainAndRestoreLineEditorBuffer::g_editorPendingText = new_text;
+
+		editorReplaceLine("");
+		editorDone = 1;
+		RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = 0;
 	}
 
-	std::free(new_text);
 	return 0;
 
 }
@@ -1275,11 +1181,11 @@ int clear_list_and_screen(int a, int b) {
 }
 
 /**
- * @brief TAB-completion handler that extends @c rl_complete with directory
+ * @brief TAB-completion handler that extends @c editorComplete with directory
  * slash handling, completion-list state management, and screen repaint.
  *
- * Delegates to @c rl_complete_internal('?') on double-TAB (list matches)
- * or @c rl_complete_internal('!') on single TAB (insert/complete). At the start
+ * Delegates to @c editorCompleteInternal('?') on double-TAB (list matches)
+ * or @c editorCompleteInternal('!') on single TAB (insert/complete). At the start
  * of each attempt it clears the completion repaint snapshot and restores the
  * default Esc binding. After completion, if the input changed and the result is
  * a directory, it appends a trailing slash.
@@ -1298,17 +1204,17 @@ int clear_list_and_screen(int a, int b) {
  * Settings Editor value prompt. If a repaint follows a displayed list (e.g. a
  * common prefix was inserted), the hijack is re-installed afterwards.
  *
- * @note When @c RetainAndRestoreReadlineBuffer::g_rl_complete_mode is 1, the
+ * @note When @c RetainAndRestoreLineEditorBuffer::g_editorCompletionMode is 1, the
  *       repaint path (@c clear_screen_and_buffer) stashes the current input in
- *       @c g_rl_pending_text, clears the buffer and sets @c rl_done so the next
+ *       @c g_editorPendingText, clears the buffer and sets @c editorDone so the next
  *       loop iteration can restore the text. This function does not handle that
  *       mode itself.
  *
  * @param ignore       Numeric argument (unused).
  * @param invoking_key Triggering key (unused).
- * @return Return value of @c rl_complete_internal.
+ * @return Return value of @c editorCompleteInternal.
  */
-int my_rl_complete(int ignore, int invoking_key)
+int completePrompt(int ignore, int invoking_key)
 {
 
 	(void)ignore;
@@ -1321,21 +1227,21 @@ int my_rl_complete(int ignore, int invoking_key)
 	lastCompletion.clear();
 	restore_esc_default();
 
-	rl_completion_append_character = '\0';
+	editorCompletionAppendCharacter = '\0';
 
-	const int old_point = rl_point;
-	char *old_text = rl_copy_text(0, rl_end);
+	const int old_point = editorCursor;
+	const std::string old_text = editorCopyText(0, editorBufferEnd);
 
 	int ret;
-	if (rl_last_func == my_rl_complete)
-	    ret = rl_complete_internal('?');
+	if (editorLastCommand == completePrompt)
+	    ret = editorCompleteInternal('?');
 	else
-	    ret = rl_complete_internal('!');
+	    ret = editorCompleteInternal('!');
 
-	char *new_text = rl_copy_text(0, rl_end);
+	const std::string new_text = editorCopyText(0, editorBufferEnd);
 
 	const bool input_changed =
-	    rl_point != old_point || strcmp(old_text, new_text) != 0;
+	    editorCursor != old_point || old_text != new_text;
 
 	// Redraw when completion changes the input, or when a previous
 	// listing was dismissed by an attempt that produced no new listing.
@@ -1344,11 +1250,11 @@ int my_rl_complete(int ignore, int invoking_key)
 
 		if (input_changed) {
 			struct stat st;
-			if (stat(new_text, &st) == 0 && S_ISDIR(st.st_mode)) {
-				const size_t len = strlen(new_text);
+			if (stat(new_text.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+				const size_t len = new_text.size();
 				if (len > 0 && new_text[len - 1] != '/') {
-					rl_point = static_cast<int>(len);
-					rl_insert_text("/");
+					editorCursor = static_cast<int>(len);
+					editorInsertText("/");
 				}
 			}
 		}
@@ -1363,83 +1269,82 @@ int my_rl_complete(int ignore, int invoking_key)
 
 	list_shown_during_completion = false;
 
-	std::free(old_text);
-	std::free(new_text);
+
 	return ret;
 
 }
 
 /**
- * @brief Restores readline key bindings and re-inserts any pending buffer text.
+ * @brief Restores line editor key bindings and re-inserts any pending buffer text.
  *
- * Rebinds readline keys and, if a pending input line was saved in
- * RetainAndRestoreReadlineBuffer::g_rl_pending_text, installs a startup hook
- * that re-inserts it into the readline buffer before the next prompt is
+ * Rebinds line editor keys and, if a pending input line was saved in
+ * RetainAndRestoreLineEditorBuffer::g_editorPendingText, installs a startup hook
+ * that re-inserts it into the line editor buffer before the next prompt is
  * displayed. If no pending text exists, the startup hook is cleared.
  *
  * Key bindings set:
  * - `Ctrl+L` (`\f`): Clears/repaints the screen via @p clear_screen_and_buffer.
  *   The input buffer is only cleared (and stashed for restoration) when
- *   @c g_rl_complete_mode is active.
- * - `Tab`    (`\t`): Invokes custom completion via @p my_rl_complete.
+ *   @c g_editorCompletionMode is active.
+ * - `Tab`    (`\t`): Invokes custom completion via @p completePrompt.
  *
- * @note The startup hook consumes @p g_rl_pending_text exactly once,
+ * @note The startup hook consumes @p g_editorPendingText exactly once,
  *       clearing it after insertion to prevent repeated re-insertion.
  *
- * @see RetainAndRestoreReadlineBuffer::g_rl_pending_text
+ * @see RetainAndRestoreLineEditorBuffer::g_editorPendingText
  * @see clear_screen_and_buffer()
- * @see my_rl_complete()
+ * @see completePrompt()
  */
-void RestoreReadlineBuffer() {
+void RestoreLineEditorBuffer() {
 
-	rl_bind_key('\f', clear_screen_and_buffer);
-	rl_bind_key('\t', my_rl_complete);
+	editorBindKey('\f', clear_screen_and_buffer);
+	editorBindKey('\t', completePrompt);
 
-	if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
-		rl_startup_hook = []() -> int {
+	if (!RetainAndRestoreLineEditorBuffer::g_editorPendingText.empty()) {
+		editorStartupHook = []() -> int {
 
-			if (!RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) {
-				rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
-				rl_point = rl_end;
-				RetainAndRestoreReadlineBuffer::g_rl_pending_text = "";
+			if (!RetainAndRestoreLineEditorBuffer::g_editorPendingText.empty()) {
+				editorInsertText(RetainAndRestoreLineEditorBuffer::g_editorPendingText);
+				editorCursor = editorBufferEnd;
+				RetainAndRestoreLineEditorBuffer::g_editorPendingText = "";
 			}
 			return 0;
 
 		};
 	} else {
-		rl_startup_hook = nullptr;
+		editorStartupHook = nullptr;
 	}
 
 }
 
 /**
- * @brief Arms a one-shot readline startup hook that restores stashed input.
+ * @brief Arms a one-shot line editor startup hook that restores stashed input.
  *
- * If @c RetainAndRestoreReadlineBuffer::g_rl_pending_text is non-empty,
- * installs an @c rl_startup_hook that re-inserts it into the buffer before
+ * If @c RetainAndRestoreLineEditorBuffer::g_editorPendingText is non-empty,
+ * installs an @c editorStartupHook that re-inserts it into the buffer before
  * the next prompt is displayed, places the cursor at the end of the text,
  * then clears both the stash and the hook so the text is restored exactly once.
  * If the stash is empty, the function does nothing.
  *
- * Call immediately before @c readline(). Unlike @c RestoreReadlineBuffer(),
+ * Call immediately before @c editLine(). Unlike @c RestoreLineEditorBuffer(),
  * it does not rebind any keys, so prompts that disable Tab completion and
  * Ctrl+L keep that behavior.
  *
  * @note The stash is filled by @c pgup_handler and @c pgdn_handler, and is
- *       cleared by @c ReadlineKeybindingGuard on scope exit.
+ *       cleared by @c LineEditorKeybindingGuard on scope exit.
  *
- * @see RetainAndRestoreReadlineBuffer::g_rl_pending_text
- * @see RestoreReadlineBuffer()
+ * @see RetainAndRestoreLineEditorBuffer::g_editorPendingText
+ * @see RestoreLineEditorBuffer()
  */
 void armPendingInputRestore() {
 
-	if (RetainAndRestoreReadlineBuffer::g_rl_pending_text.empty()) return;
-	rl_startup_hook = []() -> int {
+	if (RetainAndRestoreLineEditorBuffer::g_editorPendingText.empty()) return;
+	editorStartupHook = []() -> int {
 
-		rl_insert_text(RetainAndRestoreReadlineBuffer::g_rl_pending_text.c_str());
-		rl_point = rl_end;
-		RetainAndRestoreReadlineBuffer::g_rl_pending_text.clear();
-		rl_startup_hook = nullptr;   // one-shot
+		editorInsertText(RetainAndRestoreLineEditorBuffer::g_editorPendingText);
+		editorCursor = editorBufferEnd;
+		RetainAndRestoreLineEditorBuffer::g_editorPendingText.clear();
+		editorStartupHook = nullptr;   // one-shot
 		return 0;
 
 	};

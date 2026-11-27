@@ -8,10 +8,10 @@
 #include <unistd.h>
 #include <wchar.h>
 
-#include <readline/readline.h>
 
 import std;
-import isocmd.ui.display.readlineResize;
+import isocmd.input.lineEditor;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.cli.termSize;
 
 namespace {
@@ -65,7 +65,7 @@ namespace {
 
 	}
 
-	// Strip Readline's nonprinting delimiters but keep the ANSI styling. If
+	// Strip the line editor's nonprinting delimiters but keep the ANSI styling. If
 	// the prompt alone is too wide, shorten it to leave space for the input.
 	std::pair<std::string, std::size_t> fitPrompt(std::string_view prompt, std::size_t budget) {
 
@@ -101,7 +101,7 @@ namespace {
 	struct InputWindow { std::size_t first, last; bool left, right; };
 
 	// Avoid a visually empty edge after the overflow marker when clipping
-	// starts on a space. Never skip the cursor or change the Readline buffer.
+	// starts on a space. Never skip the cursor or change the line-editor buffer.
 	std::size_t skipClippedSpaces(const InputLayout& layout, std::size_t first) {
 
 		if (!first) return first;
@@ -136,9 +136,9 @@ namespace {
 
 	void appendWindow(std::string& out, const InputLayout& layout, const InputWindow& window) {
 
-		const bool active = rl_mark_active_p() != 0;
-		const auto lo = static_cast<std::size_t>(std::min(rl_mark, rl_point));
-		const auto hi = static_cast<std::size_t>(std::max(rl_mark, rl_point));
+		const bool active = editorSelectionActive() != 0;
+		const auto lo = static_cast<std::size_t>(std::min(editorSelectionMark, editorCursor));
+		const auto hi = static_cast<std::size_t>(std::max(editorSelectionMark, editorCursor));
 		bool marked = false;
 		for (std::size_t i = window.first; i < window.last; ++i) {
 			const auto& cell = layout.cells[i];
@@ -153,7 +153,7 @@ namespace {
 	}
 
 	struct FixedPrompt {
-		rl_voidfunc_t* previous = rl_redisplay_function;
+		EditorRedisplay* previous = editorRedisplayHook;
 		std::size_t first = 0;
 		bool initial = true;
 		bool enabled = false;
@@ -161,7 +161,7 @@ namespace {
 		FixedPrompt();
 		~FixedPrompt();
 		void draw();
-		RlLine read(const std::string& prompt);
+		EditorLine read(const std::string& prompt);
 	};
 
 	FixedPrompt* activePrompt = nullptr;
@@ -176,22 +176,22 @@ namespace {
 		if (!::isatty(STDOUT_FILENO)) return;
 		enabled = true;
 		activePrompt = this;
-		if (previous == rl_redisplay) rl_redisplay_function = fixedPromptRedisplay;
+		if (previous == editorRedisplay) editorRedisplayHook = fixedPromptRedisplay;
 	}
 
 	FixedPrompt::~FixedPrompt() {
 		if (!enabled) return;
-		rl_redisplay_function = previous;
+		editorRedisplayHook = previous;
 		activePrompt = nullptr;
 	}
 
-	RlLine FixedPrompt::read(const std::string& prompt) {
+	EditorLine FixedPrompt::read(const std::string& prompt) {
 
-		RlLine line(readline(prompt.c_str()), &std::free);
-		// Native final redisplay has no rendered row to advance from when a
-		// custom redisplay hook is installed. EOF already emits its newline.
+		EditorLine line = editLine(prompt);
+		// The native backend leaves the successful-submit newline to this
+		// renderer. EOF already emits its newline.
 		if (enabled && line) {
-			FILE* stream = rl_outstream ? rl_outstream : stdout;
+			FILE* stream = editorOutputStream ? editorOutputStream : stdout;
 			std::fputc('\n', stream);
 			std::fflush(stream);
 		}
@@ -202,10 +202,10 @@ namespace {
 	// Emit any multiline header only on the initial redisplay.
 	std::string_view displayPromptTail(FILE* stream, bool& initial) {
 
-		const std::string_view prompt(rl_display_prompt ? rl_display_prompt : "");
+		const std::string_view prompt(editorDisplayPrompt ? editorDisplayPrompt : "");
 		const auto split = prompt.rfind('\n');
 		const auto tail = split == std::string_view::npos ? 0 : split + 1;
-		if (initial && tail && !rl_already_prompted) {
+		if (initial && tail) {
 			for (const char c : prompt.substr(0, tail))
 				if (c != '\001' && c != '\002') std::fputc(c, stream);
 		}
@@ -232,7 +232,7 @@ namespace {
 
 		const auto size = terminalSize();
 		const auto cols = size.cols ? size.cols : 80;
-		FILE* stream = rl_outstream ? rl_outstream : stdout;
+		FILE* stream = editorOutputStream ? editorOutputStream : stdout;
 		if (cols < 4) {
 			std::fputs("\r\033[K", stream);
 			std::fflush(stream);
@@ -242,8 +242,8 @@ namespace {
 		const auto usable = cols - 1;
 		const auto prompt = displayPromptTail(stream, initial);
 		const auto [label, labelWidth] = fitPrompt(prompt, usable > 4 ? usable - 4 : 0);
-		const std::string_view input(rl_line_buffer ? rl_line_buffer : "", static_cast<std::size_t>(rl_end));
-		const auto layout = measureInput(input, static_cast<std::size_t>(rl_point));
+		const std::string_view input(editorLineBuffer ? editorLineBuffer : "", static_cast<std::size_t>(editorBufferEnd));
+		const auto layout = measureInput(input, static_cast<std::size_t>(editorCursor));
 		const auto window = inputWindow(layout, usable - labelWidth, first);
 		first = window.first;
 		const auto out = renderInputLine(label, labelWidth, layout, window);
@@ -257,40 +257,37 @@ namespace {
 void redisplayPrompt() {
 
 	if (activePrompt) activePrompt->draw();
-	else rl_redisplay();
+	else editorRedisplay();
 
 }
 
 /**
- * @brief Wraps @c readline() with an optional @ref ListResizeWatcher and
+ * @brief Wraps @c editLine() with an optional @ref ListResizeWatcher and
  *        temporary Tab-completion control.
  *
- * Runs @p repaint (on the calling thread, from Readline's idle hook) whenever
+ * Runs @p repaint (on the calling thread, from the line editor's idle hook) whenever
  * the terminal size changes while the prompt waits. The watcher is stopped
- * and the previous @c rl_event_hook restored before this returns.
+ * and the previous @c editorEventHook restored before this returns.
  *
- * Readline's own SIGWINCH handling (@c rl_catch_sigwinch) is disabled for the
- * watcher's lifetime and restored before this returns. The watcher already
- * redraws on resize; leaving Readline's built-in SIGWINCH handler enabled
- * makes it call @c rl_resize_terminal() -> @c rl_forced_update_display() ->
- * @c rl_redisplay_function() on the same event, racing the watcher's redraw
- * and potentially painting the prompt twice. The previous value is restored
- * on every exit path, including exceptions from the watcher constructor.
+ * The native editor's fallback terminal-size polling (@c editorCatchSigwinch)
+ * is disabled for the watcher's lifetime to avoid duplicate prompt redraws.
+ * The previous value is restored on every exit path, including exceptions
+ * from the watcher constructor.
  *
  * The ordinary prompt stays fixed while its editable input scrolls horizontally.
- * The full Readline buffer is retained. The live Filter preview retains its
+ * The full line-editor buffer is retained. The live Filter preview retains its
  * own redisplay hook and delegates the input row to the same renderer.
  *
- * Optionally disables Tab completion for the duration of the Readline call.
+ * Optionally disables Tab completion for the duration of the Line editor call.
  * When enabled, Tab does not invoke completion or display matching entries.
- * The previous Tab key binding and @c rl_attempted_completion_function are
- * saved and automatically restored afterward, leaving other Readline prompts
+ * The previous Tab key binding and @c editorCompletionHook are
+ * saved and automatically restored afterward, leaving other line-editor prompts
  * unaffected.
  *
  * If @p repaint is empty, no resize watcher is installed, but Tab-completion
  * control is still applied when requested.
  *
- * @param prompt               Prompt passed to @c readline() (may contain
+ * @param prompt               Prompt passed to @c editLine() (may contain
  *                             \001/\002 markers).
  * @param repaint              Repaint callback (see @ref ListResizeWatcher
  *                             for the contract). Empty means no resize watcher.
@@ -300,39 +297,32 @@ void redisplayPrompt() {
  * @return The line read (freed by the returned pointer), or null on EOF
  *         (Ctrl+D).
  */
-RlLine readlineWithResize(
+EditorLine editLineWithResize(
     const std::string& prompt,
     ListResizeWatcher::Repaint repaint,
     bool disableTabCompletion) {
 
-	// Initialize first so ~/.inputrc cannot override the application's one-row
-	// prompt layout. Reapply on entry in case Readline settings were reloaded.
-	rl_initialize();
-	rl_variable_bind("horizontal-scroll-mode", "on");
-
 	// Use the actual terminal width, including changes between prompts.
 	const TermSize size = terminalSize();
 	if (size.rows && size.cols) {
-		rl_set_screen_size(static_cast<int>(size.rows), static_cast<int>(size.cols));
+		editorSetScreenSize(static_cast<int>(size.rows), static_cast<int>(size.cols));
 	}
 
 	FixedPrompt fixedPrompt;
 
 	// Save and restore the Tab binding and completion callbacks.
 	struct TabCompletionGuard {
-		Keymap keymap;
-		rl_command_func_t* tabBinding;
-		rl_completion_func_t* attemptedCompletion;
+		EditorCommand* tabBinding;
+		EditorCompletion* attemptedCompletion;
 
 		TabCompletionGuard()
-		    : keymap(rl_get_keymap()),
-		      tabBinding(rl_function_of_keyseq("\t", keymap, nullptr)),
-		      attemptedCompletion(rl_attempted_completion_function) {}
+		    : tabBinding(editorKeySequenceHandler("\t")),
+		      attemptedCompletion(editorCompletionHook) {}
 
 		~TabCompletionGuard() {
 
-			rl_attempted_completion_function = attemptedCompletion;
-			rl_bind_key_in_map('\t', tabBinding, keymap);
+			editorCompletionHook = attemptedCompletion;
+			editorBindKey('\t', tabBinding);
 
 		}
 
@@ -345,8 +335,8 @@ RlLine readlineWithResize(
 	if (disableTabCompletion) {
 		tabGuard = std::make_unique<TabCompletionGuard>();
 
-		rl_attempted_completion_function = nullptr;
-		rl_bind_key('\t', [](int, int) -> int {
+		editorCompletionHook = nullptr;
+		editorBindKey('\t', [](int, int) -> int {
 
 			return 0;
 
@@ -360,15 +350,15 @@ RlLine readlineWithResize(
 	struct SigwinchGuard {
 		int saved;
 
-		SigwinchGuard() : saved(rl_catch_sigwinch) {
+		SigwinchGuard() : saved(editorCatchSigwinch) {
 
-			rl_catch_sigwinch = 0;
+			editorCatchSigwinch = 0;
 
 		}
 
 		~SigwinchGuard() {
 
-			rl_catch_sigwinch = saved;
+			editorCatchSigwinch = saved;
 
 		}
 
@@ -389,19 +379,19 @@ RlLine readlineWithResize(
  * @brief State for the SIGWINCH-driven resize watcher.
  *
  * The signal handler only sets an async-signal-safe flag (and forwards to the
- * previously installed handler, e.g. Readline's own). Terminal output and
- * Readline operations happen in @ref tick on the main thread, from Readline's
- * event hook, where Readline's line-buffer and cursor state are safe to touch.
+ * previously installed handler, if one was installed). Terminal output and
+ * Line editor operations happen in @ref tick on the main thread, from the line editor's
+ * event hook, where the line editor's line-buffer and cursor state are safe to touch.
  */
 struct ListResizeWatcher::Impl {
 	explicit Impl(Repaint r) : repaint(std::move(r)), last(terminalSize()) {}
 
 	Repaint           repaint;
 	TermSize          last;                     // last dimensions we repainted for (main thread only)
-	rl_hook_func_t* prevHook = nullptr;     // hook installed before ours (chained)
+	EditorHook* prevHook = nullptr;     // hook installed before ours (chained)
 
-	/// Runs from Readline's event hook on the main thread. Repaints the list
-	/// after a resize, updates Readline's screen dimensions, and restores the prompt.
+	/// Runs from the line editor's event hook on the main thread. Repaints the list
+	/// after a resize, updates the line editor's screen dimensions, and restores the prompt.
 	void tick();
 };
 
@@ -410,13 +400,12 @@ namespace {
 	/// Atomically set from the signal handler, cleared on the main thread.
 	std::atomic<bool> g_winch{false};
 
-	/// Handler that was installed before ours; we forward to it so Readline's own
-	/// SIGWINCH handling (rl_catch_sigwinch) keeps working.
+	/// Handler installed before ours; preserve its behavior while watching resizes.
 	struct sigaction g_prevWinch {};
 	bool             g_winchInstalled = false;
 
-	/// Active watcher used by the Readline event hook. Accessed only on the
-	/// thread running Readline; set during construction and cleared by stop().
+	/// Active watcher used by the Line editor event hook. Accessed only on the
+	/// thread running Line editor; set during construction and cleared by stop().
 	ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
 
 	extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
@@ -432,7 +421,7 @@ namespace {
 	}
 
 	/// Handles pending resize repainting, then invokes the hook that was installed
-	/// before this watcher so other Readline event processing remains active.
+	/// before this watcher so other Line editor event processing remains active.
 	int listResizeHook() {
 
 		ListResizeWatcher::Impl* w = g_activeListWatcher;
@@ -456,24 +445,18 @@ void ListResizeWatcher::Impl::tick() {
 	if (sz.cols == last.cols && sz.rows == last.rows) return;
 	last = sz;
 
-	// Keep Readline's horizontal viewport in sync with the dimensions used by the list renderer.
-	rl_set_screen_size(static_cast<int>(sz.rows), static_cast<int>(sz.cols));
+	// Keep the line editor's horizontal viewport in sync with the dimensions used by the list renderer.
+	editorSetScreenSize(static_cast<int>(sz.rows), static_cast<int>(sz.cols));
 
 	// The repaint callback performs the normal list display step. Prevent
-	// exceptions from propagating through Readline's C call stack.
+	// exceptions from propagating through the editor event loop.
 	try { repaint(); } catch (...) {}
 
-	// Leave a blank line after the list, then let Readline redraw the prompt
+	// Leave a blank line after the list, then let Line editor redraw the prompt
 	// and the current input, including its cursor position.
 	std::cout << '\n' << std::flush;
-	// Re-expand the prompt for the new width. rl_set_prompt() frees rl_prompt,
-	// so pass it a copy. Only the last line of a multi-line prompt is
-	// redrawn by Readline, which matches repaint() re-printing the header.
-	if (rl_prompt) {
-		const std::string p = rl_prompt;
-		rl_set_prompt(p.c_str());
-	}
-	rl_on_new_line();
+	// FixedPrompt redraws only the final line, after repaint() prints the header.
+
 	redisplayPrompt();
 
 }
@@ -484,10 +467,10 @@ ListResizeWatcher::ListResizeWatcher(Repaint repaint)
 	// Only one watcher may be active at a time: hook and signal state are process-global.
 	assert(g_activeListWatcher == nullptr && "only one ListResizeWatcher may be active");
 
-	impl_->prevHook = rl_event_hook;
+	impl_->prevHook = editorEventHook;
 	if (impl_->prevHook == listResizeHook) impl_->prevHook = nullptr;   // never chain to ourselves
 	g_activeListWatcher = impl_.get();
-	rl_event_hook = listResizeHook;
+	editorEventHook = listResizeHook;
 
 	struct sigaction sa {};
 	sa.sa_sigaction = onWinch;
@@ -514,6 +497,6 @@ void ListResizeWatcher::stop() {
 
 	g_activeListWatcher = nullptr;
 	// Only undo our own installation; leave it alone if someone replaced the hook since.
-	if (rl_event_hook == listResizeHook) rl_event_hook = impl_->prevHook;
+	if (editorEventHook == listResizeHook) editorEventHook = impl_->prevHook;
 
 }

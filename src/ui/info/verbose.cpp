@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <signal.h>
 
-#include <readline/history.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.lists;
 import isocmd.database.databaseOps;
@@ -264,7 +264,7 @@ static void printVerboseResults(const std::string& operation) {
 }
 
 /**
- * @brief Determines whether Readline history should be cleared after a
+ * @brief Determines whether line-editor history should be cleared after a
  *        destructive operation on filtered results.
  *
  * @param operation       Action string ("mv", "rm", "umount", ...).
@@ -274,7 +274,7 @@ static void printVerboseResults(const std::string& operation) {
  * @return true if operation is "mv", "rm", or "umount" and both isFiltered
  *         and umountMvRmBreak are true; false otherwise.
  */
-static bool shouldClearReadlineHistory(const std::string& operation,
+static bool shouldClearLineEditorHistory(const std::string& operation,
                                        bool isFiltered,
                                        bool umountMvRmBreak) {
 
@@ -299,7 +299,7 @@ static bool shouldClearReadlineHistory(const std::string& operation,
  *   calls verbosePrint. Mount operations pass operationSkipped and use layout
  *   mode 2; all others pass an empty set and use mode 1.
  * - **History clear:** after a destructive operation (mv, rm, umount), if
- *   @p isFiltered and @p umountMvRmBreak are both true, Readline history is
+ *   @p isFiltered and @p umountMvRmBreak are both true, line-editor history is
  *   cleared so stale indices cannot be re-run.
  *
  * @param operation       Action string ("mount", "mv", "rm", "umount", ...);
@@ -320,8 +320,8 @@ void handleSelectIsoFilesResults(const std::string& operation, bool& verbose,
 		printVerboseResults(operation);
 	}
 
-	if (shouldClearReadlineHistory(operation, isFiltered, umountMvRmBreak)) {
-		clear_history();
+	if (shouldClearLineEditorHistory(operation, isFiltered, umountMvRmBreak)) {
+		editorClearHistory();
 	}
 
 }

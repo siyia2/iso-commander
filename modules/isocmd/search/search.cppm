@@ -8,34 +8,33 @@ import std;
 export extern "C++" {
 
 /**
- * @brief scope guard for Readline session state during search operations.
+ * @brief scope guard for line-editor session state during search operations.
  *
- * This class ensures that Readline's completion function and custom keybindings
+ * This class ensures that the line editor's completion function and custom keybindings
  * are safely restored to their default or previous states upon exiting the scope,
  * regardless of how that scope terminates (e.g., successful return or error handling).
  *
- * @details On construction, it captures the current Readline completion function.
+ * @details On construction, it captures the current Line editor completion function.
  * On destruction, it restores the captured completion function, resets specific
- * keybindings (Tab/Form Feed), clears the history buffer, resets Readline
- * pagination via @c resetReadlinePagination(), and executes
+ * keybindings (Tab/Form Feed), clears the history buffer, resets Line editor
+ * pagination via @c resetLineEditorPagination(), and executes
  * @c reset_custom_keybindingsForSearches() to clean up search-specific configurations.
  *
  * @note Designed for search-focused logic (e.g., @c refreshForDatabase and
  * @c promptSearchBinImgChdDaaMdfNrg). Do not use this for selection
  * menus, which require @c reset_custom_keybindingsForSelect.
  */
-class SearchReadlineGuard {
+class SearchLineEditorGuard {
 public:
-	SearchReadlineGuard();
-	~SearchReadlineGuard();
+	SearchLineEditorGuard();
+	~SearchLineEditorGuard();
 
-	SearchReadlineGuard(const SearchReadlineGuard&) = delete;
-	SearchReadlineGuard& operator=(const SearchReadlineGuard&) = delete;
+	SearchLineEditorGuard(const SearchLineEditorGuard&) = delete;
+	SearchLineEditorGuard& operator=(const SearchLineEditorGuard&) = delete;
 
 private:
-	// Same type as readline's rl_completion_func_t, spelled out so this
-	// header does not need <readline/readline.h>.
-	char** (*oldCompletion_)(const char*, int, int);
+	// Native editor completion callback, spelled out to avoid an internal header dependency.
+	std::vector<std::string> (*oldCompletion_)(std::string_view, int, int);
 };
 
 /**

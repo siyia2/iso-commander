@@ -6,8 +6,8 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
 
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
@@ -45,6 +45,7 @@ void enable_ctrl_d() {
 /// Discards any unread data in the terminal input buffer.
 void flushStdin() {
 
+	editorDiscardPendingInput();
 	tcflush(STDIN_FILENO, TCIFLUSH);
 
 }
@@ -77,13 +78,12 @@ void restoreInput() {
 
 /**
  * @brief Configures the environment to ignore SIGINT (Ctrl+C).
- * @details Specifically instructs GNU Readline to stop catching signals
- * and sets the system-wide SIGINT handler to SIG_IGN.
+ * @details The native editor leaves signals to the application;
+ * this sets the process SIGINT handler to SIG_IGN.
  */
-void setupReadlineToIgnoreCtrlC() {
+void setupLineEditorToIgnoreCtrlC() {
 
-	// Prevent readline from overriding our signal logic
-	rl_catch_signals = 0;
+	// The native editor leaves signal handling to the application.
 
 	struct sigaction sa_ignore;
 	sa_ignore.sa_handler = SIG_IGN;

@@ -6,14 +6,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.globalMutexes;
 import isocmd.input.history;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 import isocmd.proc.process;
 import isocmd.search.search;
@@ -104,7 +103,7 @@ static std::string validateLinuxPath(const std::string& path)
 
 	auto makeError = [&](const std::string& msg) -> std::string {
 
-		return msg + std::string(UI::Palette::RL_BoldAlt);
+		return msg + std::string(UI::Palette::PromptBoldAlt);
 
 	};
 
@@ -192,26 +191,26 @@ static std::string validateLinuxPath(const std::string& path)
 }
 
 /**
- * @brief Configures Readline keybindings, signal handlers, and history for a prompt iteration.
+ * @brief Configures line-editor keybindings, signal handlers, and history for a prompt iteration.
  *
  * @param ctx Prompt context containing operation flags and history settings.
- * @param isPageTurn Indicates whether the current Readline invocation is a page turn.
+ * @param isPageTurn Indicates whether the current Line editor invocation is a page turn.
  */
-static void configureCpMvReadlineEnv(CpMvPromptContext& ctx, const bool& isPageTurn)
+static void configureCpMvLineEditorEnv(CpMvPromptContext& ctx, const bool& isPageTurn)
 {
 
 	enable_ctrl_d();
 	setupSignalHandlerCancellations();
 
-	RestoreReadlineBuffer();
-	rl_bind_keyseq("\\e", exit_handler);
+	RestoreLineEditorBuffer();
+	editorBindKeySequence("\033", exit_handler);
 
 	if (!ctx.isCopy) {
 		ctx.umountMvRmBreak = true;
 	}
 
 	if (!isPageTurn) {
-		clear_history();
+		editorClearHistory();
 		ctx.filterHistory = false;
 		loadHistory(ctx.filterHistory);
 	}
@@ -219,10 +218,10 @@ static void configureCpMvReadlineEnv(CpMvPromptContext& ctx, const bool& isPageT
 }
 
 /**
- * @brief Builds the formatted Readline prompt suffix for Copy/Move destination selection.
+ * @brief Builds the formatted Line editor prompt suffix for Copy/Move destination selection.
  *
  * @param ctx Prompt context providing operation color and description.
- * @return Formatted prompt string with Readline color escape sequences.
+ * @return Formatted prompt string with Line editor color escape sequences.
  */
 static std::string buildCpMvPromptSuffix(const CpMvPromptContext& ctx)
 {
@@ -317,7 +316,7 @@ static bool parseAndValidateDestPaths(
  * @brief Handles non-control Copy/Move input, path validation, and history persistence.
  *
  * @param ctx Prompt context updated with validated paths and overwrite flag.
- * @param userInput Raw line returned by paginated Readline display.
+ * @param userInput Raw line returned by paginated Line editor display.
  * @param shouldContinue Loop control flag cleared when a valid destination is accepted.
  */
 static void processCpMvInput(
@@ -344,7 +343,7 @@ static void processCpMvInput(
 	if (!parseAndValidateDestPaths(rawPathsInput, pathsInput, invalidPathError)) {
 		verboseSets.uniqueErrorTokenMessages.insert(invalidPathError);
 		ctx.userDestDir.clear();
-		resetReadlinePagination();
+		resetLineEditorPagination();
 		return;
 	}
 
@@ -357,7 +356,7 @@ static void processCpMvInput(
 	ctx.overwriteExisting = hasOverwriteFlag;
 	ctx.userDestDir = pathsInput;
 
-	add_history(pathsInput.c_str());
+	editorAddHistory(pathsInput);
 	saveHistory(ctx.filterHistory);
 
 	shouldContinue = false;
@@ -382,7 +381,7 @@ static void handleCpMvIteration(
 	bool isPageTurn = false;
 	auto setupEnv = [&]() {
 
-		configureCpMvReadlineEnv(ctx, isPageTurn);
+		configureCpMvLineEditorEnv(ctx, isPageTurn);
 
 	};
 
@@ -391,8 +390,8 @@ static void handleCpMvIteration(
 
 	std::string userInput;
 	{
-		RlKeyBindGuard keyGuard;
-		RlStartupHookGuard hookGuard;
+		EditorKeyBindGuard keyGuard;
+		EditorStartupHookGuard hookGuard;
 
 		userInput = handlePaginatedDisplay(
 		    entries,
@@ -422,7 +421,7 @@ static void handleCpMvIteration(
 	if (userInput == "\x1b") {
 		ctx.umountMvRmBreak = false;
 		ctx.userDestDir.clear();
-		clear_history();
+		editorClearHistory();
 		shouldContinue = false;
 		return;
 	}
@@ -435,7 +434,7 @@ static void handleCpMvIteration(
  * @brief Prompts for destination directories or routes to deletion confirmation.
  *
  * In Copy/Move mode, validates Linux paths, handles pagination, processes
- * overwrite flags (-o), and manages Readline history.
+ * overwrite flags (-o), and manages line-editor history.
  *
  * In Delete mode, delegates to handleDeleteOperation().
  *
@@ -445,9 +444,9 @@ static void handleCpMvIteration(
 std::string userDestDirCpMv(CpMvPromptContext& ctx)
 {
 
-	PendingReadlineTextClearGuard pendingTextGuard;
+	PendingLineEditorTextClearGuard pendingTextGuard;
 
-	rl_attempted_completion_function = nullptr;
+	editorCompletionHook = nullptr;
 
 	std::vector<std::string> entries =
 	    generateIsoEntries(ctx.indexChunks, ctx.isoFiles);
@@ -457,15 +456,15 @@ std::string userDestDirCpMv(CpMvPromptContext& ctx)
 
 	reset_custom_keybindingsForCpMvWrite2Usb();
 
-	// Restore the previous Readline completion mode on every exit path.
-	RlCompleteModeGuard completeModeGuard;
+	// Restore the previous Line editor completion mode on every exit path.
+	EditorCompletionModeGuard completeModeGuard;
 
 	bool shouldContinue = true;
 	std::size_t currentPage = 0;
 
 	while (shouldContinue) {
-		resetReadlinePagination();
-		RetainAndRestoreReadlineBuffer::g_rl_complete_mode = 1;
+		resetLineEditorPagination();
+		RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = 1;
 
 		if (!ctx.isDelete) {
 			handleCpMvIteration(ctx, entries, currentPage, shouldContinue);
@@ -485,7 +484,7 @@ std::string userDestDirCpMv(CpMvPromptContext& ctx)
 		}
 	}
 
-	resetReadlinePagination();
+	resetLineEditorPagination();
 	return ctx.userDestDir;
 
 }
@@ -1059,31 +1058,31 @@ std::string buildDisplaySrc(std::string_view srcDir, std::string_view srcFile) {
 
 }
 
-RlFormFeedGuard::~RlFormFeedGuard() {
+EditorFormFeedGuard::~EditorFormFeedGuard() {
 
-	rl_bind_key('\f', prevent_readline_keybindings);
-
-}
-
-RlKeyBindGuard::~RlKeyBindGuard() {
-
-	rl_bind_key('\f', prevent_readline_keybindings);
-	rl_bind_key('\t', prevent_readline_keybindings);
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKey('\f', ignoreEditorKeybinding);
 
 }
 
-RlCompleteModeGuard::RlCompleteModeGuard() : saved(RetainAndRestoreReadlineBuffer::g_rl_complete_mode) {}
+EditorKeyBindGuard::~EditorKeyBindGuard() {
 
-RlCompleteModeGuard::~RlCompleteModeGuard() {
-
-	RetainAndRestoreReadlineBuffer::g_rl_complete_mode = saved;
+	editorBindKey('\f', ignoreEditorKeybinding);
+	editorBindKey('\t', ignoreEditorKeybinding);
+	editorBindKeySequence("\033", exit_handler);
 
 }
 
-RlStartupHookGuard::~RlStartupHookGuard() {
+EditorCompletionModeGuard::EditorCompletionModeGuard() : saved(RetainAndRestoreLineEditorBuffer::g_editorCompletionMode) {}
 
-	rl_startup_hook = nullptr;
+EditorCompletionModeGuard::~EditorCompletionModeGuard() {
+
+	RetainAndRestoreLineEditorBuffer::g_editorCompletionMode = saved;
+
+}
+
+EditorStartupHookGuard::~EditorStartupHookGuard() {
+
+	editorStartupHook = nullptr;
 
 }
 

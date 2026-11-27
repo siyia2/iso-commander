@@ -6,21 +6,21 @@ export module isocmd.write2usb.util.terminalGuards;
 export extern "C++" {
 
 /**
- * @brief scope guard for the readline/terminal state that needs to be set up
+ * @brief scope guard for the line editor/terminal state that needs to be set up
  *        at the start of every loop iteration and torn down on every exit
  *        path (return, continue, or exception).
  */
 struct TerminalStateGuard {
 	/**
-	 * @brief Configures readline bindings/hooks and disables SIGINT /
+	 * @brief Configures line editor bindings/hooks and disables SIGINT /
 	 *        Ctrl-D for the duration of the guard's lifetime.
 	 */
 	TerminalStateGuard();
 
 	/**
-	 * @brief Restores readline bindings/hooks via restoreReadline().
+	 * @brief Restores line editor bindings/hooks via restoreLineEditor().
 	 *
-	 * @note restoreReadline() only resets readline bindings/hooks. The
+	 * @note restoreLineEditor() only resets line editor bindings/hooks. The
 	 *       SIGINT = SIG_IGN and disable_ctrl_d() set in the constructor
 	 *       are NOT undone here, matching the original code's behavior
 	 *       (it never restored these at any exit point either). If that's
@@ -34,18 +34,18 @@ struct TerminalStateGuard {
 };
 
 /**
- * @brief scope guard for the brief window where readline is reconfigured to
+ * @brief scope guard for the brief window where line editor is reconfigured to
  *        ask the y/n confirmation question.
  *
- * Restores the *outer* (TerminalStateGuard) readline configuration on
+ * Restores the *outer* (TerminalStateGuard) line editor configuration on
  * exit, regardless of how this scope is left.
  */
 struct ConfirmationModeGuard {
-	/// Switches readline into confirmation-prompt mode.
+	/// Switches line editor into confirmation-prompt mode.
 	ConfirmationModeGuard();
 
 	/**
-	 * @brief Re-applies the main mappings-prompt readline configuration.
+	 * @brief Re-applies the main mappings-prompt line editor configuration.
 	 *
 	 * Ensures that if the user says "no" and the outer loop continues,
 	 * the next TerminalStateGuard iteration (or the existing one, if we
@@ -58,11 +58,11 @@ struct ConfirmationModeGuard {
 
 private:
 	/**
-	 * @brief Mirrors the original setupReadline() lambda so this guard
+	 * @brief Mirrors the original setupLineEditor() lambda so this guard
 	 *        doesn't depend on a free function with the same name living
 	 *        elsewhere.
 	 */
-	static void setupReadline();
+	static void setupLineEditor();
 };
 
 } // extern "C++"

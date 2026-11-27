@@ -2,26 +2,26 @@
 
 #include <stdio.h>
 #include <signal.h>
-#include <readline/readline.h>
 
+import isocmd.input.lineEditor;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.write2usb.util.terminalGuards;
 
 namespace {
 
-	/// Readline bindings shared by the write-mapping prompt and confirmation mode.
+	/// Line editor bindings shared by the write-mapping prompt and confirmation mode.
 	void applyMappingPromptBindings() {
 
-		rl_completion_display_matches_hook = [](char**, int, int) {};
+		editorCompletionDisplayHook = [](const std::vector<std::string>&, int, int) {};
 
-		rl_attempted_completion_function = completion_cb;
-		rl_bind_key('\t', rl_complete);
-		rl_bind_key('\f', clear_screen_and_buffer);
-		rl_bind_keyseq("\033[A", rl_get_previous_history);
-		rl_bind_keyseq("\033[B", rl_get_next_history);
-		rl_bind_keyseq("\\e[5~", rl_named_function("previous-history"));
-		rl_bind_keyseq("\\e[6~", rl_named_function("next-history"));
+		editorCompletionHook = completion_cb;
+		editorBindKey('\t', editorComplete);
+		editorBindKey('\f', clear_screen_and_buffer);
+		editorBindKeySequence("\033[A", editorPreviousHistory);
+		editorBindKeySequence("\033[B", editorNextHistory);
+		editorBindKeySequence("\033[5~", editorPreviousHistory);
+		editorBindKeySequence("\033[6~", editorNextHistory);
 
 	}
 
@@ -39,23 +39,23 @@ TerminalStateGuard::TerminalStateGuard() {
 
 TerminalStateGuard::~TerminalStateGuard() {
 
-	restoreReadline();
+	restoreLineEditor();
 
 }
 
 ConfirmationModeGuard::ConfirmationModeGuard() {
 
-	disableReadlineForConfirmation();
+	disableLineEditorForConfirmation();
 
 }
 
 ConfirmationModeGuard::~ConfirmationModeGuard() {
 
-	setupReadline();
+	setupLineEditor();
 
 }
 
-void ConfirmationModeGuard::setupReadline() {
+void ConfirmationModeGuard::setupLineEditor() {
 
 	applyMappingPromptBindings();
 

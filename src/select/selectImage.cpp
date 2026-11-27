@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
-#include <readline/history.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.lists;
 import isocmd.core.uiState;
 import isocmd.filter.filter;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.select.select;
 import isocmd.select.selectShared;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 import isocmd.ui.display.themes;
 import isocmd.ui.info.verbose;
 
@@ -84,7 +83,7 @@ namespace {
 			std::vector<std::string>&       files;
 			bool&                           list;
 			std::shared_ptr<RefreshState>   state;
-			ReadlineKeybindingGuard&        keybindingGuard;
+			LineEditorKeybindingGuard&        keybindingGuard;
 
 			const std::string               operation;
 			const bool                      isMdf;
@@ -133,7 +132,7 @@ namespace {
 			             std::vector<std::string>& fileList,
 			             bool& listFlag,
 			             std::shared_ptr<RefreshState> refreshState,
-			             ReadlineKeybindingGuard& guard)
+			             LineEditorKeybindingGuard& guard)
 			    : fileType(type),
 			      files(fileList),
 			      list(listFlag),
@@ -214,7 +213,7 @@ namespace {
 			/**
 			 * @brief Repaints the list on terminal resize.
 			 *
-			 * Runs on the Readline thread (@c rl_event_hook) and uses the same
+			 * Runs on the Line editor thread (@c editorEventHook) and uses the same
 			 * display step as the main loop. A throwaway sort flag keeps a
 			 * resize from re-sorting the list.
 			 */
@@ -264,7 +263,7 @@ namespace {
 			 * Clears verbose sets, re-enables Ctrl+D, reinstalls signal
 			 * handlers, resets the cancellation flag and @c verbose, snapshots
 			 * @c currentPage into @c originalPage while unfiltered, and clears
-			 * readline history.
+			 * line editor history.
 			 */
 			void beginIteration() {
 
@@ -277,13 +276,13 @@ namespace {
 
 				if (!isFiltered) originalPage = currentPage;
 
-				clear_history();
+				editorClearHistory();
 
 			}
 
 			/**
 			 * @brief Puts the cursor on the prompt row and prepares for the
-			 *        next readline().
+			 *        next editLine().
 			 *
 			 * Redraw path (@c needsClrScrn is true): recompute the pending
 			 * display, draw the list, and print one blank separator row.
@@ -310,7 +309,7 @@ namespace {
 			 * @brief Installs select-screen keybindings and unbinds keys that
 			 *        are unused for this prompt.
 			 *
-			 * Rebinds "R" to @c rl_insert since conversion prompts have no
+			 * Rebinds "R" to @c editorInsertKey since conversion prompts have no
 			 * manual refresh.
 			 */
 			void bindPromptKeys() {
@@ -318,7 +317,7 @@ namespace {
 				setup_custom_keybindingsForSelect();
 
 				// Unused in convert2iso prompts.
-				rl_bind_keyseq("R", rl_insert);
+				editorBindKeySequence("R", editorInsertKey);
 
 			}
 
@@ -326,11 +325,11 @@ namespace {
 			 * @brief Builds the colored prompt string for the current operation.
 			 *
 			 * @param pt Theme tokens for primary/highlight text and reset.
-			 * @return Formatted prompt string for @c readlineWithResize().
+			 * @return Formatted prompt string for @c editLineWithResize().
 			 */
-			std::string buildPrompt(const ReadlineAndPromptTheme& pt) const {
+			std::string buildPrompt(const LineEditorAndPromptTheme& pt) const {
 
-				std::string prompt(UI::Palette::RL_idxGreen);
+				std::string prompt(UI::Palette::PromptIndexGreen);
 				prompt
 				    .append("IDX")
 				    .append(pt.primary)
@@ -665,10 +664,10 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 	using select_common::LoopAction;
 
 	// --- RAII: keybindings are automatically reset on any exit path ---
-	ReadlineKeybindingGuard keybindingGuard;
+	LineEditorKeybindingGuard keybindingGuard;
 
-	rl_bind_key('\f', prevent_readline_keybindings);
-	rl_bind_key('\t', prevent_readline_keybindings);
+	editorBindKey('\f', ignoreEditorKeybinding);
+	editorBindKey('\t', ignoreEditorKeybinding);
 
 	image_select::ImageSession s(fileType, files, list, state, keybindingGuard);
 
@@ -676,20 +675,20 @@ void selectForImageFiles(const std::string& fileType, std::vector<std::string>& 
 		s.beginIteration();
 		s.showListOrRewind();
 
-		const ReadlineAndPromptTheme pt = getPromptTheme();
+		const LineEditorAndPromptTheme pt = getPromptTheme();
 		s.bindPromptKeys();
 		const std::string prompt = s.buildPrompt(pt);
 
 		armPendingInputRestore();
-		RlLine rawInput = readlineWithResize(prompt, [&s] { s.repaintList(); });
-		rl_startup_hook = nullptr;
+		EditorLine rawInput = editLineWithResize(prompt, [&s] { s.repaintList(); });
+		editorStartupHook = nullptr;
 
 		if (!rawInput) {
 			s.onEndOfInput();
 			break;
 		}
 
-		const std::string inputString(rawInput.get());
+		const std::string inputString(*rawInput);
 
 		const LoopAction action = s.dispatch(inputString);
 		if (action == LoopAction::Break)  break;

@@ -24,13 +24,33 @@ integration executable links the system `libutil` for PTY support. Runners
 use GNU coreutils `timeout`, `realpath` and `mktemp`. Do not run separate make
 invocations concurrently in the same build variant.
 
-### RAII and Readline restoration regressions
+### Native line editor
+
+The standalone PTY regression test compiles only the native editor and its
+fixture driver, without application modules or third-party input libraries:
+
+```sh
+sh tests/nativeEditor/run.sh
+CXXFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" sh tests/nativeEditor/run.sh
+```
+
+This test is also run by `make test-integration`. It covers UTF-8 editing,
+selection, multiline bracketed paste, history navigation, unbound Ctrl+R,
+startup/idle/custom-input hooks, byte-key rebinding, CSI/SS3 aliases, hotkeys,
+filesystem and callback completion, sorted/deduplicated candidates, empty
+submission versus EOF,
+interleaved cursor-position reports and typeahead, EOF and exact terminal
+attribute restoration, including exception unwinding. The full application
+PTY suite remains necessary to verify the existing prompt controllers and
+rendering together with the new backend.
+
+### RAII and native editor restoration regressions
 
 `make test-unit` checks nested `AtomicFlagGuard` instances, `release()`,
 normal and exceptional scope exit, unmount-sensitive ISO-list restoration,
 and cleanup of filtering indicators, staged paths, pending input and
 completion mode. `make test-integration` runs an isolated PTY child that
-checks exact Readline handler pointers across selection, search, copy/move,
+checks exact native-editor handler pointers across selection, search, copy/move,
 remove, live preview, settings (including enum and numeric completion), USB
 mapping and confirmation modes. It checks startup, completion display,
 attempted-completion, redisplay and event hooks, including scope unwinding.
@@ -230,7 +250,7 @@ tests/
 | Unit: selection | Indices, reversed ranges, duplicates, malformed input and overflow |
 | Unit: sorting | Natural ordering, path/name modes, parallel sort and list views |
 | Unit: configuration | Validators, defaults, self-repair, on-disk order and pagination |
-| Unit: rendering | Themes, fallback colors, ANSI/Readline markers, UTF-8 clipping, ISO extension preservation, actual list pagination and filtered pending-index rendering |
+| Unit: rendering | Themes, fallback colors, ANSI/line-editor markers, UTF-8 clipping, ISO extension preservation, actual list pagination and filtered pending-index rendering |
 | Unit: pagination commands | PageUp/PageDown at boundaries, direct jumps, invalid/overflow jumps, shrinking and disabled pagination |
 | Unit: write telemetry | Raw and Windows EMA, 1 s sample floor, exact 60/300 s stall thresholds, recovery, counter regression, 99% cap, speed formatting |
 | Unit: USB mappings | Multiple targets per ISO, duplicate canonical paths, malformed and missing mappings, permissions, non-USB rejection and capacity checks |
@@ -246,7 +266,7 @@ tests/
 | Integration: USB writer | Invalid ISO, rejection of regular-file target, Windows copy engine (file bytes, directories, empty files, early EOF, missing file, cancellation) |
 | Integration: I/O recovery | Windows copy engine: EINTR, short reads and positional writes, premature EOF, EIO, ENOSPC, zero writes, aligned/unaligned direct-write recovery, unsupported preallocation, active cancellation, exact partial-byte counters, truncation and clean retry (regular files); transient and permanent cleanup truncation faults, close EINTR/EIO after failed copies, FAT32 and NTFS O_DIRECT flags, configured FAT and NTFS chunk sizes, padding, exact CRC/progress, restart exhaustion and tail truncation failure; deterministic double-buffered read/write overlap in both write modes on both filesystem paths, worker cleanup and retry; buffered mode flags, unaligned short writes, exact CRC/progress, ENOSPC, cancellation and empty files |
 | Integration: background import | History parsing, nested discovery, duplicate suppression, completion and worker accounting, stopped import, restart and missing history |
-| Integration: PTY | Four terminal resizes during typed input, repaint, preservation of input and Readline/signal state restoration |
+| Integration: PTY | Four terminal resizes during typed input, repaint, preservation of input and line-editor/signal state restoration |
 | Integration: menus | Real application main menu, invalid choice, resize with typed input, ManageISO, Convert2ISO and image search, ImportISO, Settings, Esc/EOF return and normal exit |
 | Integration: interactive workflows | Real PageUp/PageDown and page jumps, live filter scroll, query replacement, resize, no-match retry, cancellation, staged copy, rejected/confirmed delete and move with filesystem checks; verbose copy, delete and move reports, resize repaint, Enter/Esc/Ctrl+D dismissal and no stale report text |
 | Integration: interactive settings | Real settings editor help, multi-setting PageUp/PageDown and direct jump, invalid numeric value, typed input through resize, persisted update across process restart, skip, Escape and declined/confirmed reset |
@@ -266,7 +286,7 @@ uses explicit synthetic roots; normal production entry points still use the syst
 The unprivileged CLI tests exercise conversion in the sandbox, and only dispatch mount, unmount
 and USB commands when running unprivileged to check permission rejection. No real
 mount or USB write is attempted by those tests. CLI assertions capture stdout and stderr
-separately, remove ANSI CSI sequences and Readline nonprinting delimiters for text comparisons, check raw silence, and verify
+separately, remove ANSI CSI sequences and line-editor nonprinting delimiters for text comparisons, check raw silence, and verify
 exit codes and filesystem effects. They do not depend on timing, theme colors or progress
 speed. Skips count as successful jobs, and validation errors affect the exit code but
 are not counted as dispatched-job failures. The privileged CLI USB validation-only tests use missing arguments or `/dev/null`,
@@ -276,12 +296,13 @@ are restricted to independently verified disposable loop devices in the private
 private mount namespace with the sandbox bound over `/mnt`. The menu test uses a separately compiled app with
 a private lock. The workflow test seeds an isolated database with temporary regular files and checks real copy, move and delete operations only on those fixtures. Run unprivileged.
 The extended interactive settings, import and conversion cases each run in a fresh nested sandbox with an independent HOME, configuration, history, database and private menu lock. They launch the real menu binary and assert persisted configuration and exact file contents, not only rendered messages. No physical devices or privileged operations are used.
-PTY workflows synchronize on test-only Readline session and pause markers plus
+PTY workflows synchronize on test-only line-editor session and pause markers plus
 completed input rows, rather than user-facing prompt wording or icons. The
-linker wrappers are restricted to the menu-test and integration binaries.
+menu-test and integration binaries use a separately compiled editor with a
+test-only prompt-entry marker; the pause marker uses a linker wrapper.
 Prompt rendering checks use the actual displayed label, input clipping and ANSI
 colors; result/status and filesystem assertions remain independent of prompt copy.
-The settings guard checks observe each actual Readline session and assert its
+The settings guard checks observe each actual line-editor session and assert its
 keybindings and hooks directly.
 The USB UI tests inject only discovery/validation and a function-pointer writer;
 production entry points still use the real discovery, validation and writer.

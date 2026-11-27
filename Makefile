@@ -158,21 +158,19 @@ CHD_STATIC = $(DEPS_DIR)/libchdr-static.a
 CHD_INC    = $(DEPS_DIR)/libchdr/include
 
 # Dynamic (default)
-LIBS_DYN = -lreadline -lmount -lblkid $(CHD_STATIC)
+LIBS_DYN = -lmount -lblkid $(CHD_STATIC)
 
 # Static (STATIC=1)
 LZMA_STATIC     = /usr/lib/liblzma.a
 ZLIB_STATIC     = /usr/lib/libz.a
 ZSTD_STATIC     = /usr/lib/libzstd.a
-READLINE_STATIC = /usr/lib/libreadline.a
-NCURSES_STATIC  = /usr/lib/libncurses.a
 MOUNT_STATIC    = /usr/lib/libmount.a
 BLKID_STATIC    = /usr/lib/libblkid.a
 ECONF_STATIC    = /usr/lib/libeconf.a
 INTL_STATIC     = /usr/lib/libintl.a
 LIBS_STAT = $(CHD_STATIC) \
             $(LZMA_STATIC) $(ZLIB_STATIC) $(ZSTD_STATIC) \
-            $(READLINE_STATIC) $(NCURSES_STATIC) $(MOUNT_STATIC) $(BLKID_STATIC) \
+            $(MOUNT_STATIC) $(BLKID_STATIC) \
             $(ECONF_STATIC) $(INTL_STATIC) -pthread
 
 # ---------- Select build type ----------
@@ -229,7 +227,8 @@ UNITY_STANDALONE_LINES := 1000
 # Always compiled on their own:
 #   app/main.cpp           the test targets replace it
 #   converters/daa2iso.cpp defines many short macros that would leak into others
-UNITY_EXCLUDE := $(SRC_DIR)/app/main.cpp $(SRC_DIR)/converters/daa2iso.cpp
+#   input/editor/lineEditor.cpp is isolated for standalone module tests
+UNITY_EXCLUDE := $(SRC_DIR)/app/main.cpp $(SRC_DIR)/converters/daa2iso.cpp $(SRC_DIR)/input/editor/lineEditor.cpp
 
 ifneq ($(UNITY),0)
     UNITY_CANDIDATES := $(filter-out $(UNITY_EXCLUDE),$(SRCS))
@@ -377,6 +376,7 @@ $(MODDEPS_MK): $(MODSRCS) $(SRCS) $(TEST_SCAN_SRCS) Makefile $(CONFIG_STAMP) $(U
 	      n = substr(file, length(src) + 1); sub(/\.cpp$$/, "", n); \
 	      o = (file in unit) ? unit[file] : obj "/" n ".o"; \
 	      if (n == "app/main") printf "%s/tests/menuApp.o: %s\n", obj, deps; \
+	      if (n == "input/editor/lineEditor") printf "%s/tests/lineEditor.o: %s\n", obj, deps; \
 	    } \
 	    printf "%s: %s\n", o, deps; \
 	    if (!(o in cost)) objects[++count] = o; \
@@ -545,7 +545,8 @@ TEST_UNIT_OBJS := $(TEST_UNIT_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_INTEGRATION_OBJS := $(TEST_INTEGRATION_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_PRIVILEGED_OBJS := $(TEST_PRIVILEGED_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_SYNC_OBJ := $(OBJ_DIR)/tests/common/terminalSync.o
-TEST_SYNC_WRAP := -Wl,--wrap=readline,--wrap=ppoll
+TEST_SYNC_WRAP := -Wl,--wrap=ppoll
+TEST_EDITOR_OBJ := $(OBJ_DIR)/tests/lineEditor.o
 TEST_FAULT_OBJ := $(OBJ_DIR)/tests/common/ioFaults.o
 TEST_FAULT_WRAP := -Wl,--wrap=read,--wrap=write,--wrap=pwrite,--wrap=fsync,--wrap=sync_file_range,--wrap=posix_fallocate,--wrap=ftruncate,--wrap=close
 TEST_OBJS := $(TEST_UNIT_OBJS) $(TEST_INTEGRATION_OBJS) $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_SYNC_OBJ)
@@ -555,6 +556,9 @@ TEST_MENU_OBJ := $(OBJ_DIR)/tests/menuApp.o
 TEST_MENU_BIN := $(OBJ_DIR)/tests/isocmd-menu-test
 TEST_PRIVILEGED_BIN := $(OBJ_DIR)/tests/isocmd-privileged-tests
 TEST_LIB_OBJS := $(filter-out $(OBJ_DIR)/app/main.o,$(OBJS))
+# Only PTY test binaries use the instrumented editor; release and other tests do not.
+TEST_SYNC_LIB_OBJS := $(filter-out $(OBJ_DIR)/input/editor/lineEditor.o,$(TEST_LIB_OBJS)) $(TEST_EDITOR_OBJ)
+
 # Most test sources import std through testHarness.h (directly or via ioFaults.h).
 # Project module prerequisites are generated per source in moddeps.mk.
 
@@ -564,15 +568,23 @@ $(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_S
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -c $< -o $@
 	$(publish_depfile)
 
+# Test-only prompt-entry instrumentation remains reliable with LTO and does
+# not rely on the mangled name of a C++ standard-library return type.
+$(TEST_EDITOR_OBJ): src/input/editor/lineEditor.cpp tests/common/terminalSync.h Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) | $(MAPPER)
+	@echo "  TEST CXX $< (PTY synchronization)"
+	@mkdir -p $(@D)
+	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -DISOCMD_TEST_TERMINAL_SYNC -c $< -o $@
+	$(publish_depfile)
+
 $(TEST_BIN): $(TEST_UNIT_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
-$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_SYNC_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_SYNC_OBJ) $(TEST_SYNC_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 $(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 # The unity stamp also forces relinking when the production object list changes.
 # forkpty is in libc on modern glibc; -lutil also supports older glibc.
 # Only the integration executable needs it.
 $(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
 	@echo "  TEST LD  $@"
-	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil $(TEST_SYNC_WRAP)) $(if $(filter $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN),$@),$(TEST_FAULT_WRAP))
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(if $(filter $(TEST_INTEGRATION_BIN),$@),$(TEST_SYNC_LIB_OBJS),$(TEST_LIB_OBJS)) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil $(TEST_SYNC_WRAP)) $(if $(filter $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN),$@),$(TEST_FAULT_WRAP))
 
 test-unit: $(TARGET) $(TEST_BIN)
 	$(Q)sh tests/run.sh "$(TEST_BIN)" "$(TARGET)"
@@ -583,18 +595,19 @@ $(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) | 
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -DISOCMD_TEST_PRIVATE_LOCK -c $< -o $@
 	$(publish_depfile)
 
-$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_SYNC_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_SYNC_OBJ) $(TEST_SYNC_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 	@echo "  TEST LD  $@"
-	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(TEST_MENU_OBJ) $(TEST_SYNC_OBJ) -o $@ $(LIBS) $(TEST_SYNC_WRAP)
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_SYNC_LIB_OBJS) $(TEST_MENU_OBJ) $(TEST_SYNC_OBJ) -o $@ $(LIBS) $(TEST_SYNC_WRAP)
 
 test-integration: $(TEST_INTEGRATION_BIN) $(TEST_MENU_BIN)
+	$(Q)CXX="$(CXX)" CXXFLAGS="$(CXXFLAGS_EXTRA)" sh tests/nativeEditor/run.sh
 	$(Q)sh tests/integration/run.sh "$(TEST_INTEGRATION_BIN)" "$(TEST_MENU_BIN)"
 
 # Elevate only after all compilation and dependency generation have finished.
 test-privileged: $(TEST_PRIVILEGED_BIN) $(TARGET)
 	$(Q)sudo sh tests/privileged/run.sh "$(TEST_PRIVILEGED_BIN)" "$(TARGET)"
 
--include $(wildcard $(TEST_OBJS:.o=.d) $(TEST_MENU_OBJ:.o=.d))
+-include $(wildcard $(TEST_OBJS:.o=.d) $(TEST_MENU_OBJ:.o=.d) $(TEST_EDITOR_OBJ:.o=.d))
 
 install: $(TARGET)
 	mkdir -p $(BINDIR)

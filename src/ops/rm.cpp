@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <stdio.h>
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.ui.interface.pagination;
 import isocmd.core.cancellation;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 import isocmd.ui.display.themes;
 import isocmd.util.sort;
@@ -17,8 +17,8 @@ namespace fs = std::filesystem;
 /**
  * @brief Orchestrates user confirmation for permanent file deletion.
  *
- * Displays the selected ISO files and captures a Y/N confirmation. Readline
- * bindings are restored automatically through RlKeyBindGuard.
+ * Displays the selected ISO files and captures a Y/N confirmation. Line editor
+ * bindings are restored automatically through EditorKeyBindGuard.
  *
  * @param isoFiles Full list of ISO paths.
  * @param indexChunks Chunks used to format the displayed selection.
@@ -34,12 +34,12 @@ bool handleDeleteOperation(
 )
 {
 
-	PendingReadlineTextClearGuard pendingTextGuard;
+	PendingLineEditorTextClearGuard pendingTextGuard;
 
-	rl_attempted_completion_function = nullptr;
+	editorCompletionHook = nullptr;
 
 	reset_custom_keybindingsForRm();
-	rl_bind_keyseq("\\e", exit_handler);
+	editorBindKeySequence("\033", exit_handler);
 
 	const CpMvRmColors colors = getCpMvRmColors();
 
@@ -64,14 +64,14 @@ bool handleDeleteOperation(
 
 	auto setupEnv = [&]() {
 
-		RestoreReadlineBuffer();
+		RestoreLineEditorBuffer();
 
-		rl_bind_key('\f', [](int count, int key) -> int {
+		editorBindKey('\f', [](int count, int key) -> int {
 
 			clear_screen_and_buffer(count, key);
-			rl_on_new_line();
-			rl_replace_line("", 0);
-			rl_done = 1;
+
+			editorReplaceLine("");
+			editorDone = 1;
 			return 0;
 
 		});
@@ -84,7 +84,7 @@ bool handleDeleteOperation(
 		std::string userInput;
 
 		{
-			RlKeyBindGuard keyGuard;
+			EditorKeyBindGuard keyGuard;
 
 			userInput = handlePaginatedDisplay(
 			    entries,

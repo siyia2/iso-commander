@@ -25,17 +25,17 @@ extern IsoPending g_isoPending;
  * Also clears pending prompt text so it cannot leak into another screen.
  * Call restore() after a sub-mode replaces the keybindings.
  */
-class ReadlineKeybindingGuard {
+class LineEditorKeybindingGuard {
 public:
-	ReadlineKeybindingGuard();
-	~ReadlineKeybindingGuard();
+	LineEditorKeybindingGuard();
+	~LineEditorKeybindingGuard();
 
 	/// Re-establish custom keybindings after a sub-mode overrode them.
 	void restore();
 
 
-	ReadlineKeybindingGuard(const ReadlineKeybindingGuard&) = delete;
-	ReadlineKeybindingGuard& operator=(const ReadlineKeybindingGuard&) = delete;
+	LineEditorKeybindingGuard(const LineEditorKeybindingGuard&) = delete;
+	LineEditorKeybindingGuard& operator=(const LineEditorKeybindingGuard&) = delete;
 };
 
 /**

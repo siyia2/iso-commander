@@ -219,19 +219,19 @@ void deactivateLivePreview();
 bool livePreviewWasRepainted();
 
 /**
- * @brief Manages Readline hooks and keybindings for a live-preview session.
+ * @brief Manages Line editor hooks and keybindings for a live-preview session.
  *
  * Installs the preview redisplay hook and Page Up/Page Down bindings on
- * construction, then restores the original Readline configuration and
+ * construction, then restores the original Line editor configuration and
  * resets preview state on destruction.
  */
-class LivePreviewReadlineGuard {
+class LivePreviewLineEditorGuard {
 public:
-	LivePreviewReadlineGuard();
-	~LivePreviewReadlineGuard();
+	LivePreviewLineEditorGuard();
+	~LivePreviewLineEditorGuard();
 
-	LivePreviewReadlineGuard(const LivePreviewReadlineGuard&) = delete;
-	LivePreviewReadlineGuard& operator=(const LivePreviewReadlineGuard&) = delete;
+	LivePreviewLineEditorGuard(const LivePreviewLineEditorGuard&) = delete;
+	LivePreviewLineEditorGuard& operator=(const LivePreviewLineEditorGuard&) = delete;
 };
 
 } // extern "C++"

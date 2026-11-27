@@ -8,33 +8,33 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <readline/readline.h>
 
 import std;
+import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.uiState;
 import isocmd.input.inputHandling;
-import isocmd.input.readline;
+import isocmd.input.promptCompletion;
 import isocmd.proc.process;
 import isocmd.ui.bar.progressBarSizeWatcher;
 import isocmd.ui.cli.syncOutput;
 import isocmd.ui.cli.termSize;
 import isocmd.ui.display.themes;
-import isocmd.ui.display.readlineResize;
+import isocmd.ui.display.lineEditorResize;
 
 namespace {
 
 	// ============================================================================
-	// Progress-specific Readline resize hook
+	// Progress-specific Line editor resize hook
 	// ============================================================================
 
-	/// Repaint callback used by the readline event hook while the verbose prompt
-	/// waits. rl_event_hook is a plain function pointer and cannot carry state,
+	/// Repaint callback used by the line editor event hook while the verbose prompt
+	/// waits. editorEventHook is a plain function pointer and cannot carry state,
 	/// so the active callback is reached through this pointer (set only around
-	/// that one readline() call).
+	/// that one editLine() call).
 	std::function<int()>* g_progressResizeHook = nullptr;
 
-	/// rl_event_hook trampoline: forwards to the active callback, if any.
+	/// editorEventHook trampoline: forwards to the active callback, if any.
 	int progressResizeHookTrampoline() {
 
 		return g_progressResizeHook ? (*g_progressResizeHook)() : 0;
@@ -344,6 +344,8 @@ namespace {
 		// ---- main loop ------------------------------------------------------
 
 		static void drainStdin() {
+
+			editorDiscardPendingInput();
 
 			char ch;
 
@@ -788,7 +790,7 @@ namespace {
 			freezeFinalState();
 			printFinalReport(resizedAtEnd);
 
-			disableReadlineForConfirmation();
+			disableLineEditorForConfirmation();
 
 			std::cout << "\n\n";
 
@@ -799,7 +801,7 @@ namespace {
 
 			watcher_.stop();
 
-			restoreReadline();
+			restoreLineEditor();
 
 		}
 
@@ -876,8 +878,8 @@ namespace {
 			std::string res;
 
 			if (startSize.cols < kMinSafeCols) {
-				const auto input = readlineWithResize(promptFor(static_cast<int>(startSize.cols)));
-				if (input) res = input.get();
+				const auto input = editLineWithResize(promptFor(static_cast<int>(startSize.cols)));
+				if (input) res = *input;
 			} else {
 				res = readAnswerWithResizeHook(startSize);
 			}
@@ -895,26 +897,24 @@ namespace {
 
 			g_progressResizeHook = &onResize;
 
-			auto* savedHook = rl_event_hook;
-			const int savedWinch = rl_catch_sigwinch;
+			auto* savedHook = editorEventHook;
+			const int savedWinch = editorCatchSigwinch;
 
-			rl_event_hook = progressResizeHookTrampoline;
-			rl_catch_sigwinch = 0;
+			editorEventHook = progressResizeHookTrampoline;
+			editorCatchSigwinch = 0;
 
-			auto input = readlineWithResize(prompt);
+			auto input = editLineWithResize(prompt);
 
-			rl_catch_sigwinch = savedWinch;
-			rl_event_hook = savedHook;
+			editorCatchSigwinch = savedWinch;
+			editorEventHook = savedHook;
 			g_progressResizeHook = nullptr;
 
-			return input.get()
-			    ? std::string(input.get())
-			    : std::string();
+			return input.value_or(std::string{});
 
 		}
 
 		/**
-		 * @brief Readline idle hook for terminal resize handling.
+		 * @brief Line editor idle hook for terminal resize handling.
 		 *
 		 * Repaints the final report and restores the prompt when the terminal
 		 * is resized while waiting for the answer.
@@ -934,7 +934,7 @@ namespace {
 				return 0;
 			}
 
-			rl_set_screen_size(
+			editorSetScreenSize(
 			    static_cast<int>(now.rows),
 			    static_cast<int>(now.cols));
 
@@ -943,13 +943,12 @@ namespace {
 
 			if (newPrompt != prompt) {
 				prompt = newPrompt;
-				rl_set_prompt(prompt.c_str());
+				editorSetPrompt(prompt);
 			}
 
 			repaintReportBeforePrompt();
 
-			rl_on_new_line();
-			rl_forced_update_display();
+			editorForcedUpdateDisplay();
 
 			if (kUseSynchronizedOutput) {
 				std::cout << kSyncEnd << std::flush;
@@ -1069,13 +1068,13 @@ namespace {
  *
  * @par Resize at the verbose prompt
  * The watcher keeps running while the "Display verbose output?" prompt waits.
- * An rl_event_hook (called by readline from its idle loop, on this thread)
+ * An editorEventHook (called by line editor from its idle loop, on this thread)
  * compares the watcher's size with the last painted one and, on a change,
  * wipes the screen, repaints the final report (header, status, bar, with the
  * elapsed time and counters frozen at completion) and then calls
- * rl_on_new_line() + rl_redisplay() so the prompt and any half-typed answer
- * are restored. The whole repaint is one synchronized update. Readline's own
- * SIGWINCH handling is disabled for that call (rl_catch_sigwinch = 0), so the
+ * editorRedisplay() so the prompt and any half-typed answer
+ * are restored. The whole repaint is one synchronized update. the line editor's own
+ * SIGWINCH handling is disabled for that call (editorCatchSigwinch = 0), so the
  * watcher's handler is the only one involved.
  *
  * @par Structure

@@ -22,23 +22,21 @@ namespace {
 	}
 }
 
-unsigned long isocmd_tests::terminal_sync::readlineSession() noexcept {
+unsigned long isocmd_tests::terminal_sync::lineEditorSession() noexcept {
 
 	return sessions;
 
 }
 
-extern "C" {
-char* __real_readline(const char*);
-int __real_ppoll(struct pollfd*, nfds_t, const struct timespec*, const sigset_t*);
-
-char* __wrap_readline(const char* prompt) {
+void isocmd_tests::terminal_sync::lineEditorStarted() noexcept {
 
 	++sessions;
-	announce(isocmd_tests::terminal_sync::input);
-	return __real_readline(prompt);
+	announce(input);
 
 }
+
+extern "C" {
+int __real_ppoll(struct pollfd*, nfds_t, const struct timespec*, const sigset_t*);
 
 // The pause implementation is the only project caller of ppoll. It enters
 // this wait after drawing the prompt and activating terminal/signal guards.
