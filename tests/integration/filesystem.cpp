@@ -8,6 +8,7 @@
 #include "../common/testHarness.h"
 
 import isocmd.ops.cpMvRm;
+import isocmd.ui.display.themes;
 import isocmd.database.databaseOps;
 
 namespace isocmd_tests {
@@ -52,7 +53,8 @@ namespace isocmd_tests {
 		CHECK(done == 1 && failed == 0 && bytes == payload.size() && ownershipCalls == 1 && ok);
 		checkMoveAndDelete(ctx, dst, moved, payload, done, failed, bytes, ok);
 		reporter.flush(); CHECK(successes.size() == 3 && errors.size() == 1 && ownershipCalls == 2);
-		CHECK(errors.begin()->contains(": File not found") && !errors.begin()->contains('\n'));
+		CHECK(errors.begin()->contains(std::string(resolveVerboseTheme().label) + ": " +
+			      std::string(getCpMvRmColors().error_label) + "File not found") && !errors.begin()->contains('\n'));
 		checkCopyFailures(tmp.path, src, dst, payload, bytes);
 
 	}

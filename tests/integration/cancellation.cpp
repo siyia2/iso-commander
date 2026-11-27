@@ -13,6 +13,7 @@
 import isocmd.input.terminalControl;
 import isocmd.core.cancellation;
 import isocmd.ops.cpMvRm;
+import isocmd.ui.display.themes;
 import isocmd.database.databaseOps;
 
 namespace isocmd_tests {
@@ -49,7 +50,8 @@ namespace isocmd_tests {
 		CHECK(readFile(src) == "source" && readFile(dst) == "sentinel" && failed == 2 && done == 0 && !ok);
 		reporter.flush(); CHECK(errors.size() == 2 && successes.empty());
 		for (const auto& error : errors) {
-			CHECK(error.contains(": Cancelled") && !error.contains('\n'));
+			CHECK(error.contains(std::string(resolveVerboseTheme().label) + ": " +
+			      std::string(getCpMvRmColors().error_label) + "Cancelled") && !error.contains('\n'));
 		}
 		std::vector<std::string> files; std::unordered_set<std::string> scanErrors; std::mutex fm, em;
 		traverse(tmp.path, files, scanErrors, bytes, fm, em, -1, false);

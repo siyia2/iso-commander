@@ -507,6 +507,7 @@ void reportErrorCpMvRm(
 {
 
 	const auto vt = getVerboseTheme();
+	const auto label = resolveVerboseTheme().label;
 	const std::string displaySrc = buildDisplaySrc(srcDir, srcFile);
 
 	std::string errorMsg;
@@ -515,25 +516,25 @@ void reportErrorCpMvRm(
 	errorMsg.append(vt.red).append("✗ ");
 	if (errorType == "same_file") {
 		errorMsg.append(vt.yellow).append(srcDir).append("/").append(srcFile)
-		        .append(vt.red).append(": Cannot ").append(operation).append(" file to itself");
+		        .append(label).append(": ").append(vt.red).append("Cannot ").append(operation).append(" file to itself");
 	} else if (errorType == "source_missing") {
 		errorMsg.append(vt.yellow).append(displaySrc)
-		        .append(vt.red).append(": Source file no longer exists");
+		        .append(label).append(": ").append(vt.red).append("Source file no longer exists");
 	} else if (errorType == "overwrite_failed") {
 		errorMsg.append(vt.yellow).append(destDir).append(srcFile)
-		        .append(vt.red).append(": Failed to overwrite: ").append(errorDetail);
+		        .append(label).append(": ").append(vt.red).append("Failed to overwrite: ").append(errorDetail);
 	} else if (errorType == "file_exists") {
 		errorMsg.append(vt.yellow).append(displaySrc)
 		        .append(vt.reset).append(" → ")
 		        .append(vt.yellow).append(destDir).append(srcFile)
-		        .append(vt.red).append(": File exists (overwrite with -o)");
+		        .append(label).append(": ").append(vt.red).append("File exists (overwrite with -o)");
 	} else if (errorType == "remove_after_move") {
 		errorMsg.append(vt.yellow).append(displaySrc)
-		        .append(vt.red).append(": Move completed but failed to remove source file: ")
+		        .append(label).append(": ").append(vt.red).append("Move completed but failed to remove source file: ")
 		        .append(errorDetail);
 	} else if (errorType == "missing_file") {
 		errorMsg.append(vt.yellow).append(displaySrc)
-		        .append(vt.purple).append(": Missing");
+		        .append(label).append(": ").append(vt.purple).append("Missing");
 	} else {
 		errorMsg.append(errorDetail);
 	}
@@ -584,7 +585,7 @@ void logOperationResult(
 		   .append(colors.error_path).append(displaySrc)
 		   .append(colors.arrow).append(" → ")
 		   .append(colors.error_path).append(destDirProcessed).append(destFile)
-		   .append(colors.error_label).append(": ").append(errorDetail)
+		   .append(colors.success_label).append(": ").append(colors.error_label).append(errorDetail)
 		   .append(UI::Palette::BoldReset);
 
 		ctx.reporter.addError(std::move(msg));

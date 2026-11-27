@@ -24,6 +24,9 @@ namespace isocmd_tests {
 	static void checkOperationColors() {
 
 		using namespace UI::Palette;
+		// Result separators use the same label color as the operation prefix.
+		CHECK(getConversionThemeStrings().okLabel == resolveVerboseTheme().label);
+		CHECK(getCpMvRmColors().success_label == resolveVerboseTheme().label);
 		constexpr std::pair<std::string_view, std::string_view> expected[] = {
 			{"mount", Green}, {"cp", Green}, {"umount", Yellow}, {"mv", Yellow},
 			{"rm", Red}, {"write2usb", Yellow}, {"w2usb", Yellow}, {"c2iso", Orange},
