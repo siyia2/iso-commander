@@ -1462,6 +1462,23 @@ namespace isocmd_tests {
 
 	}
 
+	/// History navigation must leave the typed confirmation unchanged.
+	static void checkVerboseHistoryDisabled(TerminalSession& term, std::size_t& start) {
+
+		const auto label = inputRow(term, start);
+		CHECK(!label.empty());
+		term.send("n");
+		start = waitForInputRow(term, start);
+		CHECK(inputRow(term, start) == label + "n");
+		for (const auto* key : {"\033[A", "\033[B", "\033[5~", "\033[6~", "\033OA", "\033OB"}) {
+			term.send(key);
+			start = waitForInputRow(term, start);
+			CHECK(inputRow(term, start) == label + "n");
+		}
+		term.send("\n");
+
+	}
+
 	int sharedProgressTest(const char* binary) {
 
 		try {
@@ -1473,7 +1490,7 @@ namespace isocmd_tests {
 				auto frame = screenFrame(term, start, "INTERRUPTED");
 				CHECK(has(frame, "] 0% (0/10)"));
 				start = waitForNewInput(term, start);
-				term.send("n\n");
+				checkVerboseHistoryDisabled(term, start);
 				frame = screenFrame(term, start, "COMPLETED");
 				CHECK(has(frame, "] 100% (10/10)"));
 				start = waitForNewInput(term, start);
@@ -1489,7 +1506,7 @@ namespace isocmd_tests {
 				term.waitFor("TEST-SHARED-PROGRESS-PASS", start);
 				term.waitForExit();
 			} catch (...) { printOutput(term.output); throw; }
-			std::cout << "PASS: shared progress cancellation snapshots and final report resizing\n";
+			std::cout << "PASS: shared progress cancellation snapshots, final report resizing and disabled confirmation history\n";
 			return 0;
 		} catch (const std::exception& e) { std::cerr << "FAIL: shared progress: " << e.what() << '\n'; return 1; }
 

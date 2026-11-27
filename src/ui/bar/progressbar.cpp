@@ -781,12 +781,12 @@ namespace {
 			freezeFinalState();
 			printFinalReport(resizedAtEnd);
 
-			disableLineEditorForConfirmation();
-
 			std::cout << "\n\n";
 
 			restoreInput(&oldt, oldf);
 			reset_custom_keybindingsForSelect();
+			// Resetting selection bindings restores Page Up/Down history navigation.
+			disableLineEditorForConfirmation();
 
 			askVerbose();
 

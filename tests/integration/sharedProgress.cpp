@@ -9,6 +9,7 @@
 #include "../common/testHarness.h"
 
 import isocmd.core.cancellation;
+import isocmd.input.lineEditor;
 import isocmd.input.terminalControl;
 import isocmd.proc.process;
 import isocmd.ui.display.themes;
@@ -87,11 +88,20 @@ namespace isocmd_tests {
 
 		try {
 			getskin(); UI::Palette::updateDefaultColors();
+			editorClearHistory();
+			editorAddHistory("older history entry");
+			editorAddHistory("recent history entry");
 			interruptedProgress(false);
 			interruptedProgress(true);
 			immediateProgress(true);
 			immediateProgress(false);
 			skippedProgress();
+			CHECK(editorHistoryList() == std::vector<std::string>{"older history entry", "recent history entry"});
+			CHECK(editorKeySequenceHandler("\033[A") == editorPreviousHistory);
+			CHECK(editorKeySequenceHandler("\033[B") == editorNextHistory);
+			CHECK(editorKeySequenceHandler("\033[5~") == editorPreviousHistory);
+			CHECK(editorKeySequenceHandler("\033[6~") == editorNextHistory);
+			editorClearHistory();
 			GlobalState::g_operationCancelled = false;
 			std::cout << "TEST-SHARED-PROGRESS-PASS\n" << std::flush;
 			return 0;
