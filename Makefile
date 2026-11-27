@@ -38,7 +38,7 @@
 #    make test-unit SANITIZE=1         run unit/CLI tests with AddressSanitizer
 #    make test-unit SANITIZE=2         run unit/CLI tests with ThreadSanitizer
 #    make V=1                     show full compiler command lines
-#    make install [BINDIR=/some/dir]
+#    make install [BINDIR=/some/dir] [MANDIR=/some/share/man]
 #
 #  Tests require no Python or external C++ framework; see tests/README.md.
 # ============================================================================
@@ -64,6 +64,7 @@ SRC_DIR  := src
 DEPS_DIR := deps
 BUILD_DIR ?= build
 BINDIR   ?= bin
+MANDIR   ?= $(dir $(BINDIR))share/man
 
 STD_CACHE_ROOT := .std-cache
 
@@ -598,9 +599,12 @@ test-privileged: $(TEST_PRIVILEGED_BIN) $(TARGET)
 install: $(TARGET)
 	mkdir -p $(BINDIR)
 	install -m 755 $(TARGET) $(BINDIR)
+	install -Dm644 man/isocmd.1 "$(MANDIR)/man1/isocmd.1"
+	install -Dm644 man/isocmd.conf.5 "$(MANDIR)/man5/isocmd.conf.5"
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)
+	rm -f "$(MANDIR)/man1/isocmd.1" "$(MANDIR)/man5/isocmd.conf.5"
 
 help:
 	@echo "Usage: make [target] [options]"
@@ -626,8 +630,8 @@ help:
 	@echo "  make clean all             Remove build artifacts and std cache"
 	@echo ""
 	@echo "Installation:"
-	@echo "  make install               Install the application"
-	@echo "  make uninstall             Uninstall the application"
+	@echo "  make install               Install the application and manpages"
+	@echo "  make uninstall             Uninstall the application and manpages"
 	@echo ""
 	@echo "Options:"
 	@echo "  STATIC=1                   Build a static executable"
@@ -637,7 +641,8 @@ help:
 	@echo "  UNITY=0|1|2                Per file (0), hybrid (1, default), or full directory (2)"
 	@echo "                             FAST=1 defaults to UNITY=0"
 	@echo "  V=1                        Enable verbose build output"
-	@echo "  BINDIR=<dir>               Set installation directory"
+	@echo "  BINDIR=<dir>               Set executable installation directory"
+	@echo "  MANDIR=<dir>               Set manual installation directory"
 	@echo "  BUILD_DIR=<dir>            Set build directory"
 	@echo ""
 	@echo "Output:"

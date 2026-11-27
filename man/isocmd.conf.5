@@ -1,0 +1,132 @@
+.if n .if \n[LL]>80n .nr LL 80n
+.if n .if \n[LT]>80n .nr LT 80n
+.TH ISOCMD.CONF 5 "November 2026" "Iso Commander 8.0.4"
+.ad l
+.nh
+.SH NAME
+isocmd.conf \- configuration file for Iso Commander
+.SH DESCRIPTION
+The configuration file is
+.IR ~/.config/isocmd/config .
+Settings use the form
+.IR "key = value" .
+Lines beginning with # are comments. Numeric settings accept non-negative
+integers without signs, decimal points or leading zeros, within the
+ranges below. Missing or invalid settings are replaced with defaults.
+.PP
+Most settings take effect immediately when changed in the interactive
+settings editor. The global thread pool limit requires a restart;
+automatic database updates are a startup setting.
+.SH CONFIGURATION
+.SS Appearance settings
+.TP
+.B base
+Default state and input color.
+Values: ash, black, charcoal, gray, silver, steel, white.
+Default: white.
+.TP
+.B skin
+Menu and header color.
+Values: amber, black, cyan, gray, green, purple, rose, white.
+Default: white.
+.TP
+.B theme
+Color palette for lists and prompts.
+Values: classic, crimson, dracula, forest, high_contrast, midnight, mono,
+neon, ocean, original, paper, retro, sakura, sunset, tokyo.
+Default: original.
+.SS General settings
+.TP
+.B auto_update
+Refresh the ISO database on startup using folder path history.
+Values: on, off. Default: off.
+.TP
+.B filenames_only
+Display filenames instead of full paths, except in the unmount list.
+Values: on, off. Default: off.
+.TP
+.B pagination
+Items per page (0 disables pagination).
+Range: 0\-1000. Default: 25.
+.SS Write2USB settings
+.TP
+.B verify_checksum
+Verify USB write integrity using CRC-64 in interactive mode.
+Values: on, off. Default: off.
+.TP
+.B buffered_writes
+Use buffered I/O for Windows and WinPE writes in both modes.
+Values: on, off. Default: on.
+.SS History settings
+.TP
+.B folder_path_history_lines
+Maximum unique folder paths to persist (0 disables history).
+Range: 0\-5000. Default: 30.
+.TP
+.B filter_history_lines
+Maximum unique search filters to persist (0 disables history).
+Range: 0\-1000. Default: 15.
+.SS Display modes
+All list display settings accept full or compact. Filename-only display
+overrides these settings, except for the unmount list.
+.TP
+.B mount_list
+Mount operations. Default: compact.
+.TP
+.B umount_list
+Unmount operations. Default: full.
+.TP
+.B cp_mv_rm_list
+Copy, move and delete operations. Default: full.
+.TP
+.B write2usb_list
+USB writing. Default: compact.
+.TP
+.B convert2iso_lists
+Image conversion. Default: compact.
+.SS Thread configuration
+A shared thread pool uses the reported hardware concurrency (at least 2)
+capped by combined_thread_cap. Sub-limits draw from this pool; tasks queue
+when workers are unavailable.
+.TP
+.B combined_thread_cap
+Global thread pool limit (requires restart).
+Range: 1\-256. Default: 16.
+.TP
+.B thread_cap_for_mount
+Maximum concurrent mounting tasks.
+Range: 1\-128. Default: 8.
+.TP
+.B thread_cap_for_umount
+Maximum concurrent unmounting tasks.
+Range: 1\-128. Default: 8.
+.TP
+.B thread_cap_for_cp_mv
+Maximum concurrent copy or move tasks.
+Range: 1\-128. Default: 4.
+.TP
+.B thread_cap_for_rm
+Maximum concurrent file removal tasks.
+Range: 1\-128. Default: 8.
+.TP
+.B thread_cap_for_convert2iso
+Maximum concurrent ISO conversions.
+Range: 1\-128. Default: 4.
+.TP
+.B thread_cap_for_database_cleanup
+Maximum threads for ISO database cleanup.
+Range: 1\-128. Default: 4.
+.TP
+.B thread_cap_for_list_sorting
+Maximum threads for list sorting.
+Range: 1\-64. Default: 2.
+.TP
+.B thread_cap_for_list_filtering
+Maximum threads for list filtering.
+Range: 1\-64. Default: 2.
+.SH FILES
+.TP
+.I ~/.config/isocmd/config
+User configuration file. With sudo, HOME is normally /root.
+.SH SEE ALSO
+.BR isocmd (1)

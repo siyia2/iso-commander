@@ -1,227 +1,359 @@
-.TH ISOCMD 1 "November 2026" "Iso Commander 8.0.3" "Iso-Commander Manual"
-
+.if n .if \n[LL]>80n .nr LL 80n
+.if n .if \n[LT]>80n .nr LT 80n
+.TH ISOCMD 1 "November 2026" "Iso Commander 8.0.4" "Iso-Commander Manual"
+.ad l
+.nh
 .SH NAME
-Iso Commander (isocmd) \- A single binary command-line utility for managing .iso files and converting image formats.
-
+isocmd \- manage ISO images, convert disc images and write bootable USB media
+.SH SYNOPSIS
+.B isocmd
+.br
+.B isocmd
+.RB { \-v | \-\-version }
+.br
+.B isocmd mount
+.RI [ options ] " path ..."
+.br
+.B isocmd umount
+.RI [ options ] " [path ... | all]"
+.br
+.B isocmd unmount
+.RI [ options ] " [path ... | all]"
+.br
+.B isocmd c2iso
+.RI [ options ] " path ..."
+.br
+.B isocmd w2usb
+.RI [ options ] " iso ... device ..."
 .SH DESCRIPTION
-Iso Commander (isocmd) is a single binary command-line utility for managing .iso files and converting various image formats to .iso using multi-threaded processing.
-
+Iso Commander is a multithreaded, single-binary utility for managing ISO
+files, converting disc images to ISO and creating bootable USB media.
+Run without arguments to open the interactive menu.
+.PP
+Mounting, unmounting and USB writing require root privileges.
+ISO mount points are located under
+.IR /mnt/ISOs/ .
 .SH NON-INTERACTIVE COMMANDS
-.SS Version
-.TP 16
-.B \-v, \-\-version
-Show program version.
-.SS Actions
-.TP 16
+The action must come first, followed by options and then paths.
+Options cannot follow positional paths.
+.TP
+.BR \-v ", " \-\-version
+Show the program version and exit.
+.TP
 .B mount
-Mount one or more ISO files or scan directories for ISO files and mount them (requires root).
-.TP 16
-.B umount/unmount
-Unmount specified ISO mount points. Without paths, or with \fBall\fR as the only path, scan /mnt/ISOs and attempt to unmount all contained mount points (requires root).
-.TP 16
+Mount ISO files or recursively scan directories for ISO files and mount
+those found. Requires root.
+.TP
+.BR umount ", " unmount
+Unmount specified ISO mount points. With no paths,
+.B all
+as the only path, or
+.IR /mnt/ISOs ,
+scan the immediate subdirectories of the mount directory. Requires root.
+.TP
 .B c2iso
-Convert supported images to ISO files. Accepts individual image files and directories to scan. Supported formats are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
-.TP 16
+Convert individual disc images or recursively scan directories for supported
+images. Supported extensions are BIN, IMG, CCD, MDF, NRG, CHD, DAA and GBI.
+Converted ISO files are saved in the source image directory.
+.TP
 .B w2usb
-Write ISO files to removable USB flash devices (requires root). Arguments beginning with \fB/dev/\fR are target devices.
-.br
-All arguments are validated before any device is touched. Only raw devices are accepted, not device partitions.
-.SS Action Flags
-.TP 16
+Write ISO files to removable USB flash devices. Requires root.
+ISO paths must precede device paths, which begin with
+.IR /dev/ .
+One ISO may be written to multiple devices; otherwise ISO and device counts
+must match, with pairs assigned in argument order.
+Only whole devices are accepted, not partitions.
+See
+.B USB WRITING
+for requirements and limitations.
+.SS Options
+.TP
 .B \-\-silent
-Suppress informational messages, warnings and progress output. Critical errors will still be displayed.
-.TP 16
+Suppress informational messages, warnings and progress output.
+Critical errors are still displayed.
+.TP
 .B \-\-verify
-Verify USB writes using CRC-64 checksum readback after writing (\fBw2usb\fR only). This flag enables verification independently of
-.br
-the interactive \fBverify_checksum\fR setting. Failure or cancellation returns a nonzero exit status.
-.TP 16
-.B \-d\fIN\fR
-Maximum recursion depth when scanning directories for ISO files or convertible images (default: unlimited). A depth of 0 scans only the specified directories.
-.br
-Ignored by \fBw2usb\fR, which does not scan directories, and by \fBumount/unmount\fR, which only require surface scans.
-
+Enable CRC-64 checksum readback verification for
+.B w2usb
+only. Non-interactive writes use this flag, not the interactive
+.B verify_checksum
+setting.
+.TP
+.BI \-d N
+Maximum recursion depth for directory scans by
+.B mount
+and
+.BR c2iso .
+Depth 0 scans only the specified directories. The default is unlimited;
+negative values also select unlimited depth. Ignored by
+.BR umount ", " unmount " and " w2usb .
+.SH EXIT STATUS
+Non-interactive commands return 0 on success and 1 on error or
+cancellation, including failure or cancellation of requested verification.
+Mount, unmount and conversion commands can return 0 when no eligible
+files or mount points are found and no errors occur.
 .SH EXAMPLES
-.TS
-tab(@);
-lb l.
-isocmd mount /path/to/file1.iso /path/to/file2.iso@Mount specific ISOs
-isocmd mount /path/to/dir@Mount all ISOs in a directory
-isocmd mount \-d2 /path/to/dir@Mount ISOs up to depth 2
-isocmd mount \-\-silent /path/to/file.iso@Mount an ISO with minimal output
-@
-isocmd umount /mnt/ISOs/mountedISO1 /mnt/ISOs/mountedISO2@Unmount specific ISO mount points
-isocmd umount /mnt/ISOs/mountedISO1@Unmount a specific ISO mount point
-isocmd umount@Unmount all ISO mount points under /mnt/ISOs
-isocmd umount all@Unmount all ISO mount points under /mnt/ISOs
-isocmd umount \-\-silent@Unmount all ISO mount points with minimal output
-@
-isocmd c2iso /path/to/image.bin@Convert a BIN image to ISO
-isocmd c2iso /path/to/image.mdf /path/to/image.nrg@Convert multiple images to ISO
-isocmd c2iso /path/to/image-dir@Convert supported images in a directory
-isocmd c2iso \-d2 /path/to/image-dir@Convert images up to depth 2
-isocmd c2iso \-\-silent /path/to/image-dir@Convert images with minimal output
-@
-isocmd w2usb file.iso /dev/sdc@Write one ISO to one USB device
-isocmd w2usb file.iso /dev/sdc /dev/sdd@Write one ISO to multiple USB devices
-isocmd w2usb file1.iso file2.iso /dev/sdc /dev/sdd@Write file1.iso to sdc and file2.iso to sdd
-isocmd w2usb \-\-silent file.iso /dev/sdc@Write an ISO with minimal output
-isocmd w2usb \-\-verify file.iso /dev/sdc@Write an ISO and verify the result
-.TE
-
-.SH UI INTERACTIVE OPTIONS AND FEATURES
+.SS Mounting and unmounting
+.TP
+.B isocmd mount a.iso b.iso
+Mount two ISO files.
+.TP
+.B isocmd mount /path/to/dir
+Mount ISOs found in a directory tree.
+.TP
+.B isocmd mount \-d2 /path/to/dir
+Mount ISOs up to recursion depth 2.
+.TP
+.B isocmd mount \-\-silent a.iso
+Mount an ISO with minimal output.
+.TP
+.B isocmd umount /mnt/ISOs/mountedISO1 /mnt/ISOs/mountedISO2
+Unmount two specific mount points.
+.TP
+.B isocmd umount
+Unmount all ISO mount points under /mnt/ISOs.
+.TP
+.B isocmd umount all
+Equivalent to running umount without paths.
+.TP
+.B isocmd umount \-\-silent
+Unmount all ISO mount points with minimal output.
+.SS Conversion
+.TP
+.B isocmd c2iso image.bin
+Convert a BIN image to ISO.
+.TP
+.B isocmd c2iso image.mdf image.nrg
+Convert two images to ISO.
+.TP
+.B isocmd c2iso /path/to/images
+Convert supported images in a directory tree.
+.TP
+.B isocmd c2iso \-d2 /path/to/images
+Convert images up to recursion depth 2.
+.TP
+.B isocmd c2iso \-\-silent /path/to/images
+Convert images with minimal output.
+.SS USB writing
+.TP
+.B isocmd w2usb file.iso /dev/sdc
+Write one ISO to one device.
+.TP
+.B isocmd w2usb file.iso /dev/sdc /dev/sdd
+Write the same ISO to two devices.
+.TP
+.B isocmd w2usb a.iso b.iso /dev/sdc /dev/sdd
+Write a.iso to sdc and b.iso to sdd.
+.TP
+.B isocmd w2usb \-\-silent file.iso /dev/sdc
+Write an ISO with minimal output.
+.TP
+.B isocmd w2usb \-\-verify file.iso /dev/sdc
+Write an ISO and verify the result.
+.SH INTERACTIVE FEATURES
 .TP
 .B ManageISO
-Mount, unmount, delete, move, copy, and write ISO files to USB (bootable preserved). Requires root for mount/umount/write2usb.
-
+Mount, unmount, delete, move, copy and write ISO files to USB.
 .TP
 .B Convert2ISO
-Ported from original C tools and utilizes libchdr.
-.br
-Converts .bin, .img, .chd, .daa, .gbi, .mdf, and .nrg files to .iso.
-.br
-.sp
-.B ccd2iso
-(GPL-2.0 or later, Danny Kurniawan and Kerry Harris) \(em converts CloneCD .bin/.img disc images.
-.br
-.B mdf2iso
-(GPL-2.0 or later, Salvatore Santagati) \(em converts Alcohol 120% .mdf disc images.
-.br
-.B nrg2iso
-(GPL-3.0 or later, Grégory Kokanosky) \(em converts Nero Burning ROM .nrg disc images.
-.br
-.B daa2iso
-(GPL-2.0 or later, Luigi Auriemma) \(em converts PowerISO .daa and gBurner .gbi disc images.
-.br
-.B libchdr
-(BSD-3-Clause, MAME project, Romain TISSERAND) \(em decodes Compressed Hunks of Data (.chd) images.
+Convert supported disc images to ISO using ported converters and libchdr.
+Conversion is intended for archival use; disc-specific data needed by
+emulators may not be preserved.
 .TP
-
 .B ImportISO
-Creates and updates a local ISO database. The database has a maximum file size limit of \fB1MB\fR.
-
+Create and update the local ISO database, limited to 1 MiB.
+.TP
+.B Settings
+Edit configuration values, themes, display modes and thread limits.
+Most settings take effect immediately. The global thread pool limit
+requires a restart; automatic database updates are a startup setting.
+.TP
+.B Exit
+Close the interactive application.
+.SS List navigation and selection
+.TP
+.B 1 3 5
+Select individual numbered entries.
+.TP
+.B 1\-3 5 7\-9
+Select ranges and individual entries together.
+.TP
+.B 1\-3 5;
+Queue entries as pending selections in supported lists.
+.B P
+processes pending selections and
+.B C
+clears them.
+.TP
+.B 00
+Select all entries in the current mount or unmount list.
+.TP
+.B /
+Open the filter prompt.
+.TP
+.B ~
+Toggle full and compact display modes.
+.TP
+.B *
+Toggle filename-only display where supported (not in the unmount list).
+.TP
+.B R
+Refresh the ISO list from folder path history in supported ISO lists.
+.TP
+.BR PgUp ", " PgDn ", " gN
+Navigate to the previous, next or specified page.
+.TP
+.BR Esc ", " Ctrl+D
+Return from the current prompt or list, as applicable.
+.TP
+.B Ctrl+U
+Clear the input line.
+.SH USB WRITING
+.B Warning:
+USB writing destroys existing data on the selected devices.
+Check device paths carefully before starting a write.
+.PP
+The non-interactive command checks paths, target devices and capacities
+before starting the write jobs. Targets must be removable USB flash
+devices with sufficient capacity, no mounted partitions, and no detected
+pending writes or cancelled writes still draining.
+The interactive device list marks mounted devices as
+.B [MOUNTED]
+and unmounted devices with pending writes as
+.BR [BUSY] .
+The number of simultaneous USB write jobs cannot exceed the thread pool size.
+.SS Boot compatibility
+.TP
+.B Windows 10/11
+GPT partition layout with FAT32 and NTFS. Supports UEFI boot, not BIOS.
+Installation payloads are copied to NTFS without splitting install.wim.
+.TP
+.B Windows 10/11 PE (WinPE)
+GPT partition layout with FAT32. Supports UEFI boot, not BIOS.
+.TP
+.B Linux/BSD
+Raw sector copy using direct I/O. BIOS and UEFI compatibility depend on
+whether the source ISO supports the corresponding USB boot mode.
+.PP
+Windows versions earlier than 10 are not supported.
+The Windows writer requires parted and mkfs.fat, and mkfs.ntfs when an
+NTFS partition is needed.
+.SS Write modes and verification
+Windows and WinPE writes use buffered I/O by default, with controlled
+writeback. Set
+.B buffered_writes
+to off to select direct I/O instead. Raw ISO writes always use direct I/O.
+.PP
+Optional CRC-64/ECMA-182 verification reads the written data back and checks
+it against checksums calculated during writing. Raw writes verify the
+written image, including final sector padding; Windows writes verify the
+copied file contents. Verification detects accidental corruption, not
+image authenticity or bootability.
+.PP
+Writing and verification have separate progress phases. The final average
+write speed excludes verification. Failed or cancelled verification does
+not count as verified. The final status is DONE for an unverified write,
+PASS for a verified write, FAIL for failure or CXL for cancellation.
+.PP
+After cancellation, pending writes may continue draining. Wait until the
+device is no longer busy before attempting another write or removing it.
 .SH FILTERING
-Press \fB/\fR in a list to open the filter prompt. Matching is a plain substring search. The list
-updates live as you type and Enter applies the filter. Esc or Ctrl+D exits.
+Press
+.B /
+in a list to open the filter prompt. Matching is a plain substring search.
+The preview updates as you type; Enter applies the filter.
+Esc or Ctrl+D exits the prompt.
 .SS Syntax
-.TS
-tab(@);
-lb l.
-;@OR: an entry matches if it satisfies any group
-&@AND: within a group, an entry must contain every non-negated term
-!@NOT: at the start of a term, excludes entries containing it (applies to the whole query)
-\e;@Literal ';'
-\e&@Literal '&'
-\e!@Literal '!'
-\e\e@Literal '\e'
-.TE
+.TP
+.B ;
+OR: match entries satisfying any group of terms.
+.TP
+.B &
+AND: match every non-negated term within a group.
+.TP
+.B !
+NOT: at the start of a term, exclude matching entries from the entire query.
+.TP
+.BR \e; ", " \e& ", " \e! ", " \e\e
+Escape a literal semicolon, ampersand, exclamation mark or backslash.
 .PP
-AND binds tighter than OR, so \fBping&pong;metal&gear\fR matches entries containing both
-\fIping\fR and \fIpong\fR, or both \fImetal\fR and \fIgear\fR.
-.br
-A term starting with \fB!\fR excludes every entry containing it, in any group:
-\fBa;b&!t\fR matches entries with \fIa\fR or \fIb\fR, but never \fIt\fR. A \fB!\fR elsewhere in a
-term is literal (use \fB\e!\fR for a leading one).
-.br
-Empty terms are ignored (\fBa&&b\fR is \fBa&b\fR). A backslash before any
-other character is treated as a normal character.
-
+AND binds more tightly than OR. For example,
+.B ping&pong;metal&gear
+matches entries containing both ping and pong, or both metal and gear.
+A leading negation applies to the whole query:
+.B a;b&!t
+matches entries containing a or b, but never t.
+An exclamation mark elsewhere in a term is literal; use
+.B \e!
+for a literal leading exclamation mark.
+Empty terms are ignored, so
+.B a&&b
+is equivalent to
+.BR a&b .
+A backslash before any other character is treated as a normal character.
 .SS Case sensitivity
-Matching is "smart case" per term: a term with no uppercase letters is case-insensitive, and a term
-containing at least one uppercase letter is case-sensitive. This applies to negated terms too.
-.SS What is matched
-With \fBfilenames_only\fR enabled, only filenames are searched. In the umount
-list, the mount-point names are searched (without its trailing \fB~hash\fR suffix) unless the full
-list is displayed.
-.SS Filter scope
-Each query searches the full, unfiltered list rather than the current results. On list refresh, existing matches are retained, and
-new entries are tested against the active filter.
-
+Smart case applies to each term, including negated terms. A term with no
+uppercase letters is case-insensitive; a term containing an uppercase
+letter is case-sensitive.
+.SS Search scope
+Each query searches the full, unfiltered list, not the previous results.
+Filtering is not limited by pagination. On list refresh, existing matches
+are retained and new entries are tested against the active filter.
+.PP
+With
+.B filenames_only
+enabled, only filenames are searched, except in the unmount list.
+The compact unmount list matches mount-point names without their trailing
+~hash suffix; the full unmount list matches complete paths.
 .SH CONFIGURATION
-The configuration file is located at \fI~/.config/isocmd/config\fR and uses a \fIkey = value\fR format.
-.SS THEME
-.TS
-tab(@);
-l l 1.
-base  Default state and input color@charcoal|black|gray|silver|ash|white|steel (Default: white)
-skin  Accent color for menus and headers@green|cyan|white|purple|amber|rose|gray|black (Default: white)
-theme Color palette for lists and prompts@original|classic|high_contrast|neon|ocean|sunset|forest|
-@midnight|mono|retro|crimson|dracula|tokyo|paper|sakura (Default: original)
-.TE
-.SS GENERAL
-.TS
-tab(@);
-lb l l.
-auto_update@Enable background metadata updates on startup@on|off (Default: off)
-filenames_only@Show filenames instead of full paths; global override except unmount list@on|off (Default: off)
-pagination@Items per page (0 to disable)@integer >= 0 (Default: 25)
-.TE
-.SS WRITE2USB SETTINGS
-.TS
-tab(@);
-lb l l.
-verify_checksum@Verify USB write integrity using CRC-64 (interactive mode)@on|off (Default: off)
-buffered_writes@Enable buffered I/O for Windows and WinPE ISOs@on|off (Default: on)
-.TE
-.SS HISTORY
-.TS
-tab(@);
-lb l l.
-folder_path_history_lines@Max unique folder paths to persist (0 to disable)@integer (Default: 30)
-filter_history_lines@Max unique search filters to persist (0 to disable)@integer (Default: 15)
-.TE
-.SS DISPLAY
-Controls whether lists are shown in \fBfull\fR (detailed) or \fBcompact\fR format.
-If \fBfilenames_only\fR is enabled, path details are stripped regardless of these settings.
-.PP
-.TS
-tab(@);
-lb lb.
-List@Default
-_
-mount_list@compact
-umount_list@full
-cp_mv_rm_list@full
-write2usb_list@compact
-convert2iso_lists@compact
-
-.TE
-.SS THREADS
-Iso Commander uses a static central thread pool (size = min(hardware_threads, combined_thread_cap)).
-.br
-Sub-limits draw from this pool; tasks queue if the pool is full.
-.PP
-.TS
-tab(@);
-lb l.
-combined_thread_cap@Global thread pool limit (Default: 16, takes effect on restart)
-thread_cap_for_mount@Max concurrent mounting tasks (Default: 8)
-thread_cap_for_umount@Max concurrent unmounting tasks (Default: 8)
-thread_cap_for_cp_mv@Max concurrent copy/move tasks (Default: 4)
-thread_cap_for_rm@Max concurrent file removal tasks (Default: 8)
-thread_cap_for_convert2iso@Max concurrent ISO conversions (Default: 4)
-thread_cap_for_database_cleanup@Max concurrent threads for ISO database cleanup (Default: 4)
-thread_cap_for_list_sorting@Max concurrent threads for UI list sorting (Default: 2)
-thread_cap_for_list_filtering@Max concurrent threads for UI list filtering (Default: 2)
-.TE
-
+The settings editor and the configuration file are documented in
+.BR isocmd.conf (5).
 .SH FILES
-.I Note: If run with sudo, these paths are relative to /root/ instead of the user's home directory.
+The following user-specific paths are relative to the HOME environment
+variable. With sudo, HOME is normally /root.
 .TP
 .I ~/.config/isocmd/config
-Primary configuration file.
+Configuration file.
 .TP
 .I ~/.local/share/isocmd/database/iso_commander_database.txt
-Main ISO metadata database.
+ISO database.
 .TP
 .I ~/.local/share/isocmd/database/iso_commander_path_database.txt
-Persistent history of accessed folder paths.
+Persistent folder path history.
 .TP
 .I ~/.local/share/isocmd/database/iso_commander_filter_database.txt
-Persistent history of search filter terms.
-
+Persistent filter history.
+.TP
+.I /mnt/ISOs/
+ISO mount-point directory.
+.TP
+.I /tmp/isocmd.lock
+Advisory lock file for the interactive application.
+.SH CREDITS
+.TP
+.B ccd2iso
+Danny Kurniawan and Kerry Harris (GPL-2.0-or-later).
+Converts CloneCD raw sector images (BIN, IMG and CCD).
+.TP
+.B mdf2iso
+Salvatore Santagati (GPL-2.0-or-later).
+Converts Alcohol 120% MDF images.
+.TP
+.B nrg2iso
+Grégory Kokanosky (GPL-3.0-or-later).
+Converts Nero Burning ROM NRG images.
+.TP
+.B daa2iso
+Luigi Auriemma (GPL-2.0-or-later).
+Converts PowerISO DAA and gBurner GBI images.
+.TP
+.B libchdr
+Aaron Giles, the MAME project and Romain TISSERAND (BSD-3-Clause).
+Decodes Compressed Hunks of Data (CHD) images.
 .SH AUTHOR
 Written by Eutychios Dimtsas (Siyia).
-
 .SH BUGS
-Report bugs to \fIeutychios23@gmail.com\fR.
+Report bugs to
+.IR eutychios23@gmail.com .
+.SH SEE ALSO
+.BR isocmd.conf (5)
