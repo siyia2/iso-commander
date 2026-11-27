@@ -276,6 +276,13 @@ are restricted to independently verified disposable loop devices in the private
 private mount namespace with the sandbox bound over `/mnt`. The menu test uses a separately compiled app with
 a private lock. The workflow test seeds an isolated database with temporary regular files and checks real copy, move and delete operations only on those fixtures. Run unprivileged.
 The extended interactive settings, import and conversion cases each run in a fresh nested sandbox with an independent HOME, configuration, history, database and private menu lock. They launch the real menu binary and assert persisted configuration and exact file contents, not only rendered messages. No physical devices or privileged operations are used.
+PTY workflows synchronize on test-only Readline session and pause markers plus
+completed input rows, rather than user-facing prompt wording or icons. The
+linker wrappers are restricted to the menu-test and integration binaries.
+Prompt rendering checks use the actual displayed label, input clipping and ANSI
+colors; result/status and filesystem assertions remain independent of prompt copy.
+The settings guard checks observe each actual Readline session and assert its
+keybindings and hooks directly.
 The USB UI tests inject only discovery/validation and a function-pointer writer;
 production entry points still use the real discovery, validation and writer.
 The fake writer never opens or writes any device. `/dev/null`, `/dev/zero` and

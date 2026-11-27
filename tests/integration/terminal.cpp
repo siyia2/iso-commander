@@ -36,7 +36,7 @@ namespace isocmd_tests {
 
 		void overflowSpacePrompt() {
 
-			const std::string prompt = "\001\033[32m\002Display verbose output? (y/n): \001\033[0m\002";
+			const std::string prompt = "\001\033[32m\002" + std::string(29, 'p') + "> \001\033[0m\002";
 			auto line = readlineWithResize(prompt);
 			const std::string expected = "X" + std::string(160, 'a') + " " + std::string(84, 'b');
 			CHECK(line && std::string_view(line.get()) == expected);

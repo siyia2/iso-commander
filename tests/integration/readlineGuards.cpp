@@ -5,6 +5,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "../common/testHarness.h"
+#include "../common/terminalSync.h"
 
 import isocmd.filter.filter;
 import isocmd.core.sharedRefreshState;
@@ -386,14 +387,7 @@ namespace isocmd_tests {
 		Binding numericTab = nullptr;
 		std::string settingsFailure;
 
-		bool settingsPromptReady(std::string_view prompt) {
-
-			if (settingsStage == 1) return g_activeSettingValues != nullptr;
-			if (settingsStage == 2) return !g_activeSettingValues && prompt.find("Skip") != prompt.npos;
-			if (settingsStage == 4) return prompt.find("Reset all settings") != prompt.npos;
-			return settingsStage < 6 && prompt.find("? for help:") != prompt.npos;
-
-		}
+		unsigned long lastSettingsSession = 0;
 
 		void checkSettingsValue() {
 
@@ -424,13 +418,18 @@ namespace isocmd_tests {
 
 		int observeSettings() {
 
-			const std::string_view prompt = rl_prompt ? rl_prompt : "";
-			if (!settingsPromptReady(prompt)) return 0;
+			const auto session = terminal_sync::readlineSession();
+			if (session == lastSettingsSession) return 0;
+			lastSettingsSession = session;
 			try {
+				CHECK(settingsStage < 6);
 				CHECK(rl_completion_display_matches_hook == customListingsFunction);
 				CHECK(!rl_startup_hook && SettingsEditorRepaint::get());
 				key(esc, exit_handler);
-				if (settingsStage == 1 || settingsStage == 2) checkSettingsValue();
+				if (settingsStage == 1 || settingsStage == 2) {
+					CHECK((g_activeSettingValues != nullptr) == (settingsStage == 1));
+					checkSettingsValue();
+				}
 				else checkSettingsMenu();
 			} catch (const std::exception& e) { if (settingsFailure.empty()) settingsFailure = e.what(); }
 			std::cout << "RAII-SETTINGS-" << settingsStage++ << "-READY\n" << std::flush;
@@ -445,6 +444,7 @@ namespace isocmd_tests {
 			writeFile(config, "pagination = 2\nfilenames_only = off\n");
 			restoreReadline();
 			g_rl_complete_mode = 1;
+			lastSettingsSession = terminal_sync::readlineSession();
 			rl_event_hook = observeSettings;
 			interactiveConfigEditor(config.string());
 			if (!settingsFailure.empty()) throw std::runtime_error(settingsFailure);

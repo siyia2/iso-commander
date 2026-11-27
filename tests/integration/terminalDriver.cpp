@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "../common/testHarness.h"
+#include "../common/terminalSync.h"
 
 import isocmd.write2usb.ui.textWidth;
 
@@ -55,6 +56,7 @@ namespace isocmd_tests {
 
 		public:
 			std::string output;
+			std::string filterLabel;
 
 			explicit TerminalSession(const char* binary, const char* argument = "--terminal-child", unsigned short cols = 80) {
 
@@ -184,7 +186,7 @@ namespace isocmd_tests {
 
 		}
 
-		// Strip CSI commands and Readline's prompt delimiters; keep UTF-8 glyphs.
+		// Strip CSI, test OSC markers and Readline delimiters; keep UTF-8 glyphs.
 		std::string plain(std::string_view raw) {
 
 			std::string result;
@@ -193,6 +195,9 @@ namespace isocmd_tests {
 				if (c==27 && i+1<raw.size() && raw[i+1]=='[') {
 					i+=2;
 					while (i<raw.size() && !(raw[i]>=0x40 && raw[i]<=0x7e)) ++i;
+				} else if (c==27 && i+1<raw.size() && raw[i+1]==']') {
+					while (i+1<raw.size() && raw[i+1]!='\a') ++i;
+					if (i+1<raw.size()) ++i;
 				} else if (c!=1 && c!=2 && c!='\r') result+=raw[i];
 			}
 			return result;
@@ -214,50 +219,87 @@ namespace isocmd_tests {
 
 		}
 
-		// Readline echoes the old prompt while typing. Wait for a complete new
-		// screen before accepting the next prompt as a completed action.
-		std::size_t waitForRedrawnPrompt(TerminalSession& term, std::string_view prompt, std::size_t start) {
+		// The test-only link wrappers distinguish a new Readline session from
+		// redisplays of the previous one, and a real pause from a progress frame.
+		// Wait for the complete input row as well, not merely entry to readline.
+		enum class Prompt { input, filter, pause };
+		constexpr auto inputPrompt = Prompt::input;
+		constexpr auto filterPrompt = Prompt::filter;
+		constexpr auto pausePrompt = Prompt::pause;
+
+		constexpr std::string_view rowEnd = "\033[K\r";
+
+		std::size_t waitForInputRow(TerminalSession& term, std::size_t start) {
+
+			return term.waitFor(rowEnd, start);
+
+		}
+
+		std::size_t waitForNewInput(TerminalSession& term, std::size_t start = 0) {
+
+			return waitForInputRow(term, term.waitFor(terminal_sync::input, start));
+
+		}
+
+		std::string_view rawInputRow(std::string_view output, std::size_t end) {
+
+			CHECK(end >= rowEnd.size() && end <= output.size());
+			const auto stop = end - rowEnd.size();
+			CHECK(output.substr(stop, rowEnd.size()) == rowEnd);
+			CHECK(stop > 0);
+			const auto start = output.rfind('\r', stop - 1);
+			CHECK(start != std::string_view::npos);
+			return output.substr(start + 1, stop - start - 1);
+
+		}
+
+		std::string inputRow(const TerminalSession& term, std::size_t end) {
+
+			return plain(rawInputRow(term.output, end));
+
+		}
+
+		std::size_t waitForStepPrompt(TerminalSession& term, Prompt prompt, std::size_t start) {
+
+			if (prompt == pausePrompt) return term.waitFor(terminal_sync::pause, start);
+			const auto end = waitForNewInput(term, start);
+			if (prompt == filterPrompt) {
+				term.filterLabel = inputRow(term, end);
+				CHECK(!term.filterLabel.empty());
+			}
+			return end;
+
+		}
+
+		// A resize does not start a new Readline session. Require a completed
+		// input row (and, where appropriate, the caller's repaint evidence).
+		std::size_t waitForRepaintedInput(TerminalSession& term, std::size_t start) {
 
 			const auto begin = term.waitFor("\033[?2026h", start);
-			const auto end = term.waitFor("\033[?2026l", begin);
-			return term.waitFor(prompt, end);
+			// Some repaint implementations close the synchronized update before
+			// the input row; others include the row in the update. Wait for both.
+			const auto row = waitForInputRow(term, begin);
+			term.waitFor("\033[?2026l", begin);
+			return row;
 
 		}
 
-		// Menu titles and list contents are drawn before Readline starts the
-		// next input row. A prompt match alone can still be the old input echo.
-		std::size_t waitForStepPrompt(TerminalSession& term, std::string_view prompt, std::size_t start) {
-
-			if (prompt == "Enter choice [1-5]: " || prompt == "Enter choice [1-6]: " ||
-			    prompt == "? for help: " || prompt == "Skip")
-			    return waitForRedrawnPrompt(term, prompt, start);
-
-			// Folder search prompts have a multiline header but no initial
-			// synchronized redraw. Wait for a new Readline session instead.
-			if (prompt == "? for help:" || prompt == "DB, ? for help:" ||
-			    prompt == "into, ? for help:") {
-				const auto ready = term.waitFor("\033[?2004h", start);
-				const auto header = term.waitFor(prompt, ready);
-				return term.waitFor("\033[K\r", header);
-			}
-			return term.waitFor(prompt, start);
-
-		}
-
-		// Each preview repaint has its own synchronized list frame, followed by
-		// navigation hints and the input row. Ignore prompt-only redisplays left
-		// over from the previous key, even when they contain the same query.
+		// The empty input row gives us the actual label, whatever its wording.
+		// Match only the editable portion after each completed preview repaint.
 		std::string queryFrame(TerminalSession& term, std::size_t start, std::string_view query,
 		                       bool visibleTail = false) {
 
+			CHECK(!term.filterLabel.empty());
 			for (;;) {
 				const auto begin = term.waitFor("\033[?2026h", start);
 				const auto painted = term.waitFor("\033[?2026l", begin);
-				const auto prompt = term.waitFor("Filter: ", painted);
-				const auto end = term.waitFor("\033[K\r", prompt);
-				const auto input = plain(std::string_view(term.output).substr(prompt, end-prompt));
-				if (visibleTail ? input.ends_with(query) : input == query)
-				    return listFrame(term, begin, end);
+				const auto end = waitForInputRow(term, painted);
+				const auto row = inputRow(term, end);
+				if (row.starts_with(term.filterLabel)) {
+					const auto input = std::string_view(row).substr(term.filterLabel.size());
+					if (visibleTail ? input.ends_with(query) : input == query)
+						return listFrame(term, begin, end);
+				}
 				start = end;
 			}
 
@@ -282,52 +324,67 @@ namespace isocmd_tests {
 
 		// Input redisplay may use carriage returns and horizontal cursor moves,
 		// but must not advance vertically or print an entire multi-screen paste.
-		void checkSingleRowInput(std::string_view output) {
+		void checkSingleRowInput(std::string_view output, std::string_view label) {
 
-			CHECK(has(plain(output), "LONG> «")); // Overflow must not replace the label.
+			CHECK(has(plain(output), label)); // The fixed label survives scrolling.
 			CHECK(!has(output, "\n"));
 			CHECK(!has(output, "\033[A") && !has(output, "\033[B"));
 			CHECK(!has(plain(output), std::string(2400, 'b')));
 
 		}
 
+		// Check that the gap is exactly one visible, non-space cell, not a
+		// particular Unicode overflow glyph.
+		void checkOverflowGap(std::string_view row, std::string_view label, std::string_view tail) {
+
+			CHECK(row.starts_with(label) && row.ends_with(tail));
+			CHECK(row.size() >= label.size() + tail.size());
+			const auto gap = row.substr(label.size(), row.size() - label.size() - tail.size());
+			CHECK(visibleWidth(std::string(gap)) == 1 && gap != " ");
+
+		}
+
 		void checkLongInput(TerminalSession& term, std::size_t start) {
 
-			const auto prompt = term.waitFor("LONG> ", start);
+			const auto prompt = waitForNewInput(term, start);
+			const auto label = inputRow(term, prompt);
+			CHECK(!label.empty());
 			term.send("START-OF-INPUT" + std::string(160, 'a') + "TYPED-END!");
-			const auto typed = term.waitFor("!", prompt);
-			checkSingleRowInput(std::string_view(term.output).substr(prompt, typed - prompt));
+			const auto typed = waitForInputRow(term, term.waitFor("!", prompt));
+			checkSingleRowInput(std::string_view(term.output).substr(prompt, typed - prompt), label);
+			CHECK(inputRow(term, typed).starts_with(label));
 			term.send("\033[200~" + std::string(2400, 'b') + "PASTE-END@\nmultiline\nPASTE-FINAL#\033[201~");
-			const auto pasted = term.waitFor("#", typed);
-			checkSingleRowInput(std::string_view(term.output).substr(typed, pasted - typed));
+			const auto pasted = waitForInputRow(term, term.waitFor("#", typed));
+			checkSingleRowInput(std::string_view(term.output).substr(typed, pasted - typed), label);
+			CHECK(inputRow(term, pasted).starts_with(label));
 			// Resize with the cursor at the far end of the line, then edit its
 			// hidden beginning and submit the entire, untruncated buffer.
 			term.resize(18, 40);
 			const auto repaint = term.waitFor("LONG-REPAINT", pasted);
-			const auto restored = term.waitFor("#", repaint);
+			const auto restored = waitForInputRow(term, term.waitFor("#", repaint));
 			term.resize(32, 120);
 			const auto wider = term.waitFor("LONG-REPAINT", restored);
-			const auto widened = term.waitFor("#", wider);
+			const auto widened = waitForInputRow(term, term.waitFor("#", wider));
 			term.send("\x01");
 			const auto beginning = term.waitFor("START-OF-INPUT", widened);
-			const auto right = term.waitFor("\033[K", beginning);
-			CHECK(has(plain(std::string_view(term.output).substr(widened, right - widened)),
-			          "LONG> START-OF-INPUT"));
-			CHECK(has(plain(std::string_view(term.output).substr(beginning, right - beginning)), "»"));
+			const auto right = waitForInputRow(term, beginning);
+			const auto row = inputRow(term, right);
+			CHECK(row.starts_with(label + "START-OF-INPUT"));
+			CHECK(!row.ends_with("PASTE-FINAL#") && !row.ends_with("a") && !row.ends_with("b"));
+			CHECK(visibleWidth(row) <= 119);
 			term.send("X\x05\n");
-			term.waitFor("TEST-LONG-INPUT-PASS", beginning);
+			term.waitFor("TEST-LONG-INPUT-PASS", right);
 
 		}
 
 		void checkOverflowSpace(TerminalSession& term, std::size_t start) {
 
-			// The previous test leaves a 120-column terminal. With this 31-cell
-			// prompt, the viewport starts on the space 85 cells from the end.
-			const auto prompt = term.waitFor("Display verbose output? (y/n): ", start);
+			// The fixture has a fixed-width label. The viewport starts at a space.
+			const auto prompt = waitForNewInput(term, start);
+			const auto label = inputRow(term, prompt);
 			term.send("\033[200~" + std::string(160, 'a') + " " + std::string(84, 'b') + "\033[201~");
-			const auto tail = term.waitFor(std::string(84, 'b'), prompt);
-			const auto frame = plain(std::string_view(term.output).substr(prompt, tail - prompt));
-			CHECK(has(frame, "Display verbose output? (y/n): «" + std::string(84, 'b')));
+			const auto tail = waitForInputRow(term, term.waitFor(std::string(84, 'b'), prompt));
+			checkOverflowGap(inputRow(term, tail), label, std::string(84, 'b'));
 			term.send("\x01X\x05\n");
 			term.waitFor("TEST-OVERFLOW-SPACE-PASS", tail);
 
@@ -340,20 +397,20 @@ namespace isocmd_tests {
 		try {
 			TerminalSession terminal(binary);
 			try {
-				terminal.waitFor("TEST> ");
+				const auto initial = waitForNewInput(terminal);
 				terminal.send("abc");
-				terminal.waitFor("abc");
+				waitForInputRow(terminal, terminal.waitFor("abc", initial));
 				for (const auto& [rows, cols] : {std::pair{18, 45}, std::pair{32, 100}, std::pair{12, 30}, std::pair{24, 80}}) {
 					const auto start = terminal.output.size();
 					terminal.resize(rows, cols);
 					const auto repainted = terminal.waitFor("TEST-REPAINT", start);
-					terminal.waitFor("abc", repainted);
+					waitForInputRow(terminal, terminal.waitFor("abc", repainted));
 				}
 				// Move the editing cursor before another character is inserted.
 				terminal.send("\x02X\x06" "def\n");
 				const auto passed = terminal.waitFor("TEST-TERMINAL-PASS");
 				checkLongInput(terminal, passed);
-				checkOverflowSpace(terminal, passed);
+				checkOverflowSpace(terminal, terminal.waitFor("TEST-LONG-INPUT-PASS", passed));
 				terminal.waitForExit();
 			} catch (...) {
 				printOutput(terminal.output);
@@ -373,13 +430,13 @@ namespace isocmd_tests {
 		try {
 			TerminalSession terminal(binary, "--readline-guards-child");
 			try {
-				terminal.waitFor("RAII-ESC> ");
+				waitForNewInput(terminal);
 				terminal.send("\x1b");
-				terminal.waitFor("RAII-EOF> ");
+				const auto eof = waitForNewInput(terminal, terminal.output.size());
 				terminal.send("\x04");
-				const auto pause = terminal.waitFor("to return...", terminal.waitFor("RAII-PAUSE"));
+				const auto pause = terminal.waitFor(terminal_sync::pause, terminal.waitFor("RAII-PAUSE", eof));
 				terminal.resize(21, 70);
-				terminal.waitFor("to return...", terminal.waitFor("RAII-PAUSE", pause));
+				terminal.waitFor(terminal_sync::pause, terminal.waitFor("RAII-PAUSE", pause));
 				terminal.send("\x1b");
 				const char* inputs[] = {"5 6\n", "\x1b[6~", "\x1b", "r", "n\n", "\x1b"};
 				for (std::size_t stage = 0; stage < std::size(inputs); ++stage) {
@@ -403,39 +460,47 @@ namespace isocmd_tests {
 		try {
 			TerminalSession terminal(binary, nullptr);
 			try {
-				auto menu = [&](std::string_view title, std::string_view prompt, std::size_t start) {
+				auto menu = [&](std::string_view title, std::size_t start) {
 
-					return terminal.waitFor(prompt, terminal.waitFor(title, start));
+					const auto end = waitForNewInput(terminal, start);
+					CHECK(has(listFrame(terminal, start, end), title));
+					return end;
 
 				};
-				auto start = menu("Main Menu", "Enter choice [1-5]: ", 0);
+				auto start = menu("Main Menu", 0);
 				terminal.send("invalid");
-				terminal.waitFor("invalid", start);
+				waitForInputRow(terminal, terminal.waitFor("invalid", start));
 				start = terminal.output.size(); terminal.resize(18, 55);
-				start = menu("Main Menu", "Enter choice [1-5]: ", start);
-				terminal.waitFor("invalid", start);
+				auto end = waitForRepaintedInput(terminal, start);
+				CHECK(has(listFrame(terminal, start, end), "Main Menu"));
+				CHECK(inputRow(terminal, end).ends_with("invalid"));
 				start = terminal.output.size(); terminal.send("\n");
-				menu("Main Menu", "Enter choice [1-5]: ", start);
+				menu("Main Menu", start);
 				start = terminal.output.size(); terminal.send("1\n");
-				menu("ManageISO", "Enter choice [1-6]: ", start);
+				menu("ManageISO", start);
 				start = terminal.output.size(); terminal.send("\x1b");
-				menu("Main Menu", "Enter choice [1-5]: ", start);
+				menu("Main Menu", start);
 				start = terminal.output.size(); terminal.send("2\n");
-				menu("Convert2ISO", "Enter choice [1-5]: ", start);
+				menu("Convert2ISO", start);
 				start = terminal.output.size(); terminal.send("1\n");
-				terminal.waitFor("? for help:", terminal.waitFor("FolderPaths", start));
+				end = waitForNewInput(terminal, start);
+				// The search prompt has a multiline header; its copy is not a contract.
+				const auto header = terminal.output.rfind(terminal_sync::input, end);
+				CHECK(header != std::string::npos && header >= start);
+				CHECK(has(plain(std::string_view(terminal.output).substr(header, end-header)), "\n"));
 				start = terminal.output.size(); terminal.send("\x1b");
-				menu("Convert2ISO", "Enter choice [1-5]: ", start);
+				menu("Convert2ISO", start);
 				start = terminal.output.size(); terminal.send("\x04");
-				menu("Main Menu", "Enter choice [1-5]: ", start);
+				menu("Main Menu", start);
 				start = terminal.output.size(); terminal.send("3\n");
-				terminal.waitFor("DB, ? for help:", start);
+				waitForNewInput(terminal, start);
 				start = terminal.output.size(); terminal.send("\x1b");
-				menu("Main Menu", "Enter choice [1-5]: ", start);
+				menu("Main Menu", start);
 				start = terminal.output.size(); terminal.send("4\n");
-				terminal.waitFor("? for help: ", start);
+				end = waitForNewInput(terminal, start);
+				CHECK(has(listFrame(terminal, start, end), "Settings Editor"));
 				start = terminal.output.size(); terminal.send("\x1b");
-				menu("Main Menu", "Enter choice [1-5]: ", start);
+				menu("Main Menu", start);
 				terminal.send("5\n"); terminal.waitForExit();
 			} catch (...) { printOutput(terminal.output); throw; }
 			std::cout << "PASS: interactive main menu, submenus, settings, import and resize\n";
@@ -447,12 +512,11 @@ namespace isocmd_tests {
 	}
 
 	namespace {
-		constexpr std::string_view selectPrompt="? for help: ";
+		constexpr auto selectPrompt = inputPrompt;
 
-		std::string workflowStep(TerminalSession& term, std::string_view input, std::string_view prompt) {
+		std::string workflowStep(TerminalSession& term, std::string_view input, Prompt prompt) {
 
 			const auto start=term.output.size(); term.send(input);
-			if (prompt == "Filter: ") return queryFrame(term, start, "");
 			const auto end = waitForStepPrompt(term, prompt, start);
 			return listFrame(term,start,end);
 
@@ -475,8 +539,8 @@ namespace isocmd_tests {
 
 		void checkWorkflowPagination(TerminalSession& term) {
 
-			term.waitFor("Enter choice [1-5]: ",term.waitFor("Main Menu"));
-			workflowStep(term, "1\n","Enter choice [1-6]: ");
+			CHECK(has(listFrame(term, 0, waitForNewInput(term)), "Main Menu"));
+			workflowStep(term, "1\n",inputPrompt);
 			checkWorkflowPage(term, "5\n","Page 1/4","groupalpha1.iso","groupalpha3.iso");
 			checkWorkflowPage(term, "\x1b[5~","Page 1/4","groupalpha1.iso","groupalpha3.iso");
 			checkWorkflowPage(term, "\x1b[6~","Page 2/4","groupalpha3.iso","groupalpha1.iso");
@@ -494,19 +558,21 @@ namespace isocmd_tests {
 			term.send("\x15\033[200~" + query + "\033[201~");
 			auto frame=queryFrame(term,begin,"FILTER-TAIL!",true);
 			std::size_t end;
-			CHECK(has(frame,"No filter results") && has(frame,"Filter: «"));
+			CHECK(has(frame,"No filter results"));
+			CHECK(has(frame, term.filterLabel) && has(frame, "FILTER-TAIL!"));
 			begin=term.output.size(); term.send("\x01");
 			end=term.waitFor("FILTER-START!",begin);
-			end=term.waitFor("\033[K",end);
-			frame=plain(std::string_view(term.output).substr(begin,end-begin));
-			CHECK(has(frame,"Filter: FILTER-START!") && has(frame,"»"));
+			end=waitForInputRow(term,end);
+			const auto row = inputRow(term, end);
+			CHECK(row.starts_with(term.filterLabel + "FILTER-START!"));
+			CHECK(!has(row, "FILTER-TAIL!") && !row.ends_with("z"));
 			begin=term.output.size(); term.send("\x05");
 			end=term.waitFor("FILTER-TAIL!",begin);
 			term.waitFor("\033[K\r",end);
 			begin=term.output.size(); term.resize(18,55);
-			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),"Filter: «"));
+			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),term.filterLabel));
 			begin=term.output.size(); term.resize(18,95);
-			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),"Filter: «"));
+			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),term.filterLabel));
 			frame=workflowPreview(term,"\x15zzzz-no-fixture","zzzz-no-fixture");
 			CHECK(has(frame,"No filter results"));
 
@@ -516,7 +582,7 @@ namespace isocmd_tests {
 
 			// Stage a selection before preview; cancellation must retain it.
 			CHECK(has(workflowStep(term, "1;\n",selectPrompt),"Pending Indices"));
-			workflowStep(term, "/","Filter: ");
+			workflowStep(term, "/",filterPrompt);
 			auto begin=term.output.size(); term.send("groupalpha");
 			auto frame=queryFrame(term,begin,"groupalpha");
 			CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
@@ -534,7 +600,9 @@ namespace isocmd_tests {
 			CHECK(has(frame,"No filter results"));
 			checkLongFilterInput(term);
 			// No-match Enter must leave us in the filter prompt.
-			workflowStep(term, "\n","Filter: ");
+			const auto label = term.filterLabel;
+			workflowStep(term, "\n",filterPrompt);
+			CHECK(term.filterLabel == label);
 			CHECK(has(workflowStep(term, "\x1b",selectPrompt),"Pending Indices"));
 
 		}
@@ -542,10 +610,10 @@ namespace isocmd_tests {
 		void checkWorkflowCommittedFilters(TerminalSession& term) {
 
 			// Commit a non-overlapping filter, then replace it from the source.
-			workflowStep(term, "/","Filter: "); auto frame=workflowPreview(term, "groupbeta","groupbeta");
+			workflowStep(term, "/",filterPrompt); auto frame=workflowPreview(term, "groupbeta","groupbeta");
 			CHECK(has(frame,"groupbeta1.iso"));
 			frame=workflowStep(term, "\n",selectPrompt); CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
-			workflowStep(term, "/","Filter: "); frame=workflowPreview(term, "groupalpha","groupalpha");
+			workflowStep(term, "/",filterPrompt); frame=workflowPreview(term, "groupalpha","groupalpha");
 			CHECK(has(frame,"groupalpha1.iso"));
 			frame=workflowStep(term, "\n",selectPrompt); CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
 			CHECK(has(frame,"Pending Indices"));
@@ -557,18 +625,18 @@ namespace isocmd_tests {
 		void checkWorkflowCopy(TerminalSession& term, const fs::path& source, const fs::path& dest) {
 
 			// Execute the original staged path, regardless of filter history.
-			workflowStep(term, "P","into, ? for help:");
+			workflowStep(term, "P",inputPrompt);
 			auto begin=term.output.size(); term.send(dest.string()+"\n");
-			auto end=term.waitFor("verbose output? (y/n): ",begin);
+			auto end=waitForNewInput(term, begin);
 			CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
 			begin=term.output.size(); term.resize(20,110);
-			end=term.waitFor("verbose output? (y/n): ",begin);
+			end=waitForRepaintedInput(term, begin);
 			CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
-			auto frame=workflowStep(term, "y\n","to continue...");
+			auto frame=workflowStep(term, "y\n",pausePrompt);
 			CHECK(has(frame,"Copied:") && has(frame,"groupalpha1.iso"));
 			CHECK(!has(frame,"groupalpha2.iso"));
 			begin=term.output.size(); term.resize(24,120);
-			end=term.waitFor("to continue...",begin);
+			end=term.waitFor(terminal_sync::pause,begin);
 			frame=listFrame(term,begin,end);
 			CHECK(has(frame,"Copied:") && has(frame,"groupalpha1.iso"));
 			CHECK(readFile(dest/"groupalpha1.iso")==readFile(source/"groupalpha1.iso"));
@@ -580,13 +648,13 @@ namespace isocmd_tests {
 		void checkWorkflowDelete(TerminalSession& term, const fs::path& source) {
 
 			// Return to menu; exercise delete rejection followed by confirmation.
-			workflowStep(term, "\x1b","Enter choice [1-6]: ");
+			workflowStep(term, "\x1b",inputPrompt);
 			workflowStep(term, "3\n",selectPrompt);
-			workflowStep(term, "1\n","Proceed? (y/n): ");
+			workflowStep(term, "1\n",inputPrompt);
 			workflowStep(term, "n\n",selectPrompt); CHECK(fs::exists(source/"groupalpha1.iso"));
-			workflowStep(term, "1\n","Proceed? (y/n): ");
-			const auto begin=term.output.size(); term.send("y\n"); term.waitFor("verbose output? (y/n): ",begin);
-			auto frame=workflowStep(term, "Y\n","to continue...");
+			workflowStep(term, "1\n",inputPrompt);
+			const auto begin=term.output.size(); term.send("y\n"); waitForNewInput(term, begin);
+			auto frame=workflowStep(term, "Y\n",pausePrompt);
 			CHECK(has(frame,"Deleted:") && has(frame,"groupalpha1.iso") && !has(frame,"Copied:"));
 			frame=workflowStep(term, "\x1b",selectPrompt);
 			CHECK(!has(frame,"Deleted:") && !fs::exists(source/"groupalpha1.iso"));
@@ -598,12 +666,12 @@ namespace isocmd_tests {
 
 			// The source directory sorts before the destination; the deleted
 			// first row is now replaced by alpha2. Move it to the fixture dir.
-			workflowStep(term, "\x1b","Enter choice [1-6]: ");
+			workflowStep(term, "\x1b",inputPrompt);
 			auto frame=workflowStep(term, "4\n",selectPrompt); CHECK(has(frame,"groupalpha2.iso"));
-			workflowStep(term, "1\n","into, ? for help:");
+			workflowStep(term, "1\n",inputPrompt);
 			const auto begin=term.output.size(); term.send(dest.string()+"\n");
-			term.waitFor("verbose output? (y/n): ",begin);
-			frame=workflowStep(term, "y\n","to continue...");
+			waitForNewInput(term, begin);
+			frame=workflowStep(term, "y\n",pausePrompt);
 			CHECK(has(frame,"Moved:") && has(frame,"groupalpha2.iso") && !has(frame,"Deleted:") && !has(frame,"Copied:"));
 			frame=workflowStep(term, "\x04",selectPrompt);
 			CHECK(!has(frame,"Moved:") && !fs::exists(source/"groupalpha2.iso"));
@@ -614,7 +682,7 @@ namespace isocmd_tests {
 
 		void finishWorkflow(TerminalSession& term) {
 
-			workflowStep(term, "\x1b","Enter choice [1-6]: "); workflowStep(term, "\x1b","Enter choice [1-5]: ");
+			workflowStep(term, "\x1b",inputPrompt); workflowStep(term, "\x1b",inputPrompt);
 			// Observe the exit action's clear-screen sequence before waiting
 			// for shutdown, distinguishing lost input from a cleanup hang.
 			const auto begin=term.output.size(); term.send("5\n");
@@ -674,31 +742,28 @@ namespace isocmd_tests {
 
 		}
 
-		constexpr std::string_view mainPrompt = "Enter choice [1-5]: ";
-		constexpr std::string_view selectionPrompt = "? for help: ";
-		constexpr std::string_view valuePrompt = "Skip";
-		constexpr std::string_view continuePrompt = "to continue...";
-		constexpr std::string_view returnPrompt = "to return...";
+		constexpr auto mainPrompt = inputPrompt;
+		constexpr auto selectionPrompt = inputPrompt;
+		constexpr auto valuePrompt = inputPrompt;
+		constexpr auto continuePrompt = pausePrompt;
+		constexpr auto returnPrompt = pausePrompt;
 
-		std::string step(TerminalSession& term, std::string_view input, std::string_view marker) {
+		std::string step(TerminalSession& term, std::string_view input, Prompt marker) {
 
 			const auto start = term.output.size();
 			term.send(input);
-			if (marker == "Filter: ") return queryFrame(term, start, "");
-			auto end = waitForStepPrompt(term, marker, start);
-			// The value prompt has an ANSI sequence between Skip and the colon.
-			if (marker == valuePrompt) end = term.waitFor(": ", end);
+			const auto end = waitForStepPrompt(term, marker, start);
 			return plain(std::string_view(term.output).substr(start, end-start));
 
 		}
 
 		void expectStep(TerminalSession& term, std::string_view input,
-		                std::string_view marker, std::string_view expected) {
+		                Prompt marker, std::string_view expected) {
 
 			const auto frame = step(term, input, marker);
 			if (!has(frame, expected))
 			    throw std::runtime_error("expected '" + std::string(expected) +
-			        "' before prompt '" + std::string(marker) + "'");
+			        "' before the next input wait");
 
 		}
 
@@ -707,7 +772,7 @@ namespace isocmd_tests {
 
 			TerminalSession term(binary, nullptr, 120);
 			try {
-				term.waitFor(mainPrompt, term.waitFor("Main Menu"));
+				CHECK(has(listFrame(term, 0, waitForNewInput(term)), "Main Menu"));
 				workflow(term);
 				term.send("5\n");
 				term.waitForExit();
@@ -747,17 +812,16 @@ namespace isocmd_tests {
 				expectStep(term, "\x1b[6~", valuePrompt, "Setting: pagination");
 				expectStep(term, "\x1b[5~", valuePrompt, "Setting: filenames_only");
 				expectStep(term, "g2\n", valuePrompt, "Setting: pagination");
-				expectStep(term, "1001\n", "to try again...", "Invalid value:");
+				expectStep(term, "1001\n", pausePrompt, "Invalid value:");
 				CHECK(readFile(config) == original);
 				expectStep(term, "\n", valuePrompt, "Current: 2");
 				// Resize with a typed value, then submit the preserved buffer.
 				const auto typed = term.output.size();
-				term.send("3"); term.waitFor("3", typed);
+				term.send("3"); waitForInputRow(term, term.waitFor("3", typed));
 				const auto resizeStart = term.output.size();
 				term.resize(20, 100);
-				auto end = term.waitFor(valuePrompt, resizeStart);
-				end = term.waitFor(": ", end);
-				term.waitFor("3", end);
+				const auto end = waitForRepaintedInput(term, resizeStart);
+				CHECK(inputRow(term, end).ends_with("3"));
 				expectStep(term, "\n", continuePrompt, "Updated and saved to:");
 				CHECK(has(readFile(config), "pagination = 3\n"));
 				expectStep(term, "\n", valuePrompt, "Setting: filenames_only");
@@ -767,12 +831,12 @@ namespace isocmd_tests {
 				step(term, "5\n", valuePrompt);
 				step(term, "\x1b", selectionPrompt);
 				CHECK(has(readFile(config), "filenames_only = off\n"));
-				step(term, "r", "Reset all settings to default? (y/n): ");
+				step(term, "r", inputPrompt);
 				step(term, "n\n", selectionPrompt);
 				CHECK(has(readFile(config), "pagination = 3\n"));
 				CHECK(has(readFile(config), "verify_checksum = off\n"));
 				expectStep(term, "7\n", valuePrompt, "Setting: verify_checksum");
-				expectStep(term, "yes\n", "to try again...", "Invalid value:");
+				expectStep(term, "yes\n", pausePrompt, "Invalid value:");
 				CHECK(has(readFile(config), "verify_checksum = off\n"));
 				step(term, "\n", valuePrompt);
 				expectStep(term, "on\n", continuePrompt, "Updated and saved to:");
@@ -802,7 +866,7 @@ namespace isocmd_tests {
 				step(term, "\x1b", selectionPrompt);
 				expectStep(term, "14\n", valuePrompt, "Current: full");
 				step(term, "\x1b", selectionPrompt);
-				step(term, "r", "Reset all settings to default? (y/n): ");
+				step(term, "r", inputPrompt);
 				expectStep(term, "y\n", continuePrompt, "Defaults applied");
 				CHECK(has(readFile(config), "pagination = 25\n"));
 				CHECK(has(readFile(config), "buffered_writes = on\n"));
@@ -824,7 +888,7 @@ namespace isocmd_tests {
 
 	namespace {
 		// Use raw PTY output: stripping CSI would hide stale or incorrect palettes.
-		std::string rawStep(TerminalSession& term, std::string_view input, std::string_view marker) {
+		std::string rawStep(TerminalSession& term, std::string_view input, Prompt marker) {
 
 			const auto start = term.output.size();
 			term.send(input);
@@ -847,10 +911,10 @@ namespace isocmd_tests {
 			"\033[1;38;2;130;225;190m", "\033[1;38;2;130;225;190m", "\033[1;38;2;110;140;175m",
 			"\033[1;38;2;86;182;194m", "\033[1;38;2;106;128;154m"};
 
-		void checkMenuAppearance(std::string_view frame, const Appearance& a, std::string_view prompt) {
+		void checkMenuAppearance(std::string_view frame, const Appearance& a) {
 
 			CHECK(has(frame, std::string(a.skin)+"+----------------------+"));
-			CHECK(has(frame, std::string(a.prompt)+std::string(prompt)));
+			CHECK(has(rawInputRow(frame, frame.size()), a.prompt));
 
 		}
 
@@ -866,27 +930,27 @@ namespace isocmd_tests {
 			const auto line = plain(frame.substr(lineStart+1, end-lineStart-1));
 			CHECK(visibleWidth(line) < cols);
 			if (cols == 80) CHECK(has(line, "…"));
-			CHECK(has(frame, std::string(a.prompt)+", ? for help: "));
+			CHECK(has(rawInputRow(frame, frame.size()), a.prompt));
 
 		}
 
 		void checkAppearance(TerminalSession& term, const Appearance& a) {
 
-			auto frame = rawStep(term, "1\n", "Enter choice [1-6]: ");
+			auto frame = rawStep(term, "1\n", inputPrompt);
 			CHECK(has(frame, "ManageISO"));
-			checkMenuAppearance(frame, a, "Enter choice [1-6]: ");
+			checkMenuAppearance(frame, a);
 			frame = rawStep(term, "5\n", selectionPrompt);
 			checkListAppearance(frame, a, 120);
 			const auto start = term.output.size(); term.resize(20, 80);
-			const auto end = waitForStepPrompt(term, selectionPrompt, start);
+			const auto end = waitForRepaintedInput(term, start);
 			checkListAppearance(std::string_view(term.output).substr(start, end-start), a, 80);
 			const auto wideStart = term.output.size(); term.resize(24, 120);
-			const auto wideEnd = waitForStepPrompt(term, selectionPrompt, wideStart);
+			const auto wideEnd = waitForRepaintedInput(term, wideStart);
 			checkListAppearance(std::string_view(term.output).substr(wideStart, wideEnd-wideStart), a, 120);
-			step(term, "\x1b", "Enter choice [1-6]: ");
+			step(term, "\x1b", inputPrompt);
 			frame = rawStep(term, "\x1b", mainPrompt);
 			CHECK(has(frame, "Main Menu"));
-			checkMenuAppearance(frame, a, mainPrompt);
+			checkMenuAppearance(frame, a);
 
 		}
 
@@ -942,7 +1006,7 @@ namespace isocmd_tests {
 
 				checkAppearance(term, oceanAppearance);
 				enterAppearanceSettings(term, oceanAppearance);
-				step(term, "r", "Reset all settings to default? (y/n): ");
+				step(term, "r", inputPrompt);
 				expectStep(term, "y\n", continuePrompt, "Defaults applied");
 				const auto saved = readFile(config);
 				CHECK(has(saved, "base = white\n") && has(saved, "skin = white\n") && has(saved, "theme = original\n"));
@@ -981,12 +1045,12 @@ namespace isocmd_tests {
 			const std::vector<std::string> expected = {(source/"alpha.iso").string(), (nested/"beta.ISO").string()};
 			runMenuWorkflow(binary, [&](TerminalSession& term) {
 
-				step(term, "3\n", "DB, ? for help:");
+				step(term, "3\n", inputPrompt);
 				expectStep(term, "?\n", returnPrompt, "Cleanup/Display Commands");
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				expectStep(term, missing.string()+"\n", continuePrompt, "Lack of valid paths");
 				CHECK(readFile(db).empty() && readFile(paths).empty());
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				const auto input = source.string()+";"+nested.string()+";"+missing.string()+"\n";
 				auto frame = step(term, input, continuePrompt);
 				CHECK(has(frame, "2 ISO imported") && has(frame, "Invalid paths omitted from search:"));
@@ -996,26 +1060,26 @@ namespace isocmd_tests {
 				CHECK(!has(readFile(paths), missing.string()));
 				// Repaint the report; must not re-import or duplicate history.
 				const auto start = term.output.size(); term.resize(20, 100);
-				const auto end = term.waitFor(continuePrompt, start);
+				const auto end = term.waitFor(terminal_sync::pause, start);
 				CHECK(has(plain(std::string_view(term.output).substr(start, end-start)), "2 ISO imported"));
 				CHECK(fileLines(db) == expected);
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				expectStep(term, source.string()+"\n", continuePrompt, "No new ISO found");
 				CHECK(fileLines(db) == expected);
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				frame = step(term, "*stats\n", returnPrompt);
 				CHECK(has(frame, "=== ISO Database ===") && has(frame, "Entries: 2"));
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				expectStep(term, "!clr_paths\n", continuePrompt, "FolderPath database cleared successfully.");
 				CHECK(readFile(paths).empty() && fileLines(db) == expected);
 				CHECK(readFile(filters) == "fixture-filter\n");
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				expectStep(term, "!clr_filter\n", continuePrompt, "FilterTerm database cleared successfully.");
 				CHECK(readFile(filters).empty() && fileLines(db) == expected);
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				expectStep(term, "!clr\n", continuePrompt, "ISO database cleared successfully.");
 				CHECK(readFile(db).empty());
-				step(term, "\n", "DB, ? for help:");
+				step(term, "\n", inputPrompt);
 				step(term, "\x1b", mainPrompt);
 
 			});
@@ -1033,9 +1097,9 @@ namespace isocmd_tests {
 		void discoverConversionImages(TerminalSession& term, const fs::path& source) {
 
 			expectStep(term, "2\n", mainPrompt, "Convert2ISO");
-			step(term, "1\n", "? for help:");
+			step(term, "1\n", inputPrompt);
 			expectStep(term, "ls\n", continuePrompt, "entries to display.");
-			step(term, "\n", "? for help:");
+			step(term, "\n", inputPrompt);
 			auto frame = step(term, source.string()+"\n", continuePrompt);
 			CHECK(has(frame, "3 {.bin/.img} files found"));
 			frame = step(term, "\n", selectionPrompt);
@@ -1049,7 +1113,7 @@ namespace isocmd_tests {
 			auto frame = step(term, "clr\n", selectionPrompt);
 			CHECK(!has(frame, "Pending Indices"));
 			expectStep(term, "1;\n", selectionPrompt, "Pending Indices");
-			step(term, "/", "Filter: ");
+			step(term, "/", filterPrompt);
 			const auto start = term.output.size(); term.send("beta");
 			frame = queryFrame(term, start, "beta");
 			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img"));
@@ -1061,7 +1125,7 @@ namespace isocmd_tests {
 		void checkSuccessfulConversions(TerminalSession& term, const fs::path& source, const std::string& alpha, const std::string& beta) {
 
 			// Execute the staged source index while another image is visible.
-			expectStep(term, "P", "verbose output? (y/n): ", "COMPLETED");
+			expectStep(term, "P", inputPrompt, "COMPLETED");
 			auto frame = step(term, "y\n", continuePrompt);
 			CHECK(has(frame, "Convert2ISO:") && has(frame, "alpha.iso") && has(frame, "→ ISO."));
 			CHECK(!has(frame, "beta.iso") && !has(frame, "Failed."));
@@ -1069,7 +1133,7 @@ namespace isocmd_tests {
 			CHECK(has(frame, "beta.img") && !has(frame, "alpha.img") && !has(frame, "→ ISO."));
 			CHECK(readFile(source/"alpha.iso") == alpha);
 			CHECK(!fs::exists(source/"beta.iso") && !fs::exists(source/"broken.iso"));
-			expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
+			expectStep(term, "1\n", inputPrompt, "COMPLETED");
 			frame = step(term, "n\n", selectionPrompt);
 			CHECK(!has(frame, "→ ISO."));
 			CHECK(readFile(source/"beta.iso") == beta);
@@ -1079,7 +1143,7 @@ namespace isocmd_tests {
 
 		void checkFailedConversion(TerminalSession& term, const fs::path& source, const fs::path& db) {
 
-			expectStep(term, "3\n", "verbose output? (y/n): ", "FAILED");
+			expectStep(term, "3\n", inputPrompt, "FAILED");
 			const auto frame = step(term, "Y\n", continuePrompt);
 			CHECK(has(frame, "broken.img") && has(frame, "Failed.") && !has(frame, "→ ISO."));
 			step(term, "\x1b", selectionPrompt);
@@ -1092,7 +1156,7 @@ namespace isocmd_tests {
 
 			// Existing output is a skip and must never be overwritten.
 			writeFile(source/"alpha.iso", "keep existing ISO");
-			expectStep(term, "1\n", "verbose output? (y/n): ", "COMPLETED");
+			expectStep(term, "1\n", inputPrompt, "COMPLETED");
 			const auto frame = step(term, "y\n", continuePrompt);
 			CHECK(has(frame, "alpha.img") && has(frame, "ISOalrExists → Skipped."));
 			CHECK(!has(frame, "Failed.") && !has(frame, "→ ISO."));
@@ -1103,14 +1167,14 @@ namespace isocmd_tests {
 
 		void checkConversionCache(TerminalSession& term) {
 
-			step(term, "\x1b", "? for help:");
+			step(term, "\x1b", inputPrompt);
 			const auto frame = step(term, "ls\n", selectionPrompt);
 			CHECK(has(frame, "alpha.img") && has(frame, "beta.img"));
-			step(term, "\x1b", "? for help:");
+			step(term, "\x1b", inputPrompt);
 			expectStep(term, "!clr\n", continuePrompt, "BIN/IMG cache cleared.");
-			step(term, "\n", "? for help:");
+			step(term, "\n", inputPrompt);
 			expectStep(term, "ls\n", continuePrompt, "entries to display.");
-			step(term, "\n", "? for help:");
+			step(term, "\n", inputPrompt);
 			step(term, "\x1b", mainPrompt); // Convert2ISO submenu
 			step(term, "\x1b", mainPrompt); // main menu
 
@@ -1196,20 +1260,21 @@ namespace isocmd_tests {
 		try {
 			TerminalSession term(binary,"--write-ui-child",120);
 			try {
-				auto end=term.waitFor("? for help: ",term.waitFor("IDX>DEVICE"));
+				auto end=waitForNewInput(term);
+				CHECK(has(listFrame(term, 0, end), "iso2.iso"));
 				term.send("\x1b");
 				end=term.waitFor("TEST-MAPPING-CANCELLED",end);
-				end=term.waitFor("? for help: ",end);
+				end=waitForNewInput(term, end);
 				term.send("1>/dev/null;1>/dev/null\n");
-				end=term.waitFor("used multiple times",end); end=term.waitFor("to try again...",end);
-				term.send("\n"); end=term.waitFor("? for help: ",end);
+				end=term.waitFor("used multiple times",end); end=term.waitFor(terminal_sync::pause,end);
+				term.send("\n"); end=waitForNewInput(term, end);
 				const std::string mapping="1>/dev/zero;2>/dev/null;1>/dev/full";
-				term.send(mapping+"\n"); end=term.waitFor("Proceed? (y/n): ",end);
+				term.send(mapping+"\n"); end=waitForNewInput(term, end);
 				const auto start=term.output.size(); term.resize(24,100);
-				end=term.waitFor("Proceed? (y/n): ",start);
-				term.send("n\n"); end=term.waitFor("? for help: ",end);
+				end=waitForRepaintedInput(term, start);
+				term.send("n\n"); end=waitForNewInput(term, end);
 				// Declining retains the input for editing; resubmit it unchanged.
-				end=term.waitFor(mapping,end); term.send("\n"); end=term.waitFor("Proceed? (y/n): ",end);
+				CHECK(inputRow(term, end).ends_with(mapping)); term.send("\n"); end=waitForNewInput(term, end);
 				const auto afterConfirm=term.output.size(); term.send("y\n");
 				for (int i=0;i<4;++i) {
 					const auto startResult=i==0?afterConfirm:end;
@@ -1220,11 +1285,16 @@ namespace isocmd_tests {
 				}
 				end=term.waitFor("TEST-ASYNC-CANCELLATION-PASS",end);
 				end=term.waitFor("TEST-VERIFY-OFF",end);
-				end=term.waitFor("? for help: ",end);
-				term.send("1>/dev/zero;2>/dev/null\n"); end=term.waitFor("Proceed? (y/n): ",end);
+				end=waitForNewInput(term, end);
+				term.send("1>/dev/zero;2>/dev/null\n"); end=waitForNewInput(term, end);
 				term.send("y\n");
 				term.waitFor("TEST-WRITE-UI-PASS",end); term.waitForExit();
-				CHECK(!has(plain(term.output), "Verify write integrity? (y/n):"));
+				// Exactly eight Readline sessions: two mapping attempts, retry,
+				// confirmation, decline/retry, confirmation, and the final pair.
+				std::size_t sessions = 0;
+				for (std::size_t pos = 0; (pos = term.output.find(terminal_sync::input, pos)) != std::string::npos;
+				     pos += std::string_view(terminal_sync::input).size()) ++sessions;
+				CHECK(sessions == 8);
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: device mapping retry, resize, confirmation, multi-device task association and results\n";
 			return 0;

@@ -543,16 +543,18 @@ TEST_PRIVILEGED_SRCS := $(sort $(wildcard tests/privileged/*.cpp))
 TEST_UNIT_OBJS := $(TEST_UNIT_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_INTEGRATION_OBJS := $(TEST_INTEGRATION_SRCS:%.cpp=$(OBJ_DIR)/%.o)
 TEST_PRIVILEGED_OBJS := $(TEST_PRIVILEGED_SRCS:%.cpp=$(OBJ_DIR)/%.o)
+TEST_SYNC_OBJ := $(OBJ_DIR)/tests/common/terminalSync.o
+TEST_SYNC_WRAP := -Wl,--wrap=readline,--wrap=ppoll
 TEST_FAULT_OBJ := $(OBJ_DIR)/tests/common/ioFaults.o
 TEST_FAULT_WRAP := -Wl,--wrap=read,--wrap=write,--wrap=pwrite,--wrap=fsync,--wrap=sync_file_range,--wrap=posix_fallocate,--wrap=ftruncate,--wrap=close
-TEST_OBJS := $(TEST_UNIT_OBJS) $(TEST_INTEGRATION_OBJS) $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ)
+TEST_OBJS := $(TEST_UNIT_OBJS) $(TEST_INTEGRATION_OBJS) $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_SYNC_OBJ)
 TEST_BIN := $(OBJ_DIR)/tests/isocmd-tests
 TEST_INTEGRATION_BIN := $(OBJ_DIR)/tests/isocmd-integration-tests
 TEST_MENU_OBJ := $(OBJ_DIR)/tests/menuApp.o
 TEST_MENU_BIN := $(OBJ_DIR)/tests/isocmd-menu-test
 TEST_PRIVILEGED_BIN := $(OBJ_DIR)/tests/isocmd-privileged-tests
 TEST_LIB_OBJS := $(filter-out $(OBJ_DIR)/app/main.o,$(OBJS))
-# All test sources import std through testHarness.h (directly or via ioFaults.h).
+# Most test sources import std through testHarness.h (directly or via ioFaults.h).
 # Project module prerequisites are generated per source in moddeps.mk.
 
 $(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) | $(MAPPER)
@@ -562,14 +564,14 @@ $(OBJ_DIR)/tests/%.o: tests/%.cpp tests/common/testHarness.h Makefile $(CONFIG_S
 	$(publish_depfile)
 
 $(TEST_BIN): $(TEST_UNIT_OBJS) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
-$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+$(TEST_INTEGRATION_BIN): $(TEST_INTEGRATION_OBJS) $(TEST_FAULT_OBJ) $(TEST_SYNC_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 $(TEST_PRIVILEGED_BIN): $(TEST_PRIVILEGED_OBJS) $(TEST_FAULT_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 # The unity stamp also forces relinking when the production object list changes.
 # forkpty is in libc on modern glibc; -lutil also supports older glibc.
 # Only the integration executable needs it.
 $(TEST_BIN) $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN):
 	@echo "  TEST LD  $@"
-	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil) $(if $(filter $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN),$@),$(TEST_FAULT_WRAP))
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(filter $(TEST_OBJS),$^) -o $@ $(LIBS) $(if $(filter $(TEST_INTEGRATION_BIN),$@),-lutil $(TEST_SYNC_WRAP)) $(if $(filter $(TEST_INTEGRATION_BIN) $(TEST_PRIVILEGED_BIN),$@),$(TEST_FAULT_WRAP))
 
 test-unit: $(TARGET) $(TEST_BIN)
 	$(Q)sh tests/run.sh "$(TEST_BIN)" "$(TARGET)"
@@ -580,9 +582,9 @@ $(TEST_MENU_OBJ): src/app/main.cpp Makefile $(CONFIG_STAMP) $(STD_MODULE_GCM) | 
 	$(Q)$(CXX) $(CPPFLAGS) $(DEPFLAGS) $(MODFLAGS) $(CXXFLAGS) -DISOCMD_TEST_PRIVATE_LOCK -c $< -o $@
 	$(publish_depfile)
 
-$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
+$(TEST_MENU_BIN): $(TEST_MENU_OBJ) $(TEST_SYNC_OBJ) $(TEST_LIB_OBJS) $(STD_MODULE_OBJ) $(UNITY_STAMP)
 	@echo "  TEST LD  $@"
-	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(TEST_MENU_OBJ) -o $@ $(LIBS)
+	$(Q)$(CXX) $(LDFLAGS) $(STD_MODULE_OBJ) $(TEST_LIB_OBJS) $(TEST_MENU_OBJ) $(TEST_SYNC_OBJ) -o $@ $(LIBS) $(TEST_SYNC_WRAP)
 
 test-integration: $(TEST_INTEGRATION_BIN) $(TEST_MENU_BIN)
 	$(Q)sh tests/integration/run.sh "$(TEST_INTEGRATION_BIN)" "$(TEST_MENU_BIN)"
