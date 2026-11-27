@@ -28,9 +28,6 @@ From the source tree, use `man -l man/isocmd.1` and
 | Agnostic | `libchdr` (statically built and linked) |
 | Optional (Windows writer) |`dosfstools` `ntfsprogs`/`ntfs-3g` `parted` |
 
-Interactive input uses the built-in C++23/POSIX line editor, with no external
-terminal-editing library required. The editor uses ISO Commander’s own keybindings.
-
 <br>
 
 **Supported Operations**
