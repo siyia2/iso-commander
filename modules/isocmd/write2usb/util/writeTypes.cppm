@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief USB task identity, settings, cancellation and progress synchronization types.
+ */
+
 export module isocmd.write2usb.util.writeTypes;
 
 import std;
@@ -8,15 +13,18 @@ import isocmd.core.cancellation;
 // C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
-// The global flag is the signal-safe front end. The UI latches the batch's
-// stop state before allowing the global flag to be reset.
+/**
+ * @brief Checks immediate or latched cancellation of a USB write.
+ * @param token Batch stop token; an empty token checks only the global flag.
+ * @return true if the global cancellation flag or the token requests a stop.
+ * @note The UI latches cancellation in the batch stop state before resetting the
+ *       global flag, so outstanding workers remain cancelled after UI recovery.
+ */
 inline bool isUsbWriteCancelled(const std::stop_token& token = {}) noexcept {
 	// Read the UI flag first: observing its reset must not be followed by
 	// a stale pre-latch token check.
 	return GlobalState::g_operationCancelled.load() || token.stop_requested();
 }
-
-// --- Data Structures ---
 
 /// Information about an ISO image file.
 struct IsoInfo {
@@ -28,35 +36,47 @@ struct IsoInfo {
 };
 
 /**
- * @brief Thread-safe state tracker for an ongoing write process.
- * @details Utilizes atomics for progress updates and move-only semantics to
- * prevent accidental copying of atomic states.
+ * @brief Holds one USB task's identity, settings and live progress telemetry.
+ *
+ * Identity and settings are initialized before dispatch; only atomic fields
+ * are updated while workers and the UI share a row. Moving a row transfers
+ * metadata and loads the atomic values individually, not as a coherent snapshot.
+ * Rows must remain at stable addresses while workers use them.
  */
 struct ProgressInfo {
-	std::string filename;
-	std::string device;
-	std::string totalSize;
-	std::string sourcePath;
+	std::string filename;   ///< Display filename of the source image.
+	std::string device;     ///< Target device path.
+	std::string totalSize;  ///< Formatted source image size.
+	std::string sourcePath; ///< Full source image path.
 
-	std::stop_token cancelToken; // Shared by the batch; never reset after dispatch.
-	std::optional<bool> bufferedWrites; // Snapshot before dispatch; unset for standalone callers.
-	bool verifyRequested = false; // Set before dispatch; immutable while running.
-	std::atomic<bool> verifying{false}; // Readback has started; retained after completion.
-	std::atomic<std::uint64_t> bytesVerified{0};
+	std::stop_token cancelToken;        ///< Shared batch token; not reset after dispatch.
+	std::optional<bool> bufferedWrites; ///< Settings snapshot; unset for standalone callers.
+	bool verifyRequested = false;       ///< Readback requested; immutable during execution.
 
-	std::atomic<bool> writeCompleted{false}; // All writes and final flush succeeded.
-	std::atomic<bool> completed{false};      // Write and any requested verification succeeded.
-	std::atomic<bool> failed{false};
-	std::atomic<std::uint64_t> bytesWritten{0};
-	std::atomic<int> progress{0};
-	std::atomic<double> speed{0.0}; // Live write speed, then the final write-only average.
-	std::atomic<double> verificationSpeed{0.0};
+	std::atomic<bool> verifying{false};          ///< Readback started; retained in terminal states.
+	std::atomic<std::uint64_t> bytesVerified{0}; ///< Bytes read back, not necessarily CRC-matched.
+	std::atomic<bool> writeCompleted{false};     ///< Write and final flush succeeded.
+	std::atomic<bool> completed{false};          ///< Write and any requested verification succeeded.
+	std::atomic<bool> failed{false};             ///< A task failure was reported.
+	std::atomic<std::uint64_t> bytesWritten{0};  ///< Writer-reported cumulative bytes.
+	std::atomic<int> progress{0};                ///< Current write or readback percentage.
+	std::atomic<double> speed{0.0};              ///< Live write speed, then write-only average (MiB/s).
+	std::atomic<double> verificationSpeed{0.0};  ///< Live readback speed in MiB/s.
 
+	/**
+	 * @brief Creates a progress row with zeroed counters and unset result flags.
+	 * @param filename Display name of the source image.
+	 * @param device Target device path.
+	 * @param totalSize Formatted source image size.
+	 * @param sourcePath Full path of the source image.
+	 */
 	ProgressInfo(std::string filename, std::string device, std::string totalSize,
 	             std::string sourcePath);
 
+	/// Moves metadata and copies current atomic values by individual loads.
 	ProgressInfo(ProgressInfo&& other) noexcept;
 
+	/// Replaces metadata and atomic values; not for concurrent use on active rows.
 	ProgressInfo& operator=(ProgressInfo&& other) noexcept;
 
 	// Disable copying because atomics are not copyable.
@@ -77,11 +97,11 @@ struct ProgressInfo {
  * condition variable.
  */
 struct WriteSync {
-	std::stop_source cancellation;
-	std::atomic<std::size_t> completedTasks{0}; // Successful tasks.
-	std::atomic<std::size_t> finishedTasks{0};  // Tasks that have returned.
-	std::mutex mutex;
-	std::condition_variable cv;
+	std::stop_source cancellation;              ///< Latched cancellation for this batch.
+	std::atomic<std::size_t> completedTasks{0}; ///< Successful tasks.
+	std::atomic<std::size_t> finishedTasks{0};  ///< Tasks that have finished or skipped the writer.
+	std::mutex mutex;                           ///< Synchronizes condition-variable waits.
+	std::condition_variable cv;                 ///< Wakes waiters when task state changes.
 };
 
 } // extern "C++"

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Tracks USB devices with unfinished cleanup so they cannot be selected for another write.
+/**
+ * @file
+ * @brief Registration, joining and reservation tracking for USB cleanup threads.
+ */
 
 import std;
 
@@ -8,6 +11,7 @@ import isocmd.write2usb.util.drainingState;
 
 DrainingThreadManager g_drainingManager;
 
+/// Transfers the thread handle into the protected list.
 void DrainingThreadManager::add(std::thread&& t) {
 
 	std::lock_guard<std::mutex> lock(mtx);
@@ -15,6 +19,7 @@ void DrainingThreadManager::add(std::thread&& t) {
 
 }
 
+/// Joins registered threads without holding the separate reservation mutex.
 void DrainingThreadManager::joinAll() {
 
 	std::lock_guard<std::mutex> lock(mtx);
@@ -27,6 +32,7 @@ void DrainingThreadManager::joinAll() {
 
 }
 
+/// Records a reservation before control returns to the USB selection UI.
 void DrainingThreadManager::reserveDevice(const std::string& device) {
 
 	std::lock_guard lock(devicesMutex);
@@ -35,6 +41,7 @@ void DrainingThreadManager::reserveDevice(const std::string& device) {
 
 }
 
+/// Releases a single reservation and publishes the remaining drain state.
 void DrainingThreadManager::releaseDevice(const std::string& device) {
 
 	std::lock_guard lock(devicesMutex);
@@ -44,6 +51,7 @@ void DrainingThreadManager::releaseDevice(const std::string& device) {
 
 }
 
+/// Performs a synchronized lookup of the exact device path.
 bool DrainingThreadManager::isDeviceDraining(const std::string& device) {
 
 	std::lock_guard lock(devicesMutex);

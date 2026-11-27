@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief ISO 9660/UDF recognition and multi-encoding Windows signature scanning.
+ */
+
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -15,17 +20,17 @@ namespace {
 	//---- ISO 9660 / UDF volume recognition ----------------------
 	namespace iso_layout {
 
-		constexpr std::size_t  kSectorSize  = 2048;
-		constexpr std::size_t  kVrsStart    = 16 * kSectorSize;   // 0x8000: first volume descriptor
-		constexpr int     kVrsSectors  = 8;                  // sectors 16-23 are examined
-		constexpr std::size_t  kIdOffset    = 1;                  // identifier follows the type byte
-		constexpr std::size_t  kIdLength    = 5;
-		constexpr std::size_t  kHeaderSize  = kIdOffset + kIdLength;
-		constexpr std::uint8_t kTypePrimary = 0x01;               // Primary Volume Descriptor
+		constexpr std::size_t kSectorSize  = 2048;
+		constexpr std::size_t kVrsStart    = 16 * kSectorSize;   // 0x8000: first volume descriptor.
+		constexpr int         kVrsSectors  = 8;                  // Sectors 16–23 are examined.
+		constexpr std::size_t kIdOffset    = 1;                  // Identifier follows the type byte.
+		constexpr std::size_t kIdLength    = 5;
+		constexpr std::size_t kHeaderSize  = kIdOffset + kIdLength;
+		constexpr std::uint8_t kTypePrimary = 0x01;               // Primary Volume Descriptor.
 
 		/**
 		 * @brief Recognizes the ISO 9660 and UDF volume descriptors used to identify disc images.
-		 * Accept ISO 9660 primary descriptors (type 0x01, CD001) and UDF NSR02/NSR03.
+		 * Accepts ISO 9660 primary descriptors (type 0x01, CD001) and UDF NSR02/NSR03.
 		 */
 		constexpr bool isAcceptedDescriptor(std::uint8_t type, std::string_view id) {
 
@@ -61,7 +66,7 @@ namespace {
 
 		/**
 		 * @brief Converts ASCII uppercase bytes to lowercase using a lookup table.
-		 * Leave non-ASCII bytes unchanged so the scan is independent of locale.
+		 * Leaves non-ASCII bytes unchanged so the scan is independent of locale.
 		 */
 		const std::array<std::uint8_t, 256>& table() {
 
@@ -91,9 +96,9 @@ namespace {
 
 		/// Byte encoding in which a signature is searched for.
 		enum Encoding : int {
-			Ascii   = 0,   ///< one byte per character
-			Utf16Le = 1,   ///< character byte followed by 0x00 (Joliet/UDF on Windows)
-			Utf16Be = 2    ///< 0x00 followed by the character byte
+			Ascii   = 0, ///< one byte per character
+			Utf16Le = 1, ///< character byte followed by 0x00 (Joliet/UDF on Windows)
+			Utf16Be = 2  ///< 0x00 followed by the character byte
 		};
 
 		/// Number of encodings per pattern.
@@ -145,9 +150,9 @@ namespace {
 		 * the scan loop needs no failure-link chasing.
 		 */
 		struct Node {
-			std::array<int, 256> next{};   ///< Transition per input byte; -1 only while building.
-			int      fail{0};              ///< Failure link: longest proper suffix that is also a prefix.
-			std::uint32_t match{0};             ///< win_signature bits of every pattern ending here (incl. via fail links).
+			std::array<int, 256> next{};  ///< Transition per input byte; -1 only while building.
+			int                 fail{0};  ///< Longest proper suffix that is also a prefix.
+			std::uint32_t       match{0}; ///< Match bits, including those inherited via failure links.
 
 			Node() {
 
@@ -166,10 +171,9 @@ namespace {
 			 * terminal node is tagged with win_signature::bit(pattern, encoding).
 			 *
 			 * @par Utility
-			 * Disc formats store file names in different ways: as plain letters, or as
-			 * letters each padded with an empty byte (two bytes per letter), in either
-			 * order. This adds one search word in one of those forms, so every name can be
-			 * found however the disc happens to store it.
+			 * Adds one byte representation of an ASCII filename signature. Searching
+			 * all three supported encodings handles common optical-image layouts
+			 * without parsing the filesystem.
 			 *
 			 * @param trie     Trie under construction; node 0 is the root.
 			 * @param text     Pattern text (any case; folded to lower case).
@@ -213,9 +217,9 @@ namespace {
 			 * failure target, and each node inherits its failure target's match bits.
 			 *
 			 * @par Utility
-			 * Finishes the search tool so it can look for all words at the same time while
-			 * reading the data only once and never going back. It also makes sure a name
-			 * hidden inside a longer one ("bootmgr" inside "bootmgr.efi") is still noticed.
+			 * Completed transitions allow a single-pass scan without failure-link
+			 * traversal. Inherited matches preserve signatures ending at a suffix
+			 * of a matched prefix.
 			 *
 			 * @param trie Trie whose patterns have all been inserted.
 			 */
@@ -297,7 +301,7 @@ namespace {
 			const auto& fold = case_fold::table();
 
 			std::uint32_t found = 0;
-			int cur = 0;
+			int           cur   = 0;
 			for (std::size_t i = 0; i < size; ++i) {
 				cur    = ac[cur].next[fold[static_cast<std::uint8_t>(addr[i])]];
 				found |= ac[cur].match;
@@ -336,7 +340,7 @@ namespace {
 		ScopedMapping& operator=(const ScopedMapping&) = delete;
 
 		/// Reports whether the file mapping succeeded.
-		bool        ok()   const {
+		bool ok() const {
 
 			return addr_ != MAP_FAILED;
 
@@ -350,7 +354,7 @@ namespace {
 		}
 
 		/// Returns the mapped length in bytes, not necessarily the file size.
-		std::size_t      size() const {
+		std::size_t size() const {
 
 			return length_;
 
@@ -369,7 +373,7 @@ namespace {
 		}
 
 	private:
-		void*  addr_;
+		void*       addr_;
 		std::size_t length_;
 	};
 
@@ -378,7 +382,7 @@ namespace {
 namespace iso_detect {
 
 	/**
-	 * @brief Checks that a file descriptor refers to an ISO 9660 or UDF disc image.
+	 * @brief Recognizes accepted ISO 9660 or UDF volume descriptors.
 	 *
 	 * Walks the Volume Recognition Sequence (sectors 16-23, 2048-byte spacing)
 	 * with pread, so the descriptor's offset is untouched. Accepts an ISO 9660
@@ -392,8 +396,7 @@ namespace iso_detect {
 	 * @return true if an accepted descriptor is found; false on a short read, an
 	 *         unrecognized identifier, or no match within 8 sectors.
 	 *
-	 * @note Acceptance does not imply the image is bootable. The name is
-	 *       historical; isValidOpticalImage would describe it more accurately.
+	 * @note Acceptance does not validate the full filesystem or imply bootability.
 	 */
 	bool isValidIso9660(int fd) {
 
@@ -414,18 +417,16 @@ namespace iso_detect {
 	}
 
 	/**
-	 * @brief Probes an ISO image to detect Windows 10/11 installation media.
+	 * @brief Probes an ISO image for Windows installation-media signatures.
 	 *
 	 * Maps up to the first 32 MiB of the file and checks, in order:
 	 *  1. a valid volume header at sector 16 (PVD "CD001", or UDF "NSR02"/"NSR03");
 	 *  2. a single-pass Aho-Corasick scan for "boot.wim" and "bootmgr[.efi]",
-	 *     case-insensitive, in ASCII / UTF-16LE / UTF-16BE (the latter is the
-	 *     native Joliet/UDF filename encoding).
+	 *     case-insensitive, in ASCII, UTF-16LE and UTF-16BE.
 	 *
 	 * The 32 MiB window is a heuristic: images with signatures outside that
-	 * window may not be recognized. The scan exits as soon as
-	 * both signature groups have matched, so on typical Windows ISOs most of the
-	 * window is never touched.
+	 * window may not be recognized. The scan exits as soon as both signature
+	 * groups have matched; the remainder of the mapped window need not be scanned.
 	 *
 	 * @param fd       Open, readable descriptor; mapped from offset 0, not closed here.
 	 * @param fileSize Image size in bytes (from fstat); used for the minimum-size
@@ -437,7 +438,7 @@ namespace iso_detect {
 	 */
 	bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
 
-		constexpr off_t  kMinFileSize = 0x9000;
+		constexpr off_t       kMinFileSize = 0x9000;
 		constexpr std::size_t kMaxWindow   = 32 * 1024 * 1024;
 		constexpr std::size_t kEagerBytes  = 4 * 1024 * 1024;
 

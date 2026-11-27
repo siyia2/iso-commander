@@ -1,31 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Line editor guards for USB mapping and confirmation prompts.
+ */
+
 export module isocmd.write2usb.util.terminalGuards;
 
 // C++ linkage keeps declarations compatible with definitions in the .cpp files.
 export extern "C++" {
 
 /**
- * @brief scope guard for the line editor/terminal state that needs to be set up
- *        at the start of every loop iteration and torn down on every exit
- *        path (return, continue, or exception).
+ * @brief Configures the write-mapping prompt and restores standard editor bindings.
+ *
+ * Establishes a known editor configuration rather than saving arbitrary
+ * previous settings. Signal disposition and terminal EOF settings are
+ * managed separately from editor keybindings.
  */
 struct TerminalStateGuard {
 	/**
-	 * @brief Configures line editor bindings/hooks and disables SIGINT /
-	 *        Ctrl-D for the duration of the guard's lifetime.
+	 * @brief Installs mapping-prompt bindings, ignores SIGINT and attempts to disable terminal VEOF.
+	 * Also requests a screen and scrollback clear.
 	 */
 	TerminalStateGuard();
 
 	/**
-	 * @brief Restores line editor bindings/hooks via restoreLineEditor().
-	 *
-	 * @note restoreLineEditor() only resets line editor bindings/hooks. The
-	 *       SIGINT = SIG_IGN and disable_ctrl_d() set in the constructor
-	 *       are NOT undone here, matching the original code's behavior
-	 *       (it never restored these at any exit point either). If that's
-	 *       actually a latent bug, it's pre-existing and separate from
-	 *       this refactor.
+	 * @brief Restores standard editor bindings and completion hooks.
+	 * @note Does not restore the previous SIGINT disposition or terminal VEOF.
+	 *       restoreLineEditor() reinstates a known configuration, not a snapshot.
 	 */
 	~TerminalStateGuard();
 
@@ -34,22 +36,18 @@ struct TerminalStateGuard {
 };
 
 /**
- * @brief scope guard for the brief window where line editor is reconfigured to
- *        ask the y/n confirmation question.
+ * @brief Temporarily disables completion, clearing and history navigation.
  *
- * Restores the *outer* (TerminalStateGuard) line editor configuration on
- * exit, regardless of how this scope is left.
+ * Reapplies the mapping-prompt editor configuration on scope exit, including
+ * early returns and exception unwinding. Does not snapshot prior bindings.
  */
 struct ConfirmationModeGuard {
 	/// Switches line editor into confirmation-prompt mode.
 	ConfirmationModeGuard();
 
 	/**
-	 * @brief Re-applies the main mappings-prompt line editor configuration.
-	 *
-	 * Ensures that if the user says "no" and the outer loop continues,
-	 * the next TerminalStateGuard iteration (or the existing one, if we
-	 * don't reconstruct it) is in the expected state.
+	 * @brief Reapplies mapping-prompt bindings and completion hooks.
+	 * Allows the mapping prompt to resume after a rejected confirmation.
 	 */
 	~ConfirmationModeGuard();
 
@@ -57,11 +55,7 @@ struct ConfirmationModeGuard {
 	ConfirmationModeGuard& operator=(const ConfirmationModeGuard&) = delete;
 
 private:
-	/**
-	 * @brief Mirrors the original setupLineEditor() lambda so this guard
-	 *        doesn't depend on a free function with the same name living
-	 *        elsewhere.
-	 */
+	/// Reinstalls the shared mapping-prompt editor configuration.
 	static void setupLineEditor();
 };
 

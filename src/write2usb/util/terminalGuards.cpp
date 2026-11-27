@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Implementation of USB prompt editor guards.
+ */
+
 #include <stdio.h>
 #include <signal.h>
 
@@ -10,7 +15,11 @@ import isocmd.write2usb.util.terminalGuards;
 
 namespace {
 
-	/// Line editor bindings shared by the write-mapping prompt and confirmation mode.
+	/**
+	 * @brief Installs mapping-prompt completion and history keybindings.
+	 * Suppresses completion listings, enables Tab completion and Ctrl+L clearing,
+	 * and maps arrow and page keys to history navigation.
+	 */
 	void applyMappingPromptBindings() {
 
 		editorCompletionDisplayHook = [](const std::vector<std::string>&, int, int) {};
@@ -27,6 +36,7 @@ namespace {
 
 } // namespace
 
+/// Establishes the mapping-prompt configuration and terminal input policy.
 TerminalStateGuard::TerminalStateGuard() {
 
 	applyMappingPromptBindings();
@@ -37,24 +47,28 @@ TerminalStateGuard::TerminalStateGuard() {
 
 }
 
+/// Resets editor hooks and bindings; signal and VEOF settings are not restored.
 TerminalStateGuard::~TerminalStateGuard() {
 
 	restoreLineEditor();
 
 }
 
+/// Disables completion, clearing and history keys for confirmation.
 ConfirmationModeGuard::ConfirmationModeGuard() {
 
 	disableLineEditorForConfirmation();
 
 }
 
+/// Reinstates the mapping-prompt configuration on scope exit.
 ConfirmationModeGuard::~ConfirmationModeGuard() {
 
 	setupLineEditor();
 
 }
 
+/// Uses the same binding configuration as TerminalStateGuard.
 void ConfirmationModeGuard::setupLineEditor() {
 
 	applyMappingPromptBindings();

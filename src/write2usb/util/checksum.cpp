@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Reads data back from a target and compares CRC-64 checksums with the original data.
+/**
+ * @file
+ * @brief Readback telemetry, descriptor checksumming and regular-file CRC validation.
+ */
 
 #include <errno.h>
 #include <fcntl.h>
@@ -14,6 +17,8 @@ import isocmd.write2usb.util.writeTypes;
 import isocmd.write2usb.util.telemetry;
 
 namespace usb_verify {
+
+	/// Switches the existing progress row to verification telemetry.
 	ReadbackProgress::ReadbackProgress(ProgressInfo& slot, std::uint64_t total)
 	    : slot_(slot), total_(total),
 	      estimator_(write_telemetry::Clock::now(), write_telemetry::windowsStallTimeoutSeconds) {
@@ -25,6 +30,7 @@ namespace usb_verify {
 
 	}
 
+	/// Updates cumulative readback bytes, percentage and sampled speed.
 	void ReadbackProgress::record(std::size_t bytes) {
 
 		done_ += bytes;
@@ -35,6 +41,7 @@ namespace usb_verify {
 
 	}
 
+	/// Publishes successful completion after caller-side checksum validation.
 	bool ReadbackProgress::finish() {
 
 		if (done_ != total_ || cancelled()) return false;
@@ -44,6 +51,11 @@ namespace usb_verify {
 
 	}
 
+	/**
+	 * @brief Computes a CRC over the requested descriptor range using repeated reads.
+	 * Validates buffer and transfer alignment before reading. Checks cancellation
+	 * between reads and retries interrupted system calls without double-counting bytes.
+	 */
 	bool readChecksum(int fd, std::uint64_t size, char* buffer, std::size_t bufferSize,
 	                  std::size_t alignment, ReadbackProgress& progress, std::uint64_t& result) {
 
@@ -69,6 +81,10 @@ namespace usb_verify {
 
 	}
 
+	/**
+	 * @brief Opens a target file without following a final-component symlink.
+	 * Checks type and exact length before readback; a close failure also fails verification.
+	 */
 	bool verifyFile(const std::filesystem::path& path, std::uint64_t size, std::uint64_t expected,
 	                char* buffer, std::size_t bufferSize, ReadbackProgress& progress) {
 
