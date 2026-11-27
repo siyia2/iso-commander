@@ -21,7 +21,7 @@ namespace UI {
 		inline constexpr std::string_view Dim      = "\033[0;38;2;110;110;110m";
 		inline constexpr std::string_view DimGray  = "\033[1;38;2;110;110;110m";
 		inline constexpr std::string_view Red      = "\033[1;38;2;235;40;40m";
-		inline constexpr std::string_view Green    = "\033[1;38;2;90;215;35m";
+		inline constexpr std::string_view Green    = "\033[1;38;2;88;195;45m";
 		inline constexpr std::string_view Yellow   = "\033[1;38;2;212;184;0m";
 		inline constexpr std::string_view Blue     = "\033[1;38;2;0;115;215m";
 		inline constexpr std::string_view Magenta  = "\033[1;38;2;235;50;245m";
@@ -39,7 +39,7 @@ namespace UI {
 		inline constexpr std::string_view idxGreen    = "\033[1;38;2;120;220;160m";
 
 		inline constexpr std::string_view PromptBlue   = "\001\033[1;38;2;0;115;215m\002";
-		inline constexpr std::string_view PromptGreen  = "\001\033[1;38;2;90;215;35m\002";
+		inline constexpr std::string_view PromptGreen  = "\001\033[1;38;2;88;195;45m\002";
 		inline constexpr std::string_view PromptRed    = "\001\033[1;38;2;235;40;40m\002";
 		inline constexpr std::string_view PromptYellow = "\001\033[1;38;2;212;184;0m\002";
 		inline constexpr std::string_view PromptIndexGreen = "\001\033[1;38;2;120;220;160m\002";
