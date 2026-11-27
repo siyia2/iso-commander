@@ -73,7 +73,10 @@ mount_point=$1
 [ "$(cat "$mount_point/marker.txt")" = 'isocmd mount test' ] || cli_fail 'incorrect mounted contents'
 cli_pass
 cli_run 'mount: already mounted skip' 0 mount "$PWD/mount.iso"
-cli_record stdout '– mount: ' 'mount.iso' ' → '; cli_summary Mount 1 0; cli_pass
+cli_record stdout '– mount: ' 'mount.iso' '{alrMounted}'; cli_summary Mount 0 0 1
+cli_has stdout '] 100% (0/1)'; cli_pass
+cli_run 'mount: mixed skip and failure' 1 mount "$PWD/mount.iso" "$PWD/bad.iso"
+cli_summary Mount 0 1 1; cli_has stdout '] 100% (0/2)'; cli_pass
 cli_run 'umount: verbose success' 0 umount "$mount_point"
 cli_has stdout 'Located 1 mount point; Attempting to unmount...'
 cli_has stdout "✓ umount: $mount_point"; cli_summary Unmount 1 0
@@ -100,6 +103,8 @@ cli_run 'mount: silent invalid image' 1 mount --silent "$PWD/bad.iso"
 cli_quiet; cli_pass
 cli_run 'mount: silent success' 0 mount --silent "$PWD/mount.iso"
 cli_quiet; [ "$(cat "$mount_point/marker.txt")" = 'isocmd mount test' ] || cli_fail 'incorrect mounted contents'; cli_pass
+cli_run 'mount: silent already-mounted skip' 0 mount --silent "$PWD/mount.iso"
+cli_quiet; cli_pass
 cli_run 'unmount: silent alias and all scan' 0 unmount --silent all
 cli_quiet; [ ! -e "$mount_point" ] || cli_fail 'mount directory retained'; cli_pass
 cli_run 'umount: silent invalid path' 1 umount --silent "$PWD/missing-mount"

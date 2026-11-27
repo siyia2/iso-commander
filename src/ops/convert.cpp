@@ -79,8 +79,9 @@ namespace {
 
 		// Atomic counters
 		std::atomic<std::size_t>* completedBytes = nullptr; ///< Incremented by bytes processed (may be null).
-		std::atomic<std::size_t>* completedTasks = nullptr; ///< Incremented per success or skip (must be non-null).
+		std::atomic<std::size_t>* completedTasks = nullptr; ///< Incremented per success (must be non-null).
 		std::atomic<std::size_t>* failedTasks    = nullptr; ///< Incremented per failure (must be non-null).
+		std::atomic<std::size_t>* skippedTasks   = nullptr; ///< Incremented per skip (must be non-null).
 
 		// Optional output collection
 		std::vector<std::string>* successfulOutputPaths = nullptr; ///< Optional sink for produced ISO paths.
@@ -343,8 +344,7 @@ namespace {
 	/**
 	 * @brief Records a skip for a job whose destination already exists.
 	 *
-	 * Bumps the completed-task counter (a skip is treated as a successful
-	 * no-op for progress purposes) and flushes the buffer when the batch
+	 * Bumps the skipped-task counter and flushes the buffer when the batch
 	 * threshold is reached.
 	 *
 	 * @param file Per-file context (paths and display strings).
@@ -360,7 +360,7 @@ namespace {
 		   .append(themes.skipLabel).append("  ISOalrExists");
 		msg.append(UI::Palette::BoldReset);
 		ctx.localSkippedMsgs.push_back(std::move(msg));
-		ctx.completedTasks->fetch_add(1, std::memory_order_acq_rel);
+		ctx.skippedTasks->fetch_add(1, std::memory_order_acq_rel);
 		ctx.flushIfFull(ctx.localSkippedMsgs);
 
 	}
@@ -454,8 +454,10 @@ namespace {
  *                                When all flags are @c false, the CCD backend is used.
  * @param batchData               Caller-owned counters and optional output collection:
  *                                - @c completedBytes: optional; may be @c nullptr.
- *                                - @c completedTasks: incremented per success or
- *                                  skip; must be non-null.
+ *                                - @c completedTasks: incremented per success; must
+ *                                  be non-null.
+ *                                - @c skippedTasks: incremented per skip; must
+ *                                  be non-null.
  *                                - @c failedTasks: incremented per failure; must
  *                                  be non-null.
  *                                - @c successfulOutputPaths: optional sink for
@@ -486,6 +488,7 @@ void convertToISO(
 	ctx.completedBytes        = batchData.completedBytes;
 	ctx.completedTasks        = batchData.completedTasks;
 	ctx.failedTasks           = batchData.failedTasks;
+	ctx.skippedTasks          = batchData.skippedTasks;
 	ctx.successfulOutputPaths = batchData.successfulOutputPaths;
 	ctx.outPathsMutex         = batchData.outPathsMutex;
 	ctx.batchSize             = 50;

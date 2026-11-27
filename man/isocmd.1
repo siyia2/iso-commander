@@ -96,6 +96,13 @@ Non-interactive commands return 0 on success and 1 on error or
 cancellation, including failure or cancellation of requested verification.
 Mount, unmount and conversion commands can return 0 when no eligible
 files or mount points are found and no errors occur.
+.PP
+Already-mounted images and conversions with an existing output ISO are
+counted separately as skipped, not successful. Skips advance task progress
+and do not cause a nonzero exit status. A batch consisting entirely of skips
+is reported as SKIPPED. Failures mixed with successful or skipped tasks
+are reported as PARTIAL; a batch containing only failed tasks is reported
+as FAILED.
 .SH EXAMPLES
 .SS Mounting and unmounting
 .TP

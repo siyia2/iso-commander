@@ -205,12 +205,13 @@ void processInputForConversions(const std::string& input,
 	std::atomic<std::size_t> completedBytes(0);
 	std::atomic<std::size_t> completedTasks(0);
 	std::atomic<std::size_t> failedTasks(0);
+	std::atomic<std::size_t> skippedTasks(0);
 	std::atomic<bool>   isProcessingComplete(false);
 
 	std::thread progressThread = launchProgressBar(
 	    &completedBytes, totalBytes,
 	    &completedTasks, &failedTasks, totalTasks,
-	    &isProcessingComplete, &verbose, operation, header);
+	    &isProcessingComplete, &verbose, operation, header, &skippedTasks);
 
 	const std::vector<int> indices(processedIndices.begin(), processedIndices.end());
 	std::atomic<std::size_t> nextIndex(0);
@@ -229,6 +230,7 @@ void processInputForConversions(const std::string& input,
 		.completedBytes = &completedBytes,
 		.completedTasks = &completedTasks,
 		.failedTasks = &failedTasks,
+		.skippedTasks = &skippedTasks,
 		.successfulOutputPaths = &successfulOutputPaths,
 		.outPathsMutex = &outPathsMutex
 	};

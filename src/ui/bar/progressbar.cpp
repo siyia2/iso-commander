@@ -270,12 +270,14 @@ namespace {
 		    std::atomic<bool>* isComplete,
 		    bool* verbose,
 		    const std::string& operation,
-		    const std::string& header)
+		    const std::string& header,
+		    std::atomic<std::size_t>* skippedTasks)
 		    : pc_(resolveProgressTheme()),
 		      completedBytes_(completedBytes),
 		      totalBytes_(totalBytes),
 		      completedTasks_(completedTasks),
 		      failedTasks_(failedTasks),
+		      skippedTasks_(skippedTasks),
 		      totalTasks_(totalTasks),
 		      isComplete_(isComplete),
 		      verbose_(verbose),
@@ -326,6 +328,7 @@ namespace {
 		struct Counters {
 			std::size_t completed;
 			std::size_t failed;
+			std::size_t skipped;
 			std::size_t bytes;
 		};
 
@@ -398,7 +401,7 @@ namespace {
 
 			const bool done = isComplete_->load(std::memory_order_acquire);
 
-			if (bytesTrackingEnabled_ && !done && lastRenderedLines_ > 1) {
+			if (!done && lastRenderedLines_ > 1) {
 				frame += "\033[";
 				frame += std::to_string(lastRenderedLines_ - 1);
 				frame += "A";
@@ -435,6 +438,7 @@ namespace {
 			return {
 				completedTasks_->load(std::memory_order_acquire),
 				failedTasks_->load(std::memory_order_acquire),
+				skippedTasks_ ? skippedTasks_->load(std::memory_order_acquire) : 0,
 				bytesTrackingEnabled_
 				    ? completedBytes_->load(std::memory_order_acquire)
 				    : 0
@@ -471,7 +475,7 @@ namespace {
 			if (forceFull) return 1.0;
 
 			const double tasksProgress = totalTasks_ > 0
-			    ? (static_cast<double>(c.completed) + c.failed) / totalTasks_
+			    ? (static_cast<double>(c.completed) + c.failed + c.skipped) / totalTasks_
 			    : 0.0;
 			const double bytesProgress = bytesTrackingEnabled_ && totalBytes_ > 0
 			    ? static_cast<double>(c.bytes) / totalBytes_
@@ -587,7 +591,7 @@ namespace {
 
 			const std::string processed =
 			    "Processed: " +
-			    ((ctx.useFinalLayout && !ctx.cancelled)
+			    ((ctx.useFinalLayout && !ctx.cancelled && visibleCounters_.skipped == 0)
 			        ? totalBytesFormatted_
 			        : cachedCompletedBytesFormatted_) +
 			    "/" + totalBytesFormatted_;
@@ -601,8 +605,10 @@ namespace {
 			std::string speedLine = "Speed: ";
 
 			if (ctx.useFinalLayout && !ctx.cancelled) {
+				const std::size_t avgBytes = visibleCounters_.skipped == 0
+				    ? totalBytes_ : visibleCounters_.bytes;
 				const double avgSpeed = ctx.elapsed > 0.0
-				    ? static_cast<double>(totalBytes_) / ctx.elapsed
+				    ? static_cast<double>(avgBytes) / ctx.elapsed
 				    : 0.0;
 
 				speedLine += formatSize(avgSpeed) + "/s (avg)";
@@ -713,8 +719,11 @@ namespace {
 			if (finalCancelled_) {
 				s << pc_.warning << "INTERRUPTED";
 			} else if (visibleCounters_.failed > 0) {
-				s << (anyCompleted ? pc_.warning : pc_.failure)
-				  << (anyCompleted ? "PARTIAL" : "FAILED");
+				const bool partial = anyCompleted || visibleCounters_.skipped > 0;
+				s << (partial ? pc_.warning : pc_.failure)
+				  << (partial ? "PARTIAL" : "FAILED");
+			} else if (!anyCompleted && totalTasks_ > 0 && visibleCounters_.skipped == totalTasks_) {
+				s << pc_.warning << "SKIPPED";
 			} else {
 				s << pc_.success << "COMPLETED";
 			}
@@ -750,11 +759,7 @@ namespace {
 				    << resizeHeaderText()
 				    << "\033[1A";
 			} else {
-				fin << (
-				    bytesTrackingEnabled_
-				        ? "\033[1J\033[3A"
-				        : "\033[1J\033[1A"
-				);
+				fin << "\033[1J\033[" << lastRenderedLines_ << "A";
 			}
 
 			fin << statusAndBar();
@@ -972,6 +977,7 @@ namespace {
 
 		std::atomic<std::size_t>* completedTasks_;
 		std::atomic<std::size_t>* failedTasks_;
+		std::atomic<std::size_t>* skippedTasks_;
 		std::size_t totalTasks_;
 
 		std::atomic<bool>* isComplete_;
@@ -1048,6 +1054,14 @@ namespace {
  * when the operation completes, so a resize between the last frame and the
  * final report is handled.
  *
+ * @par Skipped tasks
+ * Skips advance task progress without increasing the successful count. The
+ * skip count is not displayed in the progress bar. When skips occur, the
+ * final byte and speed lines use the recorded byte counter.
+ * An all-skipped batch reports SKIPPED; mixed success and skips report COMPLETED.
+ * With failures, PARTIAL requires at least one successful or skipped task;
+ * otherwise the status is FAILED. Cancellation always takes priority.
+ *
  * @par Cancellation
  * The last visible task and byte counters are retained when cancellation is
  * observed, including cancellation before the first frame (zero counters).
@@ -1077,6 +1091,8 @@ namespace {
  * @param totalBytes     Total bytes to process.
  * @param completedTasks Atomic counter for successful tasks.
  * @param failedTasks    Atomic counter for failed tasks.
+ * @param skippedTasks   Optional atomic counter for skipped tasks.
+ *                       Skips advance progress but not the successful count.
  * @param isComplete     Atomic boolean signaling operation completion.
  * @param verbose        Pointer to boolean to store user preference for
  *                       verbose output.
@@ -1095,7 +1111,8 @@ void displayProgressBarWithSize(
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,
-    const std::string& header) {
+    const std::string& header,
+    std::atomic<std::size_t>* skippedTasks) {
 
 	ProgressBarSession session(
 	    completedBytes,
@@ -1106,7 +1123,7 @@ void displayProgressBarWithSize(
 	    isComplete,
 	    verbose,
 	    operation,
-	    header);
+	    header, skippedTasks);
 
 	session.run();
 
@@ -1122,11 +1139,12 @@ std::thread launchProgressBar(
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,
-    const std::string& header) {
+    const std::string& header,
+    std::atomic<std::size_t>* skippedTasks) {
 
 	return std::thread(displayProgressBarWithSize,
 	                   completedBytes, totalBytes,
 	                   completedTasks, failedTasks, totalTasks,
-	                   isComplete, verbose, operation, header);
+	                   isComplete, verbose, operation, header, skippedTasks);
 
 }

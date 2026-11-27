@@ -88,7 +88,8 @@ namespace isocmd_tests {
 			CHECK(lines[3].ends_with("  {unknown}"));
 			CHECK(lines[4].ends_with("  {udf}"));
 			const auto skipped = mountLines(MountRecKind::Skipped);
-			CHECK(skipped.size() == 1 && skipped[0].starts_with("– mount: /images/existing.iso → /mnt/ISOs/existing~"));
+			CHECK(skipped.size() == 1 && skipped[0].starts_with("– mount: /images/existing.iso → /mnt/ISOs/existing~") &&
+			      skipped[0].ends_with("  {alrMounted}"));
 			displayConfig::toggleNamesOnly = true;
 			CHECK(mountLines(MountRecKind::Completed).front().starts_with("✓ mount: alpha disk.iso → "));
 			displayConfig::toggleNamesOnly = false;

@@ -75,6 +75,7 @@ namespace {
 			            .append(tc.path).append(getPath(isoDir, isoFile))
 			            .append(tc.label).append(" → ")
 			            .append(tc.highlight).append(mntDir).append("/").append(mntFile)
+			            .append(tc.label).append("  {alrMounted}")
 			            .append(tc.reset);
 
 		}
@@ -918,10 +919,12 @@ namespace {
 		MountBatch(libmnt_context* context,
 		           std::atomic<std::size_t>* completed,
 		           std::atomic<std::size_t>* failed,
+		           std::atomic<std::size_t>* skipped,
 		           bool silent)
 		    : ctx_(context),
 		      completedTasks_(completed),
 		      failedTasks_(failed),
+		      skippedTasks_(skipped),
 		      silentMode_(silent),
 		      mountPointCache_(buildMountPointCache()),
 		      mountedInodes_(buildMountedInodeCache()) {
@@ -1017,7 +1020,7 @@ namespace {
 
 			// The mount point is derived from the path again when the line is printed.
 			if (!silentMode_) tempRecords_.push_back({isoFile, nullptr, MountRecKind::Skipped});
-			completedTasks_->fetch_add(1, std::memory_order_relaxed);
+			skippedTasks_->fetch_add(1, std::memory_order_relaxed);
 
 		}
 
@@ -1079,6 +1082,7 @@ namespace {
 		libmnt_context*                ctx_;
 		std::atomic<std::size_t>*           completedTasks_;
 		std::atomic<std::size_t>*           failedTasks_;
+		std::atomic<std::size_t>*           skippedTasks_;
 		const bool                     silentMode_;
 		std::unordered_set<std::string> mountPointCache_;
 		std::unordered_set<std::uint64_t>   mountedInodes_;
@@ -1122,7 +1126,8 @@ namespace {
  * - APFS is not supported: mainline Linux has no APFS driver.
  *
  * @param isoFiles      Vector of absolute paths to the image files.
- * @param completedTasks Atomic counter for successful mounts and skipped duplicates.
+ * @param completedTasks Atomic counter for successful mounts.
+ * @param skippedTasks  Atomic counter for already-mounted images.
  * @param failedTasks   Atomic counter for any failures (e.g., missing root, I/O errors).
  * @param silentMode    If true, suppresses all log generation; only updates atomics.
  *
@@ -1135,6 +1140,7 @@ void mountIsoFiles(
     const std::vector<std::string>& isoFiles,
     std::atomic<std::size_t>* completedTasks,
     std::atomic<std::size_t>* failedTasks,
+    std::atomic<std::size_t>* skippedTasks,
     bool silentMode)
 {
 
@@ -1157,7 +1163,7 @@ void mountIsoFiles(
 		fs::create_directories("/mnt/ISOs", baseEc);
 	}
 
-	MountBatch batch(ctx, completedTasks, failedTasks, silentMode);
+	MountBatch batch(ctx, completedTasks, failedTasks, skippedTasks, silentMode);
 
 	for (const auto& isoFile : isoFiles) {
 		batch.process(isoFile);

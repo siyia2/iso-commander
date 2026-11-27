@@ -213,7 +213,7 @@ void verbosePrint(std::unordered_set<std::string>& primarySet,
 				break;
 			case 2: // mount: completed / skipped / failed also come from mount records
 			    printSortedSet(primarySet, false, &mountCompleted);
-				printSortedSet(tertiarySet, true, &mountSkipped);
+				printSortedSet(tertiarySet, false, &mountSkipped);
 				printSortedSet(secondarySet, true, &mountFailed);
 				printSortedSet(errorSet, true);
 				break;

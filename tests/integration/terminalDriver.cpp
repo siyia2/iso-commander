@@ -1203,7 +1203,8 @@ namespace isocmd_tests {
 
 			// Existing output is a skip and must never be overwritten.
 			writeFile(source/"alpha.iso", "keep existing ISO");
-			expectStep(term, "1\n", inputPrompt, "COMPLETED");
+			const auto progress = step(term, "1\n", inputPrompt);
+			CHECK(has(progress, "SKIPPED") && has(progress, "100% (0/1)") && !has(progress, "Skipped:"));
 			const auto frame = step(term, "y\n", continuePrompt);
 			CHECK(has(frame, "– c2iso: ") && has(frame, "alpha.img") && has(frame, "ISOalrExists"));
 			CHECK(!has(frame, "  Failed") && !has(frame, "→ ISO"));
@@ -1440,21 +1441,22 @@ namespace isocmd_tests {
 	/// Checks that cancellation and subsequent resizes retain the last live values.
 	static void checkInterruptedProgress(TerminalSession& term, std::size_t& start, bool trackBytes) {
 
-		constexpr std::string_view progress = "] 50% (3/10)";
+		constexpr std::string_view progress = "] 60% (3/10)";
 		auto frame = screenFrame(term, start, progress);
+		CHECK(!has(frame, "Skipped:"));
 		if (trackBytes) CHECK(has(frame, "Processed: 200.00 B/1000.00 B"));
 		const auto cancelStart = start;
 		term.send("\x03");
 		frame = screenFrame(term, start, "INTERRUPTED");
-		CHECK(has(frame, progress));
+		CHECK(has(frame, progress) && !has(frame, "Skipped:"));
 		if (trackBytes) CHECK(has(frame, "Processed: 200.00 B/1000.00 B"));
 		const auto prompt = waitForNewInput(term, start);
 		const auto output = plain(std::string_view(term.output).substr(cancelStart, prompt-cancelStart));
-		CHECK(!has(output, "100%") && !has(output, "(4/10)"));
+		CHECK(!has(output, "100%") && !has(output, "(4/10)") && !has(output, "Skipped:"));
 		start = term.output.size();
 		term.resize(24, trackBytes ? 120 : 100);
 		frame = screenFrame(term, start, "INTERRUPTED");
-		CHECK(has(frame, progress));
+		CHECK(has(frame, progress) && !has(frame, "Skipped:"));
 		if (trackBytes) CHECK(has(frame, "Processed: 200.00 B/1000.00 B"));
 		term.send("n\n");
 
@@ -1475,6 +1477,14 @@ namespace isocmd_tests {
 				frame = screenFrame(term, start, "COMPLETED");
 				CHECK(has(frame, "] 100% (10/10)"));
 				start = waitForNewInput(term, start);
+				term.send("n\n");
+				frame = screenFrame(term, start, "SKIPPED");
+				CHECK(has(frame, "] 100% (0/10)") && !has(frame, "Skipped:"));
+				CHECK(has(frame, "Processed: 0.00 B/1000.00 B"));
+				start = waitForNewInput(term, start);
+				term.resize(24, 50);
+				frame = screenFrame(term, start, "SKIPPED");
+				CHECK(has(frame, "] 100% (0/10)") && !has(frame, "Skipped:"));
 				term.send("n\n");
 				term.waitFor("TEST-SHARED-PROGRESS-PASS", start);
 				term.waitForExit();

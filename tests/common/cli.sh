@@ -58,14 +58,18 @@ cli_summary() {
     cli_line stdout "$1 summary:"
     cli_line stdout " Successful: $2"
     cli_line stdout " Failed:     $3"
+    skipped=${4:-0}
+    if [ "$1" != Unmount ]; then cli_line stdout " Skipped:    $skipped"; fi
     case "$1" in
         Conversion) operation=c2iso ;;
         Mount) operation=mount ;;
         Unmount) operation=umount ;;
         *) cli_fail "unknown summary: $1" ;;
     esac
-    if [ "$3" -eq 0 ]; then status=COMPLETED
-    elif [ "$2" -eq 0 ]; then status=FAILED
+    if [ "$3" -eq 0 ]; then
+        if [ "$2" -eq 0 ] && [ "$skipped" -gt 0 ]; then status=SKIPPED
+        else status=COMPLETED; fi
+    elif [ "$2" -eq 0 ] && [ "$skipped" -eq 0 ]; then status=FAILED
     else status=PARTIAL; fi
     cli_has stdout "Status: $operation → $status"
     if grep -Fxq -- "$operation:" cli.stdout; then

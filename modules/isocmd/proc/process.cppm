@@ -49,6 +49,7 @@ void updateDatabaseAfterOperations(
 
 /**
 - Renders a visual progress bar based on byte count and task completion.
+- An optional skipped-task counter advances progress without adding successes.
  */
 void displayProgressBarWithSize(
     std::atomic<std::size_t>* completedBytes,
@@ -59,7 +60,8 @@ void displayProgressBarWithSize(
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,
-    const std::string& header = ""
+    const std::string& header = "",
+    std::atomic<std::size_t>* skippedTasks = nullptr
 );
 
 /**
@@ -78,7 +80,8 @@ std::thread launchProgressBar(
     std::atomic<bool>* isComplete,
     bool* verbose,
     const std::string& operation,
-    const std::string& header
+    const std::string& header,
+    std::atomic<std::size_t>* skippedTasks = nullptr
 );
 
 // --- Metadata & Calculation Helpers ---

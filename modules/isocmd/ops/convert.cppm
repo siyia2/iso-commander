@@ -20,6 +20,7 @@ struct ConversionBatchData {
 	std::atomic<std::size_t>* completedBytes = nullptr;
 	std::atomic<std::size_t>* completedTasks = nullptr;
 	std::atomic<std::size_t>* failedTasks = nullptr;
+	std::atomic<std::size_t>* skippedTasks = nullptr;
 
 	std::vector<std::string>* successfulOutputPaths = nullptr;
 	std::mutex* outPathsMutex = nullptr;
@@ -48,13 +49,14 @@ struct ConversionMode {
  *
  * For each source path the ISO is written next to the source with the
  * extension replaced by `.iso`. Missing or unreadable sources are recorded as
- * failures, and jobs whose destination ISO already exists are skipped (counted
- * as completed). Iteration stops early when the global cancellation flag is set.
+ * failures, and jobs whose destination ISO already exists are counted
+ * separately as skipped. Iteration stops early when cancellation is requested.
  *
  * @param imageFiles Source image paths to convert.
  * @param mode       Selects the conversion backend.
  * @param batchData  Caller-owned counters and optional output collection.
- *                   @c completedTasks and @c failedTasks must be non-null.
+ *                   @c completedTasks, @c failedTasks and @c skippedTasks
+ *                   must be non-null.
  */
 void convertToISO(
     const std::vector<std::string>& imageFiles,

@@ -126,6 +126,7 @@ static std::string printOperationHeader(std::size_t taskCount,
  * @param files          Master list of available ISO file paths.
  * @param completedTasks Atomic counter incremented for each completed file.
  * @param failedTasks    Atomic counter incremented for each failed file.
+ * @param skippedTasks   Atomic counter incremented for each skipped mount.
  * @param isUnmount      `true` to unmount ISOs, `false` to mount ISOs.
  */
 static void runWorkerChunks(ThreadPool& pool,
@@ -133,13 +134,14 @@ static void runWorkerChunks(ThreadPool& pool,
                             const std::vector<std::string>& files,
                             std::atomic<std::size_t>& completedTasks,
                             std::atomic<std::size_t>& failedTasks,
+                            std::atomic<std::size_t>& skippedTasks,
                             bool isUnmount) {
 
 	std::vector<std::future<void>> futures;
 	futures.reserve(indexChunks.size());
 
 	for (const auto& idxChunk : indexChunks) {
-		futures.emplace_back(pool.enqueue([idxChunk, &files, &completedTasks, &failedTasks, isUnmount]() {
+		futures.emplace_back(pool.enqueue([idxChunk, &files, &completedTasks, &failedTasks, &skippedTasks, isUnmount]() {
 
 			std::vector<std::string> chunkStr;
 			chunkStr.reserve(idxChunk.size());
@@ -149,7 +151,7 @@ static void runWorkerChunks(ThreadPool& pool,
 			if (isUnmount) {
 				unmountISO(chunkStr, &completedTasks, &failedTasks, false);
 			} else {
-				mountIsoFiles(chunkStr, &completedTasks, &failedTasks, false);
+				mountIsoFiles(chunkStr, &completedTasks, &failedTasks, &skippedTasks, false);
 			}
 
 		}));
@@ -214,15 +216,16 @@ void processInputForMountOrUmount(const std::string& input,
 
 	std::atomic<std::size_t> completedTasks(0);
 	std::atomic<std::size_t> failedTasks(0);
+	std::atomic<std::size_t> skippedTasks(0);
 	std::atomic<bool> isProcessingComplete(false);
 
 	std::thread progressThread = launchProgressBar(
 	    nullptr, static_cast<std::size_t>(0),
 	    &completedTasks, &failedTasks, selectedIndices.size(),
 	    &isProcessingComplete, &verbose,
-	    coloredProcess, header);
+	    coloredProcess, header, isUnmount ? nullptr : &skippedTasks);
 
-	runWorkerChunks(pool, indexChunks, files, completedTasks, failedTasks, isUnmount);
+	runWorkerChunks(pool, indexChunks, files, completedTasks, failedTasks, skippedTasks, isUnmount);
 
 	if (completedTasks == 0 && isUnmount) {
 		umountMvRmBreak = false;

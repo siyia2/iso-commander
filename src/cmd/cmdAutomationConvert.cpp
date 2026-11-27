@@ -152,6 +152,7 @@ static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
                               std::atomic<std::size_t>& completedBytes,
                               std::atomic<std::size_t>& completedTasks,
                               std::atomic<std::size_t>& failedTasks,
+                              std::atomic<std::size_t>& skippedTasks,
                               std::vector<std::string>& successfulOutputs,
                               std::mutex& outMutex) {
 
@@ -172,7 +173,7 @@ static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
 	for (std::size_t t = 0; t < numThreads; ++t) {
 		futures.emplace_back(pool.enqueue(
 		    [&tasks, &nextTask,
-		     &completedBytes, &completedTasks, &failedTasks,
+		     &completedBytes, &completedTasks, &failedTasks, &skippedTasks,
 		     &successfulOutputs, &outMutex]() {
 
 				while (!GlobalState::g_operationCancelled.load()) {
@@ -194,6 +195,7 @@ static void runConvertWorkers(const std::vector<ConversionTask>& tasks,
 						.completedBytes = &completedBytes,
 						.completedTasks = &completedTasks,
 						.failedTasks = &failedTasks,
+						.skippedTasks = &skippedTasks,
 						.successfulOutputPaths = &successfulOutputs,
 						.outPathsMutex = &outMutex
 					};
@@ -316,6 +318,7 @@ static std::size_t calculateConversionTotalBytes(
  * @param totalBytes     Estimated total output size in bytes.
  * @param completedTasks Atomic counter tracking successful conversions.
  * @param failedTasks    Atomic counter tracking failed conversions.
+ * @param skippedTasks   Atomic counter tracking skipped conversions.
  * @param totalTasks     Total number of conversion tasks.
  * @param isComplete     Atomic flag indicating completion of all workers.
  * @param showVerbose    Shared flag indicating whether detailed results
@@ -330,6 +333,7 @@ static std::thread startConversionProgress(
     std::size_t totalBytes,
     std::atomic<std::size_t>& completedTasks,
     std::atomic<std::size_t>& failedTasks,
+    std::atomic<std::size_t>& skippedTasks,
     std::size_t totalTasks,
     std::atomic<bool>& isComplete,
     bool& showVerbose) {
@@ -357,7 +361,7 @@ static std::thread startConversionProgress(
 	    &completedBytes, totalBytes,
 	    &completedTasks, &failedTasks, totalTasks,
 	    &isComplete, &showVerbose,
-	    coloredProcess, header);
+	    coloredProcess, header, &skippedTasks);
 
 }
 
@@ -416,7 +420,7 @@ static std::vector<ConversionTask> buildConversionTasks(
  * @brief Displays detailed results of the conversion operation.
  *
  * Outputs completed, skipped, and failed operation messages, followed
- * by a summary of successful and failed conversions.
+ * by a summary of successful, skipped and failed conversions.
  *
  * Detailed output is displayed only when silent mode is disabled and
  * the progress interface has explicitly requested verbose results.
@@ -428,12 +432,14 @@ static std::vector<ConversionTask> buildConversionTasks(
  * @param showVerbose    Whether detailed operation results were requested.
  * @param completedTasks Atomic counter containing successful conversions.
  * @param failedTasks    Atomic counter containing failed conversions.
+ * @param skippedTasks   Atomic counter containing skipped conversions.
  */
 static void displayConversionResults(
     bool silentMode,
     bool showVerbose,
     const std::atomic<std::size_t>& completedTasks,
-    const std::atomic<std::size_t>& failedTasks) {
+    const std::atomic<std::size_t>& failedTasks,
+    const std::atomic<std::size_t>& skippedTasks) {
 
 	if (silentMode || !showVerbose)
 	    return;
@@ -453,6 +459,7 @@ static void displayConversionResults(
 
 	std::cout << "\nConversion summary:\n"
 	          << " Successful: " << completedTasks.load() << "\n"
+	          << " Skipped:    " << skippedTasks.load() << "\n"
 	          << " Failed:     " << failedTasks.load()
 	          << UI::Palette::Reset << "\n\n";
 
@@ -547,7 +554,7 @@ int handleConvert(const ParsedArgs& args) {
 	            .append(images.size() == 1 ? "" : "s")
 	            .append("; Attempting to convert...\n"));
 
-	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0}, skippedTasks{0};
 	std::atomic<bool> isComplete{false};
 
 	std::vector<std::string> successfulOutputs;
@@ -565,6 +572,7 @@ int handleConvert(const ParsedArgs& args) {
 	    totalBytes,
 	    completedTasks,
 	    failedTasks,
+	    skippedTasks,
 	    images.size(),
 	    isComplete,
 	    showVerbose);
@@ -578,6 +586,7 @@ int handleConvert(const ParsedArgs& args) {
 	    completedBytes,
 	    completedTasks,
 	    failedTasks,
+	    skippedTasks,
 	    successfulOutputs,
 	    outMutex);
 
@@ -591,7 +600,8 @@ int handleConvert(const ParsedArgs& args) {
 	    args.silentMode,
 	    showVerbose,
 	    completedTasks,
-	    failedTasks);
+	    failedTasks,
+	    skippedTasks);
 
 	return getConversionExitStatus(
 	    failedTasks.load(),

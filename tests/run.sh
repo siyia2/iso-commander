@@ -106,9 +106,27 @@ cmp expected.iso "$output" || cli_fail 'incorrect ISO bytes'; cli_pass
 printf 'keep-existing-output' > "$output"
 cli_run 'c2iso: verbose existing output skip' 0 c2iso "$sample"
 cli_record stdout '– c2iso: ' 'sample.img' 'ISOalrExists'
-cli_lacks stdout 'IMG → ISO'; cli_summary Conversion 1 0; cli_empty stderr
+cli_lacks stdout 'IMG → ISO'; cli_summary Conversion 0 0 1; cli_empty stderr
+cli_has stdout "] 100% (0/1)"; cli_has stdout "Processed: 0.00 B/"
 [ "$(cat "$output")" = 'keep-existing-output' ] || cli_fail 'existing ISO overwritten'; cli_pass
-rm "$output"
+
+cli_run 'c2iso: mixed skip and failure' 1 c2iso "$sample" "$PWD/broken.img"
+cli_summary Conversion 0 1 1; cli_has stdout '] 100% (0/2)'
+cli_record stdout '– c2iso: ' 'sample.img' 'ISOalrExists'
+cli_record stdout '✗ c2iso: ' 'broken.img' '  Failed'
+[ ! -e broken.iso ] || cli_fail 'partial ISO retained'; cli_pass
+
+cp "$sample" other.img
+cli_run 'c2iso: mixed success and skip' 0 c2iso "$sample" "$PWD/other.img"
+cli_summary Conversion 1 0 1; cli_has stdout '] 100% (1/2)'
+cmp expected.iso other.iso || cli_fail 'incorrect ISO bytes'; cli_pass
+rm other.iso
+cli_run 'c2iso: mixed success, skip and failure' 1 c2iso "$sample" "$PWD/other.img" "$PWD/broken.img"
+cli_summary Conversion 1 1 1; cli_has stdout '] 100% (1/3)'
+cmp expected.iso other.iso || cli_fail 'incorrect ISO bytes'
+[ ! -e broken.iso ] || cli_fail 'partial ISO retained'
+[ "$(cat "$output")" = 'keep-existing-output' ] || cli_fail 'existing ISO overwritten'; cli_pass
+rm "$output" other.img other.iso
 
 cli_run 'c2iso: invalid input paths' 1 c2iso "$PWD/missing.img" "$PWD/unsupported.txt" "$PWD/not-image"
 cli_has stderr "Warning: '$PWD/missing.img' does not exist, skipping."

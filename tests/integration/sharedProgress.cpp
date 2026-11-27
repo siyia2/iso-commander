@@ -22,7 +22,7 @@ namespace isocmd_tests {
 
 			GlobalState::g_operationCancelled = false;
 			setupSignalHandlerCancellations();
-			std::atomic<std::size_t> completed{3}, failed{2}, bytes{200};
+			std::atomic<std::size_t> completed{3}, failed{2}, skipped{1}, bytes{200};
 			std::atomic<bool> done{false};
 			bool verbose = true;
 			std::jthread worker([&](std::stop_token stop) {
@@ -31,20 +31,21 @@ namespace isocmd_tests {
 				}
 				if (stop.stop_requested()) return;
 				completed = 4;
-				failed = 6;
+				failed = 4;
+				skipped = 2;
 				bytes = 900;
 				// Allow several redraws before cleanup finishes.
 				std::this_thread::sleep_for(std::chrono::milliseconds(300));
 				done.store(true, std::memory_order_release);
 			});
-			const std::string operation = trackBytes ? "cp" : "mount";
+			const std::string operation = trackBytes ? "c2iso" : "mount";
 			const std::string header = "\nProcessing " + operation + "\n";
 			std::cout << header << std::flush;
 			displayProgressBarWithSize(trackBytes ? &bytes : nullptr, trackBytes ? 1000 : 0,
-			                           &completed, &failed, 10, &done, &verbose, operation, header);
+			                           &completed, &failed, 10, &done, &verbose, operation, header, &skipped);
 			worker.join();
 			CHECK(!verbose && GlobalState::g_operationCancelled);
-			CHECK(completed == 4 && failed == 6 && bytes == 900);
+			CHECK(completed == 4 && failed == 4 && skipped == 2 && bytes == 900);
 
 		}
 
@@ -64,6 +65,22 @@ namespace isocmd_tests {
 
 		}
 
+		/// A no-op conversion must reach 100% without claiming successful work or bytes.
+		void skippedProgress() {
+
+			GlobalState::g_operationCancelled = false;
+			setupSignalHandlerCancellations();
+			std::atomic<std::size_t> completed{0}, failed{0}, skipped{10}, bytes{0};
+			std::atomic<bool> done{true};
+			bool verbose = true;
+			const std::string header = "\nProcessing c2iso\n";
+			std::cout << header << std::flush;
+			displayProgressBarWithSize(&bytes, 1000, &completed, &failed, 10,
+			                           &done, &verbose, "c2iso", header, &skipped);
+			CHECK(!verbose);
+
+		}
+
 	}
 
 	int sharedProgressChild() {
@@ -74,6 +91,7 @@ namespace isocmd_tests {
 			interruptedProgress(true);
 			immediateProgress(true);
 			immediateProgress(false);
+			skippedProgress();
 			GlobalState::g_operationCancelled = false;
 			std::cout << "TEST-SHARED-PROGRESS-PASS\n" << std::flush;
 			return 0;

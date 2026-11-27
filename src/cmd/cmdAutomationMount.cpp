@@ -234,13 +234,15 @@ static bool collectIsosAndValidatePaths(const ParsedArgs& args,
  * @param completedBytes Atomic counter tracking task progress for the progress bar.
  * @param completedTasks Atomic counter tracking successful mount operations.
  * @param failedTasks Atomic counter tracking failed mount operations.
+ * @param skippedTasks Atomic counter tracking already-mounted images.
  * @return The final value of the atomic task index upon thread completion.
  */
 static std::size_t runMountThreadPool(const std::vector<std::string>& files,
                                  bool silentMode,
                                  std::atomic<std::size_t>& completedBytes,
                                  std::atomic<std::size_t>& completedTasks,
-                                 std::atomic<std::size_t>& failedTasks) {
+                                 std::atomic<std::size_t>& failedTasks,
+                                 std::atomic<std::size_t>& skippedTasks) {
 
 	ThreadPool& pool = getStaticThreadPool();
 	const std::size_t poolSize = pool.threadCount();
@@ -257,7 +259,7 @@ static std::size_t runMountThreadPool(const std::vector<std::string>& files,
 	for (std::size_t t = 0; t < numThreads; ++t) {
 		futures.emplace_back(pool.enqueue(
 		    [&files, &nextTask,
-		     &completedBytes, &completedTasks, &failedTasks,
+		     &completedBytes, &completedTasks, &failedTasks, &skippedTasks,
 		     silentMode]() {
 
 				while (!GlobalState::g_operationCancelled.load()) {
@@ -267,7 +269,7 @@ static std::size_t runMountThreadPool(const std::vector<std::string>& files,
 					    break;
 
 					mountIsoFiles(std::vector<std::string>{files[i]},
-					              &completedTasks, &failedTasks,
+					              &completedTasks, &failedTasks, &skippedTasks,
 					              silentMode);
 
 					completedBytes.fetch_add(1);
@@ -292,12 +294,14 @@ static std::size_t runMountThreadPool(const std::vector<std::string>& files,
  * @param nextTaskVal The task index up to which workers successfully claimed tasks.
  * @param completedTasks Atomic counter tracking successful mount operations.
  * @param failedTasks Atomic counter tracking failed mount operations.
+ * @param skippedTasks Atomic counter tracking already-mounted images.
  * @param silentMode Whether silent output mode is enabled.
  */
 static void handleCancelledLeftovers(const std::vector<std::string>& files,
                                      std::size_t nextTaskVal,
                                      std::atomic<std::size_t>& completedTasks,
                                      std::atomic<std::size_t>& failedTasks,
+                                     std::atomic<std::size_t>& skippedTasks,
                                      bool silentMode) {
 
 	if (GlobalState::g_operationCancelled.load()) {
@@ -305,7 +309,7 @@ static void handleCancelledLeftovers(const std::vector<std::string>& files,
 		if (first < files.size())
 		    mountIsoFiles(
 		        std::vector<std::string>(files.begin() + first, files.end()),
-		        &completedTasks, &failedTasks, silentMode);
+		        &completedTasks, &failedTasks, &skippedTasks, silentMode);
 	}
 
 }
@@ -313,17 +317,19 @@ static void handleCancelledLeftovers(const std::vector<std::string>& files,
 /**
  * @brief Displays detailed operation logs and the final execution summary.
  *
- * Outputs completed, skipped, and failed logs alongside the final success/failure counts
+ * Outputs completed, skipped, and failed logs alongside the final success/skip/failure counts
  * if requested via the progress interface.
  *
  * @param silentMode Whether output is silent.
  * @param showVerbose Whether detailed logs were requested.
  * @param completedTasks Atomic counter tracking successful mount operations.
  * @param failedTasks Atomic counter tracking failed mount operations.
+ * @param skippedTasks Atomic counter tracking already-mounted images.
  */
 static void showMountSummary(bool silentMode, bool showVerbose,
                              std::atomic<std::size_t>& completedTasks,
-                             std::atomic<std::size_t>& failedTasks) {
+                             std::atomic<std::size_t>& failedTasks,
+                             std::atomic<std::size_t>& skippedTasks) {
 
 	if (!silentMode && showVerbose) {
 		SyncOutput sync;
@@ -344,6 +350,7 @@ static void showMountSummary(bool silentMode, bool showVerbose,
 
 		std::cout << "\nMount summary:\n"
 		          << " Successful: " << completedTasks.load() << "\n"
+		          << " Skipped:    " << skippedTasks.load() << "\n"
 		          << " Failed:     " << failedTasks.load()
 		          << UI::Palette::Reset << "\n\n";
 	}
@@ -409,7 +416,7 @@ int handleMount(const ParsedArgs& args) {
 	            .append(isoFiles.size() == 1 ? "" : "s")
 	            .append("; Attempting to mount...\n"));
 
-	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0};
+	std::atomic<std::size_t> completedBytes{0}, completedTasks{0}, failedTasks{0}, skippedTasks{0};
 	std::atomic<bool> isComplete{false};
 	bool showVerbose = false;
 
@@ -439,19 +446,19 @@ int handleMount(const ParsedArgs& args) {
 		    &completedBytes, totalTasks,
 		    &completedTasks, &failedTasks, totalTasks,
 		    &isComplete, &showVerbose,
-		    coloredProcess, header);
+		    coloredProcess, header, &skippedTasks);
 	}
 
-	std::size_t nextTaskVal = runMountThreadPool(files, args.silentMode, completedBytes, completedTasks, failedTasks);
+	std::size_t nextTaskVal = runMountThreadPool(files, args.silentMode, completedBytes, completedTasks, failedTasks, skippedTasks);
 
 	isComplete.store(true, std::memory_order_release);
 
 	if (barThread.joinable())
 	    barThread.join();
 
-	handleCancelledLeftovers(files, nextTaskVal, completedTasks, failedTasks, args.silentMode);
+	handleCancelledLeftovers(files, nextTaskVal, completedTasks, failedTasks, skippedTasks, args.silentMode);
 
-	showMountSummary(args.silentMode, showVerbose, completedTasks, failedTasks);
+	showMountSummary(args.silentMode, showVerbose, completedTasks, failedTasks, skippedTasks);
 
 	return (failedTasks.load() == 0 &&
 	        !hasErrors &&
