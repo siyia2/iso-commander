@@ -271,7 +271,7 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
 		"   • Quick Return  : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
 		if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(tc.keysYellow) + "Ctrl+c\n";
 		keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(tc.keysYellow) + "Ctrl+u\n";
-		keys += std::string(UI::Palette::BoldReset) + "   • Declutter     : " + std::string(tc.keysYellow) + "Ctrl+l";
+		keys += std::string(UI::Palette::BoldReset) + "   • Clear Screen  : " + std::string(tc.keysYellow) + "Ctrl+l";
 		printSection(tc, "\n1. Hotkeys:", keys);
 
 		std::string paths =
@@ -339,7 +339,7 @@ void helpMappings() {
 		    "   • Exit         : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
 		    "   • Quick Return : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
 		    "   • Clear Line   : " + std::string(tc.keysYellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Declutter    : " + std::string(tc.keysYellow) + "Ctrl+l");
+		    "   • Clear Screen : " + std::string(tc.keysYellow) + "Ctrl+l");
 
 		printSection(tc, "\n2. Selecting Pairs (↵):",
 		    "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"
