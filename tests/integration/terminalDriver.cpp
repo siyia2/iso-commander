@@ -1364,7 +1364,7 @@ namespace isocmd_tests {
 
 	static void checkInitialProgress(const std::string& frame) {
 
-		CHECK(has(frame,"▄░░░░") && has(frame,"[⣶⣶⡆  ]") && has(frame,"▇▇▇▇▄"));
+		CHECK(has(frame,"▄░░░░") && has(frame,"[⠶⠶⠆  ]") && has(frame,"▇▇▇▇▄"));
 		CHECK(has(frame,"10%") && has(frame,"] 50%") && !has(frame,"CHK") && has(frame,"99%") && has(frame,"12.3 MB/s"));
 		CHECK(has(frame,"very-long-fixture-image-for-resize-testing.iso"));
 		checkSpeedSpacing(frame);
