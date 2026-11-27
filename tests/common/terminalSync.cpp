@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Emits test-only PTY synchronization markers at editor and pause boundaries.
+ */
+
 #include <errno.h>
 #include <poll.h>
 #include <signal.h>
@@ -38,8 +44,8 @@ void isocmd_tests::terminal_sync::lineEditorStarted() noexcept {
 extern "C" {
 int __real_ppoll(struct pollfd*, nfds_t, const struct timespec*, const sigset_t*);
 
-// The pause implementation is the only project caller of ppoll. It enters
-// this wait after drawing the prompt and activating terminal/signal guards.
+// The pause implementation enters this ppoll wait after drawing the prompt
+// and activating terminal and signal guards.
 // A resize interrupts the wait and repaints before the next call.
 int __wrap_ppoll(struct pollfd* fds, nfds_t count, const struct timespec* timeout,
                  const sigset_t* mask) {

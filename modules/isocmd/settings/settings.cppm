@@ -96,7 +96,7 @@ ConfigEntry numericEntry(std::string key, std::string def, std::string comment,
 extern const std::vector<ConfigEntry> CONFIG_ORDERED_DEFAULTS;
 
 /**
- * CONFIGURATION EFFECTS & PERSISTENCE (settingsEffect.cpp)
+ * CONFIGURATION EFFECTS & PERSISTENCE (applyConfig.cpp, setupOptions.cpp)
  */
 bool writeConfig(const std::string& configPath, const std::map<std::string, std::string>& config);
 bool flushCache(const std::string& configPath);

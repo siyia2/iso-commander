@@ -10,7 +10,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.uiState;
@@ -742,7 +741,7 @@ void repaintCompletionListing() {
 /**
  * @brief Custom native-editor hook to display completions with pagination and color themes.
  *
- * @param matches  Array of completion matches in line-editor format: matches[0] is the
+ * @param matches  Vector of completion matches in line-editor format: matches[0] is the
  *                 common prefix of all completions (used for pagination state tracking,
  *                 not displayed), and matches[1..num_matches] are the actual completion
  *                 candidates. Note that matches[1] is interpreted as a filesystem path
@@ -752,7 +751,7 @@ void repaintCompletionListing() {
  * @param num_matches  Total number of completion candidates (excluding matches[0]).
  * @param max_length   Length of the longest match string as provided by the line editor.
  *                     Unused by this implementation — column widths are computed
- *                     directly from the match array.
+ *                     directly from the match vector.
  */
 void customListingsFunction(const std::vector<std::string>& matches, int num_matches, int max_length) {
 
@@ -1108,8 +1107,7 @@ int ignoreEditorKeybinding(int, int) {
  * completion mode flag is cleared so a subsequent loop iteration can restore
  * the buffer cleanly.
  *
- * @param ignore1 Unused parameter (typically 0).
- * @param ignore2 Unused parameter (typically 0).
+ * Both key-handler parameters are unused.
  * @return Always 0.
  */
 int clear_screen_and_buffer(int, int) {
@@ -1268,7 +1266,6 @@ int completePrompt(int ignore, int invoking_key)
 	}
 
 	list_shown_during_completion = false;
-
 
 	return ret;
 

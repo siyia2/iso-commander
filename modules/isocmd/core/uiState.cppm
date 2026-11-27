@@ -13,12 +13,12 @@ struct RefreshState;
 /**
  * @brief Identifies which UI surface, if any, has a pending asynchronous refresh.
  *
- * Background threads cannot safely call Line editor functions or write to the
+ * Background threads cannot safely call line editor functions or write to the
  * terminal directly (the line editor is not thread-safe). Instead, they publish a
  * @c PendingRefreshKind via @c GlobalState::g_pendingRefreshKind to signal
- * that a redraw is needed. The main thread's Line editor event hook
+ * that a redraw is needed. The main thread's line editor event hook
  * (@c checkPendingRefresh, installed via @c editorEventHook) polls this value
- * and performs the actual redraw itself, ensuring all Line editor API calls
+ * and performs the actual redraw itself, ensuring all line editor API calls
  * originate from the single thread that owns the line editor's internal state.
  */
 enum class PendingRefreshKind {

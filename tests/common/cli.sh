@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Shared CLI capture, exit-status and output assertions.
+
 # Source after setup_sandbox; caller sets app to an absolute executable path.
 # Preserve raw streams for diagnostics and strip ANSI CSI and line-editor nonprinting delimiters for assertions.
 cli_fail() {

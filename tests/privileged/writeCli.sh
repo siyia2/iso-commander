@@ -1,5 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Exercises real raw USB CLI writes on two verified disposable loop devices.
+
 # Only invoked by run.sh; never accepts a user-selected disk.
 set -eu
 sandbox=${ISOCMD_TEST_SANDBOX:?}

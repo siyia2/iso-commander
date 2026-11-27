@@ -30,24 +30,23 @@ std::size_t utf8Width(const std::string& s);
  * escapes count as 0 columns; every other UTF-8 code point counts as 1.
  *
  * @param s String that may contain colour/formatting escapes.
- * @return Visible columns @p s occupies when printed.
+ * @return Code-point count excluding ANSI CSI sequences (approximate display width).
  */
 std::size_t visibleWidth(const std::string& s);
 
 /**
- * @brief Cuts a string to at most @p maxCols visible columns.
+ * @brief Clips text to at most @p maxCols non-CSI UTF-8 code points.
  *
  * ANSI CSI escape sequences are copied through untouched and do not count
  * toward the budget, so colours opened before the cut remain effective past
  * it (the caller handles any reset it needs). UTF-8 multi-byte sequences
- * are never split: an escape or code point that would cross the limit is
- * dropped whole.
+ * are not split. CSI sequences encountered before the next over-budget
+ * code point are retained, including any trailing CSI sequences.
  *
  * @param s       Input string, possibly with ANSI escapes and UTF-8.
- * @param maxCols Maximum visible columns to keep. 0 returns an empty string;
- *                escapes appearing before the first visible character are
- *                still emitted.
- * @return The longest prefix of @p s whose visible width is <= @p maxCols.
+ * @param maxCols Maximum code points to keep. 0 keeps only any leading
+ *                CSI sequences.
+ * @return Prefix of @p s within the approximate width budget.
  */
 std::string clipToWidth(const std::string& s, std::size_t maxCols);
 
@@ -61,16 +60,16 @@ std::string clipToWidth(const std::string& s, std::size_t maxCols);
  * whole UTF-8 code points, so a multi-byte sequence is never split.
  *
  * @par Stem floor
- * MIN_STEM is 4 columns, so on very narrow terminals the returned string
- * can exceed @p maxCols by up to 5 columns (4 stem + 1 "…") when an
- * extension is present, or by 1 column when it is not. Callers should clip
- * the containing line with clipToWidth to prevent wrap.
+ * MIN_STEM is 4 code points, so the returned string can exceed @p maxCols
+ * on narrow terminals: up to 9 code points with an ISO extension, or
+ * 5 without it. A stem of 4 or fewer code points is returned unchanged.
+ * Callers should clip the containing line with clipToWidth.
  *
  * @param name    Filename to shorten (may be empty, with or without a ".iso"
  *                extension).
- * @param maxCols Column budget the result should fit within; 0 forces the
- *                stem floor and returns "….iso" or "…".
- * @return @p name unchanged if it fits, otherwise the shortened form.
+ * @param maxCols Approximate column budget; 0 uses the minimum stem length.
+ * @return @p name unchanged if it fits or the stem is too short to truncate;
+ *         otherwise the shortened form, preserving the original extension case.
  */
 std::string truncateIsoName(const std::string& name, std::size_t maxCols);
 

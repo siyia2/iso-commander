@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Checks filter grammar and compares randomized results with a scalar reference.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.filter.filter;
@@ -6,6 +12,9 @@ import isocmd.util.stringManipulation;
 
 namespace isocmd_tests {
 
+	/**
+	 * @brief Checks deterministic filter grammar and matching cases.
+	 */
 	void filterGrammar() {
 
 		const std::vector<std::string> files{
@@ -21,21 +30,21 @@ namespace isocmd_tests {
 			CHECK(filterFilesIndices(files, q, &wrongSize) == expected);
 
 		};
-		match("ubuntu", {0,1,8});
-		match("Ubuntu", {0,8});
-		match("ubuntu&24;fedora", {1,2,3});
-		match("ubuntu;fedora&!boot", {0,1,3});
-		match("!boot", {0,1,3,4,5,6,7});
+		match("ubuntu", {0, 1, 8});
+		match("Ubuntu", {0, 8});
+		match("ubuntu&24;fedora", {1, 2, 3});
+		match("ubuntu;fedora&!boot", {0, 1, 3});
+		match("!boot", {0, 1, 3, 4, 5, 6, 7});
 		match("a\\&b", {4});
 		match("a\\;b", {5});
 		match("\\!bang", {6});
 		match("path\\\\name", {7});
 		match("ubuntu&&24;", {1});
-		match(";!&", {0,1,2,3,4,5,6,7,8});
+		match(";!&", {0, 1, 2, 3, 4, 5, 6, 7, 8});
 		match("", {});
 		match("nonexistent", {});
 		CHECK(filterFilesIndices({}, "ubuntu").empty());
-		CHECK(filterFilesIndicesSubset(files, {8,1,3,0}, "ubuntu", nullptr) == Indices({8,1,0}));
+		CHECK(filterFilesIndicesSubset(files, {8, 1, 3, 0}, "ubuntu", nullptr) == Indices({8, 1, 0}));
 		bool trailing = false;
 		buildQueryGroups("ubuntu;", &trailing);
 		CHECK(trailing);
@@ -47,6 +56,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Compares randomized filter results with a scalar reference implementation.
+	 */
 	void filterRandom() {
 
 		// Independent scalar oracle for simple terms, including SIMD boundary lengths.

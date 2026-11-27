@@ -12,10 +12,10 @@ export extern "C++" {
 //=======================================
 namespace GlobalMutexes {
 
-	// Mutex Protection For Verbose Sets
+	// Protects verbose result sets.
 	inline std::mutex globalSetsMutex;
 
-	// Mutex Protection For file counts in search.cpp
+	// Protects file counts in searchImage.cpp and searchIso.cpp.
 	inline std::mutex couNtMutex;
 
 	// --- Global State Mutexes ---

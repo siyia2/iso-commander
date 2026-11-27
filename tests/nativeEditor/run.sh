@@ -1,5 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Builds and runs standalone native editor PTY tests in two locales.
+
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 tmp=$(mktemp -d)

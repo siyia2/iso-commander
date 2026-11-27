@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Defines inode-specific fault plans and their scoped activation.
+ */
+
 #pragma once
 
 #include <errno.h>
@@ -8,8 +14,8 @@
 // All POSIX headers must precede the shared standard-library import.
 #include "testHarness.h"
 
-// Test-only GNU linker wrappers. A rule matches one explicitly registered inode
-// (and device identity), never an arbitrary descriptor or a path prefix.
+// A rule matches one explicitly registered file/device identity,
+// never an arbitrary descriptor or a path prefix.
 namespace isocmd_tests::io_faults {
 
 	enum class Call { Read, Write, Pwrite, Fsync, SyncRange, Fallocate, Truncate, Close, Count };

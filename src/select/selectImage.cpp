@@ -213,7 +213,7 @@ namespace {
 			/**
 			 * @brief Repaints the list on terminal resize.
 			 *
-			 * Runs on the Line editor thread (@c editorEventHook) and uses the same
+			 * Runs on the line editor thread (@c editorEventHook) and uses the same
 			 * display step as the main loop. A throwaway sort flag keeps a
 			 * resize from re-sorting the list.
 			 */

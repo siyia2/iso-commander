@@ -166,11 +166,12 @@ bool isFlashDrive(const std::string& devicePath, const DeviceDiscoveryPaths& pat
 /**
  * @brief Enumerates removable USB block devices visible in /sys/block.
  *
- * Skips loop devices, RAM disks, zram devices, and partition entries (names
- * ending in a digit). A device is included only when its removable sysfs
+ * Skips loop devices, RAM disks, zram devices, and any name ending in a
+ * digit. A device is included only when its removable sysfs
  * attribute reads "1" and isFlashDrive() confirms it is USB-attached.
  *
- * @return Absolute device paths such as /dev/sdb.
+ * @param paths Filesystem roots for device discovery.
+ * @return Device paths under paths.dev (normally /dev).
  */
 std::vector<std::string> getRemovableDevices(const DeviceDiscoveryPaths& paths) {
 
@@ -218,7 +219,9 @@ std::vector<std::string> getRemovableDevices(const DeviceDiscoveryPaths& paths) 
  * with the same base and continue with a digit.
  *
  * @param device Absolute block-device path (e.g. /dev/sdb).
- * @return true if the device or a partition of it is mounted.
+ * @param paths Filesystem roots for mount and device discovery.
+ * @return true on a matching mount entry; false if none is found or the mount
+ *         table cannot be opened.
  */
 bool isDeviceMounted(const std::string& device, const DeviceDiscoveryPaths& paths) {
 

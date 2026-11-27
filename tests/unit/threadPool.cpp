@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks concurrent task execution, callable ownership, futures and shutdown.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.threadpool.threadpool;

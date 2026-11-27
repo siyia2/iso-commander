@@ -20,11 +20,11 @@ inline bool isUsbWriteCancelled(const std::stop_token& token = {}) noexcept {
 
 /// Information about an ISO image file.
 struct IsoInfo {
-	std::string path;          /** Full filesystem path to the ISO file. */
-	std::string filename;      /** Name of the file without path. */
-	std::uint64_t size;             /** Size of the ISO in bytes. */
-	std::string sizeStr;       /** Human-readable size string (e.g., "4.2 GB"). */
-	std::size_t originalIndex;      /** Original sort index for maintaining list order. */
+	std::string path;          ///< Full filesystem path to the ISO file.
+	std::string filename;      ///< Filename without the directory path.
+	std::uint64_t size;        ///< ISO size in bytes.
+	std::string sizeStr;       ///< Human-readable size (e.g., "4.20 GB").
+	std::size_t originalIndex; ///< One-based index in the source list or accepted CLI inputs.
 };
 
 /**
@@ -41,7 +41,7 @@ struct ProgressInfo {
 	std::stop_token cancelToken; // Shared by the batch; never reset after dispatch.
 	std::optional<bool> bufferedWrites; // Snapshot before dispatch; unset for standalone callers.
 	bool verifyRequested = false; // Set before dispatch; immutable while running.
-	std::atomic<bool> verifying{false};
+	std::atomic<bool> verifying{false}; // Readback has started; retained after completion.
 	std::atomic<std::uint64_t> bytesVerified{0};
 
 	std::atomic<bool> writeCompleted{false}; // All writes and final flush succeeded.
@@ -52,17 +52,14 @@ struct ProgressInfo {
 	std::atomic<double> speed{0.0}; // Live write speed, then the final write-only average.
 	std::atomic<double> verificationSpeed{0.0};
 
-
 	ProgressInfo(std::string filename, std::string device, std::string totalSize,
 	             std::string sourcePath);
 
-
 	ProgressInfo(ProgressInfo&& other) noexcept;
-
 
 	ProgressInfo& operator=(ProgressInfo&& other) noexcept;
 
-	// Disable Copying (Atomics cannot be copied)
+	// Disable copying because atomics are not copyable.
 	ProgressInfo(const ProgressInfo&) = delete;
 	ProgressInfo& operator=(const ProgressInfo&) = delete;
 };
@@ -81,9 +78,9 @@ struct ProgressInfo {
  */
 struct WriteSync {
 	std::stop_source cancellation;
-	std::atomic<std::size_t>     completedTasks{0};
-	std::atomic<std::size_t>     finishedTasks{0};   // success OR failure
-	std::mutex              mutex;
+	std::atomic<std::size_t> completedTasks{0}; // Successful tasks.
+	std::atomic<std::size_t> finishedTasks{0};  // Tasks that have returned.
+	std::mutex mutex;
 	std::condition_variable cv;
 };
 

@@ -33,7 +33,6 @@ public:
 	/// Re-establish custom keybindings after a sub-mode overrode them.
 	void restore();
 
-
 	LineEditorKeybindingGuard(const LineEditorKeybindingGuard&) = delete;
 	LineEditorKeybindingGuard& operator=(const LineEditorKeybindingGuard&) = delete;
 };

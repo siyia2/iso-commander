@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Creates and cleans a private test working directory and environment.
+
 # Source after resolving executable paths; this changes cwd and HOME.
 setup_sandbox() {
     sandbox=$(mktemp -d "${TMPDIR:-/tmp}/isocmd-tests.XXXXXX")

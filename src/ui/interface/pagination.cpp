@@ -336,7 +336,7 @@ static bool handleNavigation(const std::string& userInput,
  * Draws the current page, reads a line, and handles in-loop navigation
  * ('PgDn' / 'PgUp' / 'g<num>'); anything else is returned to the caller.
  *
- * Optionally disables Line editor Tab completion for the duration of input,
+ * Optionally disables line editor Tab completion for the duration of input,
  * preventing completion matches from being displayed. The previous Tab
  * binding and completion callback are restored automatically afterward.
  *

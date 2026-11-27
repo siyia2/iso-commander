@@ -111,7 +111,7 @@ namespace {
 
 		/**
 		 * @brief Translates special navigation keys or jump commands into an `EditNav` action.
-		 * @param s Raw Line editor input string or key token (`"PgUp"`, `"PgDn"`, etc.).
+		 * @param s Raw line editor input string or key token (`"PgUp"`, `"PgDn"`, etc.).
 		 * @param pos Current 1-based position within the batch queue.
 		 * @param total Total number of items in the batch queue.
 		 * @param newVal Trimmed input text used to detect `g<number>` jump syntax.
@@ -206,11 +206,11 @@ namespace {
 
 	} // namespace nav
 
-	/// the native line editor configuration, resize-aware prompting, and RAII state guards.
+	/// Native line editor configuration, resize-aware prompting, and RAII state guards.
 	namespace term {
 
 		/**
-		 * @brief line-editor key handler that performs no action and returns success.
+		 * @brief Line-editor key handler that performs no action and returns success.
 		 * @return Always `0`.
 		 */
 		int noopTabHandler(int, int) {
@@ -221,9 +221,9 @@ namespace {
 
 		/**
 		 * @brief Reads a line while registering a repaint callback for terminal resize events.
-		 * @param prompt Formatted Line editor prompt string.
+		 * @param prompt Formatted line editor prompt string.
 		 * @param repaint Callback invoked on resize or editor redraw requests.
-		 * @return Line editor line wrapper containing the entered line or null on EOF/interrupt.
+		 * @return Submitted line, or std::nullopt if no line is returned.
 		 */
 		EditorLine editLineWithRepaint(const std::string& prompt,
 		                           const std::function<void()>& repaint) {
@@ -260,7 +260,7 @@ namespace {
 
 		}
 
-		/// scope guard that restores history navigation and escape bindings on scope exit.
+		/// Scope guard that restores history navigation and escape bindings on scope exit.
 		struct NavBindGuard {
 			bool on; ///< Whether Page Up/Page Down were rebound for batch navigation.
 
@@ -275,7 +275,7 @@ namespace {
 			}
 		};
 
-		/// scope guard that clears active completion state and resets key bindings on exit.
+		/// Scope guard that clears active completion state and resets key bindings on exit.
 		struct CompletionGuard {
 			~CompletionGuard() {
 
@@ -288,7 +288,7 @@ namespace {
 			}
 		};
 
-		/// scope guard that preserves and restores Line editor completion mode flags.
+		/// Scope guard that preserves and restores line editor completion mode flags.
 		struct CompleteModeGuard {
 			int saved = RetainAndRestoreLineEditorBuffer::g_editorCompletionMode;
 
@@ -381,7 +381,7 @@ namespace {
 		};
 
 		/**
-		 * @brief Builds the main editor selection prompt with Line editor non-printing markers.
+		 * @brief Builds the main editor selection prompt with line editor non-printing markers.
 		 * @param tc Active theme color palette.
 		 * @return Formatted prompt string.
 		 */

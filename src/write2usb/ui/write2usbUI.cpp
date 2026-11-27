@@ -4,7 +4,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
@@ -432,7 +431,7 @@ namespace {
 
 	}
 
-	/// Clears any temporary Line editor startup hook installed for input prefilling.
+	/// Clears any temporary line editor startup hook installed for input prefilling.
 	void clearPrefillStartupHook()
 	{
 
@@ -463,7 +462,7 @@ namespace {
 	 *
 	 * Disables `SIGINT` and `Ctrl+D` before waiting for acknowledgement when validation fails.
 	 *
-	 * @param devicePrompt Rendered Line editor prompt string.
+	 * @param devicePrompt Rendered line editor prompt string.
 	 * @param rawInput Raw user input string to re-display alongside the error message.
 	 * @param messages List of parse or validation error messages to render.
 	 * @param wt Active write theme configuration.

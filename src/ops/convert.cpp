@@ -253,7 +253,7 @@ namespace {
 } // namespace
 
 /**
- * @file convert_iso.cpp
+ * @file convert.cpp
  * @brief Batch conversion driver for disk-image → ISO workflows.
  */
 

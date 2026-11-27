@@ -1,5 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Stages and validates disposable loop and mount-namespace fixtures.
+
 set -eu
 [ "$#" -eq 2 ] || { echo "Usage: $0 PRIVILEGED_BINARY ISOCMD_BINARY" >&2; exit 2; }
 binary=$(realpath "$1")

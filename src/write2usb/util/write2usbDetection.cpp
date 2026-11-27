@@ -422,8 +422,8 @@ namespace iso_detect {
 	 *     case-insensitive, in ASCII / UTF-16LE / UTF-16BE (the latter is the
 	 *     native Joliet/UDF filename encoding).
 	 *
-	 * The 32 MiB window suffices because the directory entries for bootmgr and
-	 * boot.wim always sit within the first few MiB. The scan exits as soon as
+	 * The 32 MiB window is a heuristic: images with signatures outside that
+	 * window may not be recognized. The scan exits as soon as
 	 * both signature groups have matched, so on typical Windows ISOs most of the
 	 * window is never touched.
 	 *
@@ -432,7 +432,8 @@ namespace iso_detect {
 	 *                 guard and to clamp the mapping window.
 	 * @return true if the header is valid and both signature groups are present.
 	 *
-	 * @note Read-only; the file is not modified.
+	 * @note Read-only; the file is not modified. Matching signatures do not
+	 *       establish the Windows version or bootability.
 	 */
 	bool isWindowsIsoInitialCheck(int fd, off_t fileSize) {
 

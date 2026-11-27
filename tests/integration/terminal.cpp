@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Provides child prompts for PTY input, resize and restoration tests.
+ */
+
 #include <stdio.h>
 #include <signal.h>
 #include "../common/testHarness.h"
@@ -8,6 +13,7 @@ import isocmd.input.lineEditor;
 import isocmd.ui.display.lineEditorResize;
 
 namespace isocmd_tests {
+
 	namespace {
 		int previousHook() {
 
@@ -47,28 +53,28 @@ namespace isocmd_tests {
 	int terminalChild() {
 
 		try {
-			editorEventHook=previousHook;
-			const auto oldTab=editorKeySequenceHandler("\t");
-			const auto oldCatch=editorCatchSigwinch;
-			const auto oldRedisplay=editorRedisplayHook;
+			editorEventHook = previousHook;
+			const auto oldTab = editorKeySequenceHandler("\t");
+			const auto oldCatch = editorCatchSigwinch;
+			const auto oldRedisplay = editorRedisplayHook;
 			struct sigaction oldWinch{}, after{};
-			CHECK(sigaction(SIGWINCH,nullptr,&oldWinch)==0);
-			int repaints=0;
-			auto line=editLineWithResize("TEST> ",[&]{ ++repaints; std::cout << "\nTEST-REPAINT\n" << std::flush; },true);
-			CHECK(line && std::string_view(*line)=="abXcdef"); CHECK(repaints>=4);
-			CHECK(editorEventHook==previousHook && editorCatchSigwinch==oldCatch);
-			CHECK(editorRedisplayHook==oldRedisplay);
-			CHECK(editorKeySequenceHandler("\t")==oldTab);
-			CHECK(sigaction(SIGWINCH,nullptr,&after)==0 && after.sa_handler==oldWinch.sa_handler);
+			CHECK(sigaction(SIGWINCH, nullptr, &oldWinch) == 0);
+			int repaints = 0;
+			auto line = editLineWithResize("TEST> ", [&]{ ++repaints; std::cout << "\nTEST-REPAINT\n" << std::flush; }, true);
+			CHECK(line && std::string_view(*line) == "abXcdef"); CHECK(repaints >= 4);
+			CHECK(editorEventHook == previousHook && editorCatchSigwinch == oldCatch);
+			CHECK(editorRedisplayHook == oldRedisplay);
+			CHECK(editorKeySequenceHandler("\t") == oldTab);
+			CHECK(sigaction(SIGWINCH, nullptr, &after) == 0 && after.sa_handler == oldWinch.sa_handler);
 			std::cout << "TEST-TERMINAL-PASS\n" << std::flush;
 			longInputPrompt();
 			overflowSpacePrompt();
 			auto unicode = editLineWithResize("UNICODE ↵ Ω> ");
 			CHECK(unicode && std::string_view(*unicode) == "é界");
 			std::cout << "TEST-UNICODE-PASS\n" << std::flush;
-			CHECK(editorRedisplayHook==oldRedisplay);
+			CHECK(editorRedisplayHook == oldRedisplay);
 			return 0;
-		} catch(const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
+		} catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 
 	}
 }

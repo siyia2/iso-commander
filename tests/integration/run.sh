@@ -1,5 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Runs unprivileged integration and isolated PTY workflows.
+
 set -eu
 [ "$#" -eq 2 ] || { echo "Usage: $0 INTEGRATION_BINARY MENU_BINARY" >&2; exit 2; }
 binary=$(realpath "$1")

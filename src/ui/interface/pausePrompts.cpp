@@ -7,7 +7,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.input.inputHandling;

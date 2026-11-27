@@ -14,9 +14,9 @@ export extern "C++" {
  * are safely restored to their default or previous states upon exiting the scope,
  * regardless of how that scope terminates (e.g., successful return or error handling).
  *
- * @details On construction, it captures the current Line editor completion function.
+ * @details On construction, it captures the current line editor completion function.
  * On destruction, it restores the captured completion function, resets specific
- * keybindings (Tab/Form Feed), clears the history buffer, resets Line editor
+ * keybindings (Tab/Form Feed), clears the history buffer, resets line editor
  * pagination via @c resetLineEditorPagination(), and executes
  * @c reset_custom_keybindingsForSearches() to clean up search-specific configurations.
  *

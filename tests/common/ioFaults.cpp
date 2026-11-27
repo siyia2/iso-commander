@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Implements scoped syscall fault injection for integration and privileged tests.
+ */
+
 #include <fcntl.h>
 #include "ioFaults.h"
 
 namespace isocmd_tests::io_faults {
+
 	namespace {
 		std::atomic<Plan*> active{nullptr};
 

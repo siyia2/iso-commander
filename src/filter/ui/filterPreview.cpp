@@ -6,7 +6,6 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.sharedRefreshState;
@@ -896,7 +895,7 @@ namespace {
 	/**
 	 * @brief Computes matches and paints one windowed live-preview frame.
 	 *
-	 * Does not interact with Line editor or print the blank separator row.
+	 * Does not interact with line editor or print the blank separator row.
 	 *
 	 * When the query changed since the last frame, resets the preview cursor and
 	 * scroll offset to the top before computing the window. Updates
@@ -940,7 +939,7 @@ namespace {
 	/**
 	 * @brief Line editor redisplay hook that repaints the live preview when needed.
 	 *
-	 * Repaints the list, prints its separator row, and forces Line editor to redraw
+	 * Repaints the list, prints its separator row, and forces line editor to redraw
 	 * the prompt and current input after the screen has been repainted.
 	 *
 	 * The hook skips repainting (drawing only the input row) when:
@@ -1067,7 +1066,7 @@ namespace {
 	 * @brief Line editor PageUp handler for preview-window scrolling.
 	 *
 	 * Line editor passes (count, key) but the preview ignores both; the action is
-	 * always a single page up. Returns 0 to signal success to Line editor.
+	 * always a single page up. Returns 0 to signal success to line editor.
 	 */
 	int editorPreviewPageUp(int /*count*/, int /*key*/)
 	{
@@ -1081,7 +1080,7 @@ namespace {
 	 * @brief Line editor PageDown handler for preview-window scrolling.
 	 *
 	 * Line editor passes (count, key) but the preview ignores both; the action is
-	 * always a single page down. Returns 0 to signal success to Line editor.
+	 * always a single page down. Returns 0 to signal success to line editor.
 	 */
 	int editorPreviewPageDown(int /*count*/, int /*key*/)
 	{
@@ -1153,7 +1152,7 @@ void configureLivePreview(
  *
  * Refreshes the window height from the new terminal dimensions and paints a
  * frame using the current line-editor buffer. Does not print the separator
- * row or force Line editor to redraw the prompt (the resize path handles that).
+ * row or force line editor to redraw the prompt (the resize path handles that).
  *
  * @return True if the live preview handled the repaint; otherwise false (the
  *         caller should fall back to its own resize handling).
@@ -1203,11 +1202,11 @@ void deactivateLivePreview()
 }
 
 /**
- * @brief Installs and restores the Line editor live-preview hooks and keybindings.
+ * @brief Installs and restores the line editor live-preview hooks and keybindings.
  *
  * Construction installs the preview redisplay callback and scrolling keys.
  * Destruction restores history navigation bindings, resets preview state,
- * and restores the default Line editor redisplay callback.
+ * and restores the default line editor redisplay callback.
  *
  * Page Up/Page Down are bound to previous/next history by default; the
  * constructor rebinds them to preview scrolling, and the destructor restores

@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks natural ordering, sort modes and list views.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.ui.display.display;
@@ -27,7 +32,7 @@ namespace isocmd_tests {
 		for (int n = 4096; n > 0; --n) many.push_back("disk" + std::to_string(n) + ".iso");
 		sortFilesCaseInsensitive(many);
 		for (int n = 1; n <= 4096; ++n) CHECK(many[n-1] == "disk" + std::to_string(n) + ".iso");
-		const Indices subset{2,0};
+		const Indices subset{2, 0};
 		StringListView view(files, subset);
 		CHECK(view.size() == 2 && &view[0] == &files[2]);
 		CHECK(std::vector<std::string>(view.begin(), view.end()) == std::vector<std::string>({files[2], files[0]}));

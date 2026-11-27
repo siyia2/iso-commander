@@ -23,7 +23,7 @@ std::size_t getTotalFileSize(const std::vector<std::string>& files);
  * @brief Queries the size of a block device in bytes.
  *
  * Reads @c /sys/block/<name>/size from sysfs, which reports the device
- * size in 512-byte logical sectors. This avoids opening the block device
+ * size in 512-byte units. This avoids opening the block device
  * directly, preventing thread blocking during active kernel I/O flushes.
  *
  * @param device Absolute path to the block device (e.g. @c /dev/sdb).
@@ -40,7 +40,7 @@ std::uint64_t getBlockDeviceSize(const std::string& device, const DeviceDiscover
 		return 0;
 	}
 
-	// sysfs /size is always in 512-byte logical sectors regardless of
+	// sysfs /size is always in 512-byte units regardless of
 	// the drive's physical sector size
 	return sectors * 512ULL;
 
@@ -55,8 +55,8 @@ std::uint64_t getBlockDeviceSize(const std::string& device) {
 /**
  * @brief Formats a byte count as a human-readable size string.
  *
- * Produces output in KB, MB, or GB with two decimal places depending on
- * the magnitude of @p size.
+ * Uses binary scaling (powers of 1024), displayed as KB, MB or GB with
+ * two decimal places depending on the magnitude of @p size.
  *
  * @param size Raw size in bytes.
  * @return Formatted string such as @c "4.70 GB" or @c "720.00 MB".
@@ -84,7 +84,7 @@ std::string formatFileSize(std::uint64_t size) {
  * Returns KB/s for speeds below 0.1 MB/s, otherwise MB/s, both with one
  * decimal place.
  *
- * @param mbPerSec Write speed in megabytes per second.
+ * @param mbPerSec Transfer speed in mebibytes per second (displayed as MB/s).
  * @return Formatted string such as @c "45.3 MB/s" or @c "98.4 KB/s".
  */
 std::string formatSpeed(double mbPerSec) {

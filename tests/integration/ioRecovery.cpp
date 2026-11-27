@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Exercises Windows copy-engine I/O recovery, write modes and cancellation using injected faults.
+ */
+
 #include "../common/ioFaults.h"
 
 import isocmd.core.cancellation;
@@ -7,6 +13,7 @@ import isocmd.write2usb.util.checksum;
 import isocmd.write2usb.util.writeTypes;
 
 namespace isocmd_tests {
+
 	namespace {
 		using namespace io_faults;
 		using write2usb_detail::IsoCopyEntry;
@@ -99,6 +106,9 @@ namespace isocmd_tests {
 		}
 	}
 
+	/**
+	 * @brief Checks read/write overlap and worker cleanup in both copy modes.
+	 */
 	void windowsDoubleBuffering() {
 
 		for (const bool buffered : {false, true}) {
@@ -175,10 +185,16 @@ namespace isocmd_tests {
 		}
 	}
 
+	/**
+	 * @brief Checks that Windows copy cancellation survives a UI flag reset.
+	 */
 	void windowsLatchedCancellation() {
 		for (bool buffered : {false, true}) checkLatchedWindowsCancellation(buffered);
 	}
 
+	/**
+	 * @brief Checks cancellation latched while a verification read is in flight.
+	 */
 	void readbackLatchedDuringIo() {
 		TempDir tmp;
 		const auto path = tmp.path / "payload";
@@ -210,6 +226,9 @@ namespace isocmd_tests {
 		CHECK(!readback.finish() && !row.completed);
 	}
 
+	/**
+	 * @brief Checks recoverable syscall faults and short transfers in the Windows copy engine.
+	 */
 	void windowsIoRecovery() {
 
 		CopyFixture f;
@@ -240,6 +259,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks failed copy accounting, partial output cleanup and subsequent recovery.
+	 */
 	void windowsIoFailures() {
 
 		CopyFixture f;
@@ -269,6 +291,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks cleanup syscall errors and their effect on copy completion.
+	 */
 	void windowsCleanupFailures() {
 
 		int failures = 0;
@@ -332,6 +357,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks direct-I/O behavior of the FAT32 and NTFS copy paths.
+	 */
 	void windowsFilesystemWriteModes() {
 
 		CopyFixture f;
@@ -433,6 +461,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks buffered copy transfers, writeback pacing and cancellation.
+	 */
 	void windowsBufferedWrites() {
 
 		for (const bool ntfs : {false, true}) {
@@ -479,6 +510,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks aligned and unaligned short direct writes, replay and failure handling.
+	 */
 	void windowsDirectRecovery() {
 
 		for (const bool ntfs : {false, true}) {

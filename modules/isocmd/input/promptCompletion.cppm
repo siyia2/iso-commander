@@ -144,8 +144,6 @@ int checkPendingRefresh();
 /** @brief Clears line editor list completions on exact matches. */
 int completePrompt(int ignore, int invoking_key);
 
-/** @brief Custom hook for the native line editor to display completions with pagination and color themes. */
-
 /**
  * KEYBINDING MANAGEMENT
  * Functions to toggle between "Hotkeys" and "Standard Typing" modes.
@@ -154,7 +152,7 @@ int completePrompt(int ignore, int invoking_key);
 // --- Restore Prompt After Completions ---
 void RestoreLineEditorBuffer();
 
-//--- Arms a one-shot line editor startup hook that restores stashed input ---
+// --- Arms a one-shot line editor startup hook that restores stashed input ---
 void armPendingInputRestore();
 
 // --- Exit Handler ---
@@ -185,54 +183,15 @@ void reset_custom_keybindingsForSearches(void);
  * listing functions implemented in promptCompletion.cpp.
  */
 
-/**
- * @brief Resets the completion-list pagination state and the repaint snapshot.
- *
- * Sets the current page back to 0, clears the cached common prefix used to
- * detect the start of a new completion session, and drops the saved
- * completion-repaint snapshot. Invoked by @c completion_cb at the beginning of
- * each completion attempt, after a screen wipe via @c clear_screen_and_buffer
- * and @c completePrompt, and at the top of the Settings Editor's per-setting
- * loop so a list from a previous prompt can never be repainted on a different
- * screen. It does not touch any other Settings Editor state — no such flag
- * exists in the completion TU.
+/*
+ * The completion-list pagination state and repaint snapshot are reset by
+ * resetLineEditorPagination(), declared in inputHandling.cppm.
  */
 
-/**
- * @brief Enables context-aware Tab completion for a Settings Editor value.
- *
- * Populates the candidate list from the setting's allowed values and, when
- * candidates exist, installs the value-completion entry point
- * (@c setting_value_completion_entry) and the shared listing display hook
- * (@c customListingsFunction), binds <kbd>Tab</kbd> to @c completePrompt, and
- * resets pagination so the listing starts on page 1.
- *
- * The Settings Editor listing is labelled "Valid Completion Matches" and uses
- * the settings palette; <kbd>Esc</kbd> is deliberately @b not rebound to
- * @c clear_screen_and_buffer on these prompts, so the editor's own Esc handler
- * can dismiss the listing and repaint the body.
- *
- * Must be paired with @c endSettingsValueCompletion() on every exit path; the
- * @c SettingsCompletionGuard RAII type in settingsEditor.cpp does this.
- *
- * @note Implemented in settingsEditor.cpp, not in the completion TU.
- *
- * @param key Configuration key whose value is being edited. Keys without a
- *            fixed candidate set (numeric limits, free-form strings) produce
- *            an empty list and leave completion disabled.
- */
+// Legacy declarations; neither has a definition or call site in the current tree.
+// Settings-value completion is configured by term::setupSettingLineEditor()
+// and cleaned up by term::CompletionGuard in settingsEditor.cpp.
 void beginSettingsValueCompletion(const std::string& key);
-
-/**
- * @brief Restores the completion callbacks and Tab binding after value input.
- *
- * Reverses everything @c beginSettingsValueCompletion installed: restores the
- * previously-active attempted-completion, display, and Tab functions, clears
- * the candidate list, and resets pagination/listing state. Safe to call when
- * no settings completion is active (it is a no-op then).
- *
- * @note Implemented in settingsEditor.cpp, not in the completion TU.
- */
 void endSettingsValueCompletion();
 
 /**

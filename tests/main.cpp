@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Registers and runs the unit test groups.
+ */
+
 #include "common/testHarness.h"
 
 namespace isocmd_tests {
+
 	void filterGrammar();
 	void filterRandom();
 	void selection();

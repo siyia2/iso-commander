@@ -8,7 +8,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
@@ -25,7 +24,7 @@ import isocmd.ui.display.lineEditorResize;
 namespace {
 
 	// ============================================================================
-	// Progress-specific Line editor resize hook
+	// Progress-specific line editor resize hook
 	// ============================================================================
 
 	/// Repaint callback used by the line editor event hook while the verbose prompt

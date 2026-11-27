@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <wchar.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.ui.display.lineEditorResize;
@@ -278,7 +277,7 @@ void redisplayPrompt() {
  * The full line-editor buffer is retained. The live Filter preview retains its
  * own redisplay hook and delegates the input row to the same renderer.
  *
- * Optionally disables Tab completion for the duration of the Line editor call.
+ * Optionally disables Tab completion for the duration of the line editor call.
  * When enabled, Tab does not invoke completion or display matching entries.
  * The previous Tab key binding and @c editorCompletionHook are
  * saved and automatically restored afterward, leaving other line-editor prompts
@@ -404,8 +403,8 @@ namespace {
 	struct sigaction g_prevWinch {};
 	bool             g_winchInstalled = false;
 
-	/// Active watcher used by the Line editor event hook. Accessed only on the
-	/// thread running Line editor; set during construction and cleared by stop().
+	/// Active watcher used by the line editor event hook. Accessed only on the
+	/// thread running line editor; set during construction and cleared by stop().
 	ListResizeWatcher::Impl* g_activeListWatcher = nullptr;
 
 	extern "C" void onWinch(int sig, siginfo_t* info, void* ctx) {
@@ -421,7 +420,7 @@ namespace {
 	}
 
 	/// Handles pending resize repainting, then invokes the hook that was installed
-	/// before this watcher so other Line editor event processing remains active.
+	/// before this watcher so other line editor event processing remains active.
 	int listResizeHook() {
 
 		ListResizeWatcher::Impl* w = g_activeListWatcher;
@@ -452,7 +451,7 @@ void ListResizeWatcher::Impl::tick() {
 	// exceptions from propagating through the editor event loop.
 	try { repaint(); } catch (...) {}
 
-	// Leave a blank line after the list, then let Line editor redraw the prompt
+	// Leave a blank line after the list, then let line editor redraw the prompt
 	// and the current input, including its cursor position.
 	std::cout << '\n' << std::flush;
 	// FixedPrompt redraws only the final line, after repaint() prints the header.

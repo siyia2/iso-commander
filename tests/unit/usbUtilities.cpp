@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks ISO detection, CRC-64 verification, progress state and aligned buffers.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.write2usb.util.isoDetect;
@@ -56,6 +61,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks CRC-64 calculation and readback verification outcomes.
+	 */
 	void checksumVerification() {
 
 		using namespace usb_verify;
@@ -108,6 +116,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks that readback cancellation survives resetting the UI cancellation flag.
+	 */
 	void latchedReadbackCancellation() {
 		using namespace usb_verify;
 		TempDir tmp;

@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.app.main;
@@ -180,7 +179,7 @@ static int openAndLockTruncatedFile(const std::string& filePath) {
 /**
  * @brief Collects deduplicated history entries in oldest-first order.
  *
- * Reads the current line-editor history list from newest to oldest, skips null or
+ * Reads the current line-editor history list from newest to oldest, skips
  * empty entries, deduplicates lines, stops once @p maxLines unique entries are
  * gathered, and reverses the result to oldest-first order.
  *

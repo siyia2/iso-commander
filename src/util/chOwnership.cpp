@@ -10,12 +10,15 @@ import std;
 
 /**
  * @brief Retrieves the identity of the user who invoked the process via sudo.
- * * This function is designed to be thread-safe. It attempts to extract the
+ *
+ * This function is designed to be thread-safe. It attempts to extract the
  * original user's UID and GID from the `SUDO_UID` and `SUDO_GID` environment
- * variables. If these are unavailable or invalid, it falls back to the
- * current effective user/group IDs. It also resolves these IDs into
+ * variables. If either is absent or the UID cannot be parsed, it uses both
+ * effective IDs; if only the GID cannot be parsed, it uses the effective
+ * GID. It also resolves these IDs into
  * human-readable usernames and group names using reentrant system calls.
- * * @param[out] real_uid The resolved numeric User ID.
+ *
+ * @param[out] real_uid The resolved numeric User ID.
  * @param[out] real_gid The resolved numeric Group ID.
  * @param[out] real_username The string representation of the resolved username.
  * @param[out] real_groupname The string representation of the resolved group name.

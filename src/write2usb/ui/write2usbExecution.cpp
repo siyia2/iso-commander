@@ -16,7 +16,7 @@ import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.writeTypes;
 
 ProgressInfo::ProgressInfo(std::string filename, std::string device, std::string totalSize,
-             std::string sourcePath)
+                           std::string sourcePath)
     : filename(std::move(filename)),
       device(std::move(device)),
       totalSize(std::move(totalSize)),

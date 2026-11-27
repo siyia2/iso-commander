@@ -10,13 +10,12 @@ export extern "C++" {
 /**
  * Parses a raw user input string into valid file indices.
  *
- * Takes a string (e.g., "1-5, 8, 10") and maps it against the provided
- * list of ISO files, tracking which indices were successfully processed
- * and logging any range or formatting errors.
+ * Parses whitespace-separated indices and inclusive ranges (e.g., "1-5 8 10")
+ * against the provided ISO list. Valid one-based indices are deduplicated;
+ * malformed and out-of-range tokens are recorded in the verbose error set.
  *
  * @param input The raw command string from the user.
  * @param isoFiles The current list of available files to index into.
- * @param uniqueErrorMessages Set to collect any parsing or range errors.
  * @param processedIndices Set to store the final validated integer indices.
  */
 void tokenizeInput(

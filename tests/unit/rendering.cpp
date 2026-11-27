@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks themes, text width, list rendering and pagination.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.ui.display.themes;
@@ -53,28 +58,28 @@ namespace isocmd_tests {
 
 	static void checkListPages(const auto& render, const auto& has, const std::vector<std::string>& files, std::size_t& page) {
 
-		GlobalState::ITEMS_PER_PAGE=2;
-		auto first=render(files);
-		CHECK(has(first,"alpha.iso") && has(first,"beta.iso") && !has(first,"gamma.iso"));
-		CHECK(has(first,"[PgDn] Next") && !has(first,"[PgUp] Prev") && has(first,"1-2 3"));
-		page=99; auto last=render(files);
-		CHECK(has(last,"gamma.iso") && !has(last,"alpha.iso") && has(last,"[PgUp] Prev") && !has(last,"[PgDn] Next"));
-		GlobalState::ITEMS_PER_PAGE=0; auto all=render(files);
-		CHECK(has(all,"alpha.iso") && has(all,"gamma.iso") && !has(all,"[PgUp]") && !has(all,"[PgDn]"));
+		GlobalState::ITEMS_PER_PAGE = 2;
+		auto first = render(files);
+		CHECK(has(first, "alpha.iso") && has(first, "beta.iso") && !has(first, "gamma.iso"));
+		CHECK(has(first, "[PgDn] Next") && !has(first, "[PgUp] Prev") && has(first, "1-2 3"));
+		page = 99; auto last = render(files);
+		CHECK(has(last, "gamma.iso") && !has(last, "alpha.iso") && has(last, "[PgUp] Prev") && !has(last, "[PgDn] Next"));
+		GlobalState::ITEMS_PER_PAGE = 0; auto all = render(files);
+		CHECK(has(all, "alpha.iso") && has(all, "gamma.iso") && !has(all, "[PgUp]") && !has(all, "[PgDn]"));
 
 	}
 
 	static void checkFilteredList(const auto& render, const auto& has, const std::vector<std::string>& files, PrintListContext& context) {
 
-		const std::vector<std::size_t> indices{1,2};
-		filteringStack.push_back(FilteringState{{1,2},"test",true,false});
-		auto filtered=render(StringListView(files,indices));
-		CHECK(!has(filtered,"alpha.iso") && has(filtered,"beta.iso") && has(filtered,"2^") && has(filtered,"(1-2)^ 3^"));
-		context.showPendingIndices=false; context.showSourceIndices=false;
-		auto hidden=render(StringListView(files,indices));
-		CHECK(!has(hidden,"Pending Indices") && !has(hidden,"2^") && !has(hidden,"3^"));
-		auto empty=render(StringListView(files,std::vector<std::size_t>{}));
-		CHECK(!has(empty,"alpha.iso") && !has(empty,"beta.iso"));
+		const std::vector<std::size_t> indices{1, 2};
+		filteringStack.push_back(FilteringState{{1, 2}, "test", true, false});
+		auto filtered = render(StringListView(files, indices));
+		CHECK(!has(filtered, "alpha.iso") && has(filtered, "beta.iso") && has(filtered, "2^") && has(filtered, "(1-2)^ 3^"));
+		context.showPendingIndices = false; context.showSourceIndices = false;
+		auto hidden = render(StringListView(files, indices));
+		CHECK(!has(hidden, "Pending Indices") && !has(hidden, "2^") && !has(hidden, "3^"));
+		auto empty = render(StringListView(files, std::vector<std::size_t>{}));
+		CHECK(!has(empty, "alpha.iso") && !has(empty, "beta.iso"));
 
 	}
 
@@ -86,30 +91,30 @@ namespace isocmd_tests {
 
 			~Restore() {
 
-				GlobalState::ITEMS_PER_PAGE=pageSize; filteringStack=std::move(stack);
+				GlobalState::ITEMS_PER_PAGE = pageSize; filteringStack = std::move(stack);
 
 			}
 		} restore;
 		filteringStack.clear();
 		const std::vector<std::string> files{"/sample/alpha.iso", "/sample/beta.iso", "/sample/gamma.iso"};
-		std::vector<std::string> pending{"1-2", "3"}; bool hasPending=true;
-		std::size_t page=0; auto state=std::make_shared<RefreshState>();
-		PrintListContext context{pending, hasPending, page, state}; context.clearFirst=false;
+		std::vector<std::string> pending{"1-2", "3"}; bool hasPending = true;
+		std::size_t page = 0; auto state = std::make_shared<RefreshState>();
+		PrintListContext context{pending, hasPending, page, state}; context.clearFirst = false;
 		auto render = [&](const StringListView& view) {
 
 			std::ostringstream out;
 
-			struct Redirect { std::streambuf* old; ~Redirect(){
+			struct Redirect { std::streambuf* old; ~Redirect() {
 
 					std::cout.rdbuf(old);
 
 				} } redirect{std::cout.rdbuf(out.rdbuf())};
 
-			printList(view,"ISO_FILES","cp",context);
+			printList(view, "ISO_FILES", "cp", context);
 			return out.str();
 
 		};
-		auto has=[](const std::string& s,std::string_view text){ return s.find(text)!=std::string::npos; };
+		auto has = [](const std::string& s, std::string_view text) { return s.find(text) != std::string::npos; };
 		checkListPages(render, has, files, page);
 		checkFilteredList(render, has, files, context);
 
@@ -117,13 +122,13 @@ namespace isocmd_tests {
 
 	void paginationCommands() {
 
-		std::size_t total=3,page=0;
-		bool filtered=false, redraw=false, sort=false;
+		std::size_t total = 3, page = 0;
+		bool filtered = false, redraw = false, sort = false;
 		std::vector<std::string> files;
-		auto command=[&](const std::string& cmd) {
+		auto command = [&](const std::string& cmd) {
 
-			redraw=false;
-			return processPaginationHelpAndDisplay(cmd,total,page,filtered,redraw,"cp",sort,nullptr,files);
+			redraw = false;
+			return processPaginationHelpAndDisplay(cmd, total, page, filtered, redraw, "cp", sort, nullptr, files);
 
 		};
 		struct PageCase {

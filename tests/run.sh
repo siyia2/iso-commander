@@ -1,5 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Runs unit groups and unprivileged CLI regression cases.
+
 set -eu
 if [ "$#" -ne 2 ]; then
     echo "Usage: $0 UNIT_BINARY ISOCMD_BINARY" >&2

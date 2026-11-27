@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Checks scope cleanup, nested atomic guards and selection-state restoration.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.core.uiState;
@@ -7,6 +13,7 @@ import isocmd.input.promptCompletion;
 import isocmd.ops.cpMvRm;
 
 namespace isocmd_tests {
+
 	namespace {
 		struct Unwind {};
 
@@ -44,6 +51,9 @@ namespace isocmd_tests {
 		}
 	}
 
+	/**
+	 * @brief Checks restoration on normal exit, early return, exceptions, nesting and release.
+	 */
 	void atomicScopeGuards() {
 
 		std::atomic<bool> flag{false};
@@ -79,6 +89,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Checks selection-state cleanup on each exit path and unmount-sensitive list restoration.
+	 */
 	void selectionScopeGuards() {
 
 		using namespace GlobalState;

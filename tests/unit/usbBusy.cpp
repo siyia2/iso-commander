@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Checks busy and mounted indicators, device validation and in-flight counter parsing.
+ */
+
 #include "../common/testHarness.h"
+
 import isocmd.core.uiState;
 import isocmd.ui.display.themes;
 import isocmd.write2usb.ui.write2usbUI;
 import isocmd.write2usb.util.drainingState;
 
 namespace isocmd_tests {
+
 	namespace {
 		struct BusyFixture {
 			TempDir tmp;
@@ -62,6 +70,9 @@ namespace isocmd_tests {
 		}
 	}
 
+	/**
+	 * @brief Checks displayed device status and the priority of mounted over busy.
+	 */
 	void usbBusyIndicators() {
 		BusyFixture f;
 		CHECK(f.label().empty());
@@ -82,6 +93,9 @@ namespace isocmd_tests {
 		CHECK(f.label().empty());
 	}
 
+	/**
+	 * @brief Checks busy-device rejection and recovery in interactive and CLI validation.
+	 */
 	void usbBusyValidation() {
 		BusyFixture f;
 		ModeRestore restore;
@@ -105,6 +119,9 @@ namespace isocmd_tests {
 		}
 	}
 
+	/**
+	 * @brief Checks parsing of synthetic in-flight I/O counters.
+	 */
 	void usbInflightParsing() {
 		BusyFixture f;
 		for (const auto* counters : {"0 0\n", "9 0\n", "", "invalid\n", "1\n", "1 invalid\n"}) {

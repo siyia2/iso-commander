@@ -5,7 +5,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.app.main;
@@ -61,7 +60,7 @@ namespace {
 	}
 
 	/**
-	 * @brief Prepares application state, caches, Line editor and signal handling.
+	 * @brief Prepares application state, caches, line editor and signal handling.
 	 * Ctrl+C is ignored at the main prompt; SIGTERM is handled by signalHandler.
 	 */
 	void initializeEnvironment() {

@@ -10,7 +10,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
@@ -155,7 +154,7 @@ namespace confirm_resize_detail {
 
 	}
 
-	/// the line editor's getc hook waits on stdin and the self-pipe, with no idle polling.
+	/// The line editor's input-reader hook waits on stdin and the self-pipe, with no idle polling.
 	static int confirmResizeGetc(FILE* stream) {
 
 		ResizeRepaintState& s = g_confirmResize;
@@ -217,8 +216,8 @@ struct ConfirmResizeWatcher::Impl {
 		}
 		g_installed = true;
 
-		savedEventHook_  = editorEventHook;
-		savedGetc_       = editorInputReader;
+		savedEventHook_   = editorEventHook;
+		savedGetc_        = editorInputReader;
 		editorEventHook    = nullptr;
 		editorInputReader = confirmResizeGetc;
 		active_ = true;
@@ -284,7 +283,7 @@ void ConfirmResizeWatcher::stop() {
  * - Finished — after finish() it shows the final rows, the status line and
  *   the summary. The keeper keeps running and repaints on terminal resize,
  *   unless a prompt was registered with setPrompt(): then the program's
- *   resize hook owns repainting (it calls repaint() and lets Line editor redraw
+ *   resize hook owns repainting (it calls repaint() and lets line editor redraw
  *   the prompt and typed input), so the keeper stays out of the way.
  *
  * @par Rendering
@@ -326,26 +325,28 @@ void ConfirmResizeWatcher::stop() {
  * filename → /dev/sdX <drive name> [▇▇▄░░] percentage speed
  * @endcode
  * Device path, drive name and speed are padded to the widest value across
- * rows so the bars line up. Drive names are always shown in full. The bar
- * has 5 cells and 10% steps while writing (empty ░, half ▄, full ▇)
- * and during active verification (empty space, half ⠆, full ⠶).
- * Both are floored from the percentage, so the bar is full only at 100%.
- * Terminal states restore the regular write bar. Failure or cancellation
- * after a completed write shows the full write bar rather than the
- * interrupted verification percentage.
- * The status column shows the live percentage (writing or verification),
- * DONE or PASS (speed shown
- * as the write-only " (avg)"), FAIL or CXL
- * (cancelled).
+ * rows so the bars line up. Drive names are not individually truncated,
+ * although the final row may be clipped on narrow terminals. The bar has
+ * 5 cells, advancing in 10% steps while writing (empty ░, half ▄, full ▇)
+ * and during verification (empty space, half ⠆, full ⠶). Both styles
+ * floor the displayed percentage, so the bar is full only at 100%. Successful
+ * verification retains the full Braille bar; other terminal states use
+ * the write bar. Failure or cancellation after a completed write displays
+ * a full write bar instead of the interrupted verification percentage.
+ * The status column shows the live percentage, DONE (write only), PASS
+ * (verified), FAIL or CXL (cancelled). Completed rows show the write-only
+ * average speed; incomplete rows show verification speed once readback
+ * has started, otherwise write speed.
  *
  * @par Filename truncation
  * Names are shown in full unless the widest row exceeds the terminal width.
  * Only then is each name shortened to the space the terminal actually leaves
  * for the filename column (terminal width minus the rest of the row) as
- * "stem….iso": the ".iso" extension is always kept, the stem never shrinks
- * below 4 columns, and truncation is UTF-8 safe. On very narrow terminals
- * the stem floor can make the row slightly wider than the budget; the
- * per-row clip then prevents wrap.
+ * "stem….iso": the original ISO extension is kept and truncation preserves
+ * whole UTF-8 code points, retaining at least 4 stem code points when
+ * available. On narrow terminals the minimum stem can exceed the budget;
+ * the final per-row clip limits the approximate width. Width helpers count
+ * UTF-8 code points rather than actual terminal cell widths.
  *
  * @par Redraw and result screen
  * At an unchanged size, a frame moves the cursor up by the previous frame's
@@ -363,6 +364,9 @@ void ConfirmResizeWatcher::stop() {
  * Written: n/m | Time Elapsed: x.xs
  * Written: n/m | Verified: v/m | Time Elapsed: x.xs (with verification)
  * @endcode
+ * The status may also be PARTIAL, FAILED or INTERRUPTED. Written counts
+ * tasks whose write completed, even if verification failed or was cancelled.
+ * Verified counts only successfully completed tasks that requested verification.
  * The prompt itself is not printed by this class: after repaint() the
  * program's resize hook calls redisplayPrompt(), which redraws the prompt and
  * the user's typed input.
@@ -371,7 +375,8 @@ void ConfirmResizeWatcher::stop() {
  * Holds shared_ptr copies of the progress vector and the WriteSync state, so
  * it never refers to the stack of the function that created it. The
  * destructor stops and joins the keeper and relay threads and restores the
- * previous SIGWINCH handler.
+ * previous SIGWINCH handler and, if still installed, the previous SIGINT
+ * handler.
  */
 class WriteScreen {
 public:
@@ -469,7 +474,7 @@ public:
 
 	/// Registers the program's "press Enter" prompt. Once set, the keeper no
 	/// longer repaints on resize by itself: the program's resize hook calls
-	/// repaint() instead and Line editor redraws the prompt and typed input.
+	/// repaint() instead and line editor redraws the prompt and typed input.
 	void setPrompt(std::string prompt) {
 
 		std::lock_guard<std::mutex> rl(renderMutex_);
@@ -817,7 +822,7 @@ private:
 	/**
 	 * @brief Builds the filled and empty parts of a USB progress bar.
 	 * @param pct Progress percentage, clamped to 0–100 by the caller.
-	 * @param verificationActive Selects Braille glyphs for active verification.
+	 * @param verificationActive Selects Braille glyphs during verification or after a pass.
 	 * @return Filled and empty portions, kept separate for coloring.
 	 */
 	static std::pair<std::string, std::string> buildProgressBar(int pct, bool verificationActive) {
@@ -843,7 +848,7 @@ private:
 	void appendRowStatus(std::ostringstream& row, const ProgressInfo& prog, bool isCompleted,
 	                     bool failed, bool cancelled, int pct) {
 
-		if (isCompleted)                                    row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
+		if (isCompleted)                                   row << wt_.colorSuccess << (prog.verifying.load() ? "PASS " : "DONE ");
 		else if (failed)                                   row << wt_.colorFailure << "FAIL ";
 		else if (cancelled)                                row << wt_.colorWarning << "CXL  ";
 		else {
@@ -875,20 +880,20 @@ private:
 		const bool verifying = prog.verifying.load();
 
 		const bool verificationActive = phase_ == Phase::Running &&
-            verifying && !speed.completed && !failed && !cancelled;
+		    verifying && !speed.completed && !failed && !cancelled;
 
 		const bool verificationPassed = speed.completed && verifying;
 
 		// On failure or cancellation after a completed write,
 		// restore the full write bar.
 		const bool restoreWriteProgress = !speed.completed &&
-            (failed || cancelled) && prog.writeCompleted.load();
+		    (failed || cancelled) && prog.writeCompleted.load();
 
 		const int pct = (restoreWriteProgress || verificationPassed)
-            ? 100 : std::clamp(prog.progress.load(), 0, 100);
+		    ? 100 : std::clamp(prog.progress.load(), 0, 100);
 
 		const auto [bar, empty] =
-        buildProgressBar(pct, verificationActive || verificationPassed);
+		    buildProgressBar(pct, verificationActive || verificationPassed);
 
 		std::ostringstream row;
 		row << wt_.fileCol << paddedFilename
@@ -1018,8 +1023,8 @@ private:
 
 // Opaque WriteScreen interface declared in the write2usbUI module.
 std::shared_ptr<WriteScreen> createWriteScreen(
-        std::shared_ptr<std::vector<ProgressInfo>> progressData,
-        std::shared_ptr<WriteSync> sync, WriteTheme theme) {
+    std::shared_ptr<std::vector<ProgressInfo>> progressData,
+    std::shared_ptr<WriteSync> sync, WriteTheme theme) {
 
 	return std::make_shared<WriteScreen>(std::move(progressData), std::move(sync), std::move(theme));
 

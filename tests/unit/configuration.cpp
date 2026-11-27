@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks configuration defaults, validation, repair, ordering and persistence.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.settings.settings;

@@ -46,15 +46,15 @@ namespace UI {
  * Opaque handle returned by @ref performWriteOperation. It owns the keeper
  * thread that keeps the screen laid out correctly on terminal resize, and it
  * must stay alive until the caller has finished waiting for the user. The
- * destructor stops and joins that thread. Defined in
- * write2usbUIRendering.cpp.
+ * destructor stops and joins the keeper and signal-relay threads. Defined in
+ * write2usbScreen.cpp.
  */
 class WriteScreen;
 
-// --- Opaque WriteScreen interface (defined in write2usbUIRendering.cpp) ---
+// --- Opaque WriteScreen interface (defined in write2usbScreen.cpp) ---
 //
 // WriteScreen is forward-declared above; these free functions are the only
-// way to drive it. All are no-ops / safe to call on a stopped screen.
+// way to drive it. Start the screen before use; stop is idempotent.
 
 /**
  * @brief Constructs a WriteScreen from the shared per-task progress vector,
@@ -64,9 +64,9 @@ class WriteScreen;
  * refers to the stack of the function that created it.
  */
 std::shared_ptr<WriteScreen> createWriteScreen(
-        std::shared_ptr<std::vector<ProgressInfo>> progressData,
-        std::shared_ptr<WriteSync> sync,
-        UI::WriteTheme theme);
+    std::shared_ptr<std::vector<ProgressInfo>> progressData,
+    std::shared_ptr<WriteSync> sync,
+    UI::WriteTheme theme);
 
 /** @brief Prints the header and starts the keeper / relay threads. */
 void startWriteScreen(WriteScreen& screen);
@@ -100,7 +100,7 @@ void stopWriteScreen(WriteScreen& screen);
  * @brief Watches terminal resizes while the write confirmation prompt is active.
  *
  * The implementation and its signal/self-pipe state are kept in
- * write2usbUIRendering.cpp. The painter callback redraws the prompt for the
+ * write2usbScreen.cpp. The painter callback redraws the prompt for the
  * supplied terminal width and returns the widths of the rendered lines.
  */
 class ConfirmResizeWatcher {
@@ -133,9 +133,9 @@ private:
 std::shared_ptr<WriteScreen> performWriteOperation(
     const std::vector<std::pair<IsoInfo, std::string>>&, bool* allSucceeded = nullptr, bool verify = false);
 
-// --- Device discovery and mapping APIs (defined in write2usbUI.cpp) ---
+// --- Device discovery, validation and mapping APIs ---
 
-/** @brief Enumerates removable USB block devices visible to the system. */
+/** @brief Enumerates removable USB block devices visible to the system (write2usbDeviceDiscovery.cpp). */
 std::vector<std::string> getRemovableDevices();
 
 /// Validates parsed ISO-to-device mappings and returns viable pairs.
@@ -145,7 +145,7 @@ std::vector<std::pair<IsoInfo, std::string>> validateDevices(
     bool noPermissions,
     std::vector<std::string>& validationErrors);
 
-/// Parses semicolon-delimited INDEX>DEVICE mappings.
+/// Parses semicolon-delimited INDEX>DEVICE mappings (write2usbChecks.cpp).
 std::vector<std::pair<std::size_t, std::string>> parseDeviceMappings(
     const std::string& pairString,
     const std::vector<std::string>& selectedIsos,
@@ -158,8 +158,8 @@ std::vector<std::pair<IsoInfo, std::string>> collectDeviceMappings(
 /** @brief Entry point for the write-to-USB workflow. */
 void writeToUsb(const std::string& input, const std::vector<std::string>& isoFiles);
 
-// Internal dependency-injected entry points. Production wrappers below/above
-// always supply the real writer and discovery/validation functions.
+// Internal dependency-injected entry points. Production wrappers supply
+// the real writer and discovery/validation functions.
 namespace WriteExecution {
 	using Writer = bool (*)(const std::string&, const std::string&, std::size_t, std::vector<ProgressInfo>&);
 	std::shared_ptr<WriteScreen> performWithWriter(
@@ -177,31 +177,31 @@ namespace WriteMapping {
 // --- Filesystem & Formatting Utilities ---
 
 /**
- * Converts a raw byte count into a human-readable string (KB, MB, GB).
+ * Formats a byte count using powers of 1024, labelled KB, MB or GB.
  */
 std::string formatFileSize(std::uint64_t size);
 
 /**
- * Formats a speed value into a readable string (e.g., "15.4 MB/s").
+ * Formats a speed in MiB/s with one decimal place, labelled MB/s or KB/s.
  */
 std::string formatSpeed(double mbPerSec);
 
 /**
  * Queries the kernel for the total capacity of a block device.
  * @param device Path to the device (e.g., "/dev/sdb").
- * @return Size in bytes.
+ * @return Size in bytes, or 0 if the sysfs size cannot be read.
  */
 std::uint64_t getBlockDeviceSize(const std::string& device);
 std::uint64_t getBlockDeviceSize(const std::string& device, const DeviceDiscoveryPaths& paths);
 
-// --- Shared validation helpers (defined in the same .cpp as validateDevices) ---
+// --- Shared validation helpers (write2usbChecks.cpp) ---
 
 /**
  * @namespace WriteValidation
  * @brief Shared validation helpers used by the interactive write2usb UI and
  *        the non-interactive CLI writer.
  *
- * Defined in write2usbUI.cpp alongside validateDevices().
+ * Defined in write2usbChecks.cpp alongside validateDevices().
  */
 namespace WriteValidation {
 
@@ -242,14 +242,15 @@ namespace WriteValidation {
 	/**
 	 * @brief Runs the device-level checks, independent of which ISO is paired with it.
 	 *
-	 * Verifies that the device is a removable USB flash drive, is not mounted,
-	 * is not in the draining set (pending kernel-level tasks), has no write I/O
-	 * still in flight (interactive and non-interactive modes), and has a determinable size.
+	 * Checks that the device is a removable USB flash drive, is not reserved by
+	 * the drain manager, is not mounted, has no write I/O in flight, and has
+	 * a determinable size. These checks apply in both interactive and CLI modes.
 	 *
 	 * @param wt     Active write theme.
 	 * @param device Path used for the checks (canonical /dev/sdX).
 	 * @param shown  Path displayed in error messages (what the user typed).
 	 * @param[out] size Device size in bytes; only valid when no error is returned.
+	 * @param paths Filesystem roots for device discovery and validation.
 	 * @return An error message for the first failed check, or std::nullopt if
 	 *         the device is usable.
 	 */

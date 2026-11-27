@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks the Windows FAT-only and FAT32/NTFS workflows on disposable loop devices.
+ */
+
 #include <errno.h>
 #include <linux/fs.h>
 #include <linux/loop.h>
@@ -16,6 +21,7 @@ import isocmd.core.cancellation;
 import isocmd.settings.settings;
 
 namespace isocmd_tests {
+
 	namespace {
 		constexpr std::uint64_t capacity = 1280ULL * 1024 * 1024;
 
@@ -230,6 +236,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Runs the selected Windows layout and write mode against a validated disposable loop.
+	 */
 	int windowsWriterTest(const std::string& loop, const std::string& layout, const std::string& mode) {
 
 		try {

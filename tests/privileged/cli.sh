@@ -1,5 +1,8 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# Checks privileged CLI validation and isolated mount/unmount operations.
+
 # Invoked only by the privileged runner with root-owned staged fixtures.
 set -eu
 [ "$#" -eq 1 ] && [ "$(id -u)" -eq 0 ] || exit 2

@@ -2,7 +2,8 @@
 
 The tests use production C++ modules and object files. The unit and integration
 executables exclude the application's `main.cpp`; the menu test builds a separate
-copy of that entry point with a private sandbox lock instead of `/tmp/isocmd.lock`. No Python or external C++ test framework is required. Normal builds do not
+copy of that entry point with a private sandbox lock instead of `/tmp/isocmd.lock`.
+No Python or external C++ test framework is required. Normal builds do not
 compile test sources. The usual GCC 15+ and project dependencies apply.
 
 ## Running
@@ -38,11 +39,11 @@ This test is also run by `make test-integration`. It covers UTF-8 editing,
 selection, multiline bracketed paste, history navigation, unbound Ctrl+R,
 startup/idle/custom-input hooks, byte-key rebinding, CSI/SS3 aliases, hotkeys,
 filesystem and callback completion, sorted/deduplicated candidates, empty
-submission versus EOF,
-interleaved cursor-position reports and typeahead, EOF and exact terminal
+submission versus EOF, interleaved cursor-position reports and typeahead,
+and exact terminal
 attribute restoration, including exception unwinding. The full application
 PTY suite remains necessary to verify the existing prompt controllers and
-rendering together with the new backend.
+rendering together with the native editor.
 
 ### RAII and native editor restoration regressions
 
@@ -149,9 +150,8 @@ Mounted rejection uses a private tmpfs mount with the test device name as
 its source, rather than mounting or formatting the loop. Busy rejection
 uses a synthetic in-flight counter. Each case runs in its own shell so
 regressions do not prevent later cases from executing. All-success verbose
-cases require exit 0, even if the current implementation returns 1 due to
-its separate UI and CLI progress vectors. This is an intentional regression
-assertion, not an expected-failure exemption.
+cases require exit 0, guarding against the previous mismatch between UI and
+CLI progress vectors.
 
 ### Windows end-to-end verification
 
@@ -205,7 +205,9 @@ tests/
 │   ├── sandbox.sh          # private HOME, XDG, TMPDIR and cleanup
 │   ├── cli.sh              # stdout/stderr, exit code and result assertions
 │   ├── ioFaults.h          # scoped inode-specific fault scripts
-│   └── ioFaults.cpp        # test-only linker wrappers
+│   ├── ioFaults.cpp        # test-only linker wrappers
+│   ├── terminalSync.h     # PTY synchronization markers and session hooks
+│   └── terminalSync.cpp   # test-only marker implementation
 ├── unit/
 │   ├── filtering.cpp
 │   ├── selection.cpp
@@ -218,6 +220,8 @@ tests/
 │   ├── deviceDiscovery.cpp
 │   ├── history.cpp
 │   ├── writeTelemetry.cpp
+│   ├── usbBusy.cpp
+│   ├── scopeGuards.cpp
 │   └── usbUtilities.cpp
 ├── integration/
 │   ├── main.cpp
@@ -226,9 +230,13 @@ tests/
 │   ├── backgroundImport.cpp
 │   ├── terminal.cpp
 │   ├── terminalDriver.cpp  # native PTY controller
+│   ├── editorGuards.cpp    # editor guard and restoration tests
 │   ├── usbWriter.cpp
 │   ├── ioRecovery.cpp       # Windows copy engine syscall faults
 │   ├── writeUi.cpp         # safe mapping, progress and injected writer child
+│   └── run.sh
+├── nativeEditor/
+│   ├── driver.cpp         # standalone editor PTY regression tests
 │   └── run.sh
 ├── privileged/
 │   ├── mount.cpp
@@ -257,7 +265,9 @@ tests/
 | Unit: converters | CCD Mode 1/2 and NRG payload bytes, counters, invalid input and pre-cancellation |
 | Unit: database | Persistence, duplicate rejection, overlapping concurrent writers, stale-entry removal |
 | Unit: thread pool | Exactly-once execution, 1–16 workers, concurrent producers, move-only values, inline/heap callable lifetime and ownership, throwing-move fallback, futures, exceptions, nested tasks and shutdown |
-| Unit: USB utilities | ISO 9660/UDF and Windows signature detection, progress moves and aligned buffers |
+| Unit: USB utilities | ISO 9660/UDF and Windows signature detection, CRC-64 reference vector and readback, latched cancellation, progress moves and aligned buffers |
+| Unit: USB busy | Synthetic in-flight counters, mounted/busy status priority, validation and drain reservations |
+| Unit: scope guards | Atomic flag restoration, nesting and release; selection cleanup and unmount-sensitive list restoration |
 | Unit: device discovery | Synthetic sysfs/dev/proc fixtures, USB ancestry, removable flag, ignored device names, symlink aliases, model and partition mount detection |
 | Unit: history | Independent path/filter histories, newest-entry deduplication, limits, disabled history, missing/empty files |
 | CLI | Version/parser errors on stderr; conversion discovery, depth, deduplication, symlink exclusion, success, existing output skip, backend failure and cleanup, mixed validation/backend batches, final progress status, per-file messages and summary counters; raw silent output; exact ISO bytes; unprivileged permission errors for mount/unmount/write even in silent mode |
@@ -266,6 +276,8 @@ tests/
 | Integration: USB writer | Invalid ISO, rejection of regular-file target, Windows copy engine (file bytes, directories, empty files, early EOF, missing file, cancellation) |
 | Integration: I/O recovery | Windows copy engine: EINTR, short reads and positional writes, premature EOF, EIO, ENOSPC, zero writes, aligned/unaligned direct-write recovery, unsupported preallocation, active cancellation, exact partial-byte counters, truncation and clean retry (regular files); transient and permanent cleanup truncation faults, close EINTR/EIO after failed copies, FAT32 and NTFS O_DIRECT flags, configured FAT and NTFS chunk sizes, padding, exact CRC/progress, restart exhaustion and tail truncation failure; deterministic double-buffered read/write overlap in both write modes on both filesystem paths, worker cleanup and retry; buffered mode flags, unaligned short writes, exact CRC/progress, ENOSPC, cancellation and empty files |
 | Integration: background import | History parsing, nested discovery, duplicate suppression, completion and worker accounting, stopped import, restart and missing history |
+| Native editor: PTY | UTF-8 editing, selection, paste, history, completion, keybindings, hooks, cursor reports, EOF and terminal restoration in C and C.UTF-8 locales |
+| Integration: editor guards | Exact handler and hook restoration, scope unwinding, signal and terminal state, settings and USB mapping guard policies |
 | Integration: PTY | Four terminal resizes during typed input, repaint, preservation of input and line-editor/signal state restoration |
 | Integration: menus | Real application main menu, invalid choice, resize with typed input, ManageISO, Convert2ISO and image search, ImportISO, Settings, Esc/EOF return and normal exit |
 | Integration: interactive workflows | Real PageUp/PageDown and page jumps, live filter scroll, query replacement, resize, no-match retry, cancellation, staged copy, rejected/confirmed delete and move with filesystem checks; verbose copy, delete and move reports, resize repaint, Enter/Esc/Ctrl+D dismissal and no stale report text |
@@ -274,7 +286,7 @@ tests/
 | Integration: interactive import | Invalid and mixed directory input, overlapping directory scans, exact database contents, repeat import, report resize, statistics, independent history clearing and database clearing without deleting source files |
 | Integration: interactive conversion | BIN/IMG discovery and empty cache, staged selection clearing, filtering, executing a staged source index from a different filtered view, exact ISO bytes, invalid-sector failure and cleanup, existing output preservation, database registration, cache listing and clearing; accept/decline verbose results, assert success/failure/skip details and dismiss with Enter/Esc/Ctrl+D |
 | Integration: USB UI | Injected discovery/validation using harmless device names; invalid mapping retry, confirmation resize, decline and prefill, multi-device task ordering, completed/partial/failed summaries |
-| Integration: progress | Real WriteScreen rendering at 10/50/99/100%, speed and bar glyphs, filename clipping, active/result resize, DONE/FAIL/CXL and interrupted summary; copy result resize at verbose prompt |
+| Integration: progress | Real WriteScreen rendering at 10/50/99/100%, speed and bar glyphs, filename clipping, active/result resize, DONE/PASS/FAIL/CXL, verification bars and interrupted summary; copy result resize at verbose prompt |
 | Privileged | Linux writer on verified disposable loop device; 16 raw I/O scenarios (EINTR, short reads, aligned and unaligned short writes with bounded restart, premature EOF, EIO, ENOSPC, zero writes, final fsync EINTR retries and hard failure, close EIO during failure cleanup, active cancellation and clean retry), exact device prefix/padding and untouched tail; CLI USB argument and device validation (including multiple errors and duplicate targets); 26 real raw-writer CLI cases (14 ordinary and 12 with `--verify`): single/broadcast/paired success, invalid image, mixed batch, capacity/duplicate/mounted/busy rejection, verbose per-job status and summary, silent output, exit codes and full-device data checks; optional full Windows FAT-only and FAT32 + NTFS verified writes in direct and buffered modes on disposable partitioned loops, independent read-only remount and byte comparisons; optional private-namespace ISO mount/read/unmount and CLI success, skip, failure, mixed results, status/summary and silent mode |
 
 ## Safety and limitations

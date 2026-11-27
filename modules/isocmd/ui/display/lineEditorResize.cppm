@@ -8,7 +8,7 @@ import std;
 export extern "C++" {
 
 /**
- * @brief Repaints a screen when the terminal size changes while a Line editor
+ * @brief Repaints a screen when the terminal size changes while a line editor
  *        prompt waits.
  *
  * Construct it immediately before @c editLine() and let it go out of scope
@@ -21,7 +21,7 @@ export extern "C++" {
  * - the repaint callback redraws the screen;
  * - the line editor restores the prompt and any half-typed input.
  *
- * All terminal and Line editor access stays on the calling thread.
+ * All terminal and line editor access stays on the calling thread.
  *
  * @note Only one watcher may be active at a time: the event hook and
  *       the @c SIGWINCH handler are process-global.
@@ -60,7 +60,7 @@ private:
 };
 
 /// Draw only the prompt/input row, without invoking a live-preview hook.
-/// Falls back to native Line editor when no fixed prompt is active.
+/// Falls back to native line editor when no fixed prompt is active.
 void redisplayPrompt();
 
 /// A submitted line, or no value on EOF.

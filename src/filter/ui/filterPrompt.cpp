@@ -170,7 +170,7 @@ static void handleFilterCancel(
 /**
  * @brief Runs the interactive filter prompt and commits a query on Enter.
  *
- * Manages the Line editor preview session, history, resize callback, cancellation,
+ * Manages the line editor preview session, history, resize callback, cancellation,
  * and filter-commit lifecycle.
  *
  * Loop contract: on each iteration, resetLivePreviewIteration() primes a fresh
@@ -179,7 +179,7 @@ static void handleFilterCancel(
  * leading Escape (0x1B) cancels via handleFilterCancel(). Otherwise the query
  * is committed by applyFilterCore(); on success the query is saved to history
  * and @p onSuccess runs; on failure the prompt row is rewound and the loop
- * repeats. line-editor history is loaded once, before the loop, so the
+ * repeats. Line-editor history is loaded once, before the loop, so the
  * alreadyLoaded=true save path is used.
  *
  * @note @p onEmptyInput is currently resolved and cast to void but not
@@ -220,7 +220,7 @@ static void runFilterLoop(
 	ctx.filterHistory = true;
 	loadHistory(ctx.filterHistory);
 
-	// Installs the preview Line editor hook and restores it on scope exit.
+	// Installs the preview line editor hook and restores it on scope exit.
 	LivePreviewLineEditorGuard livePreviewGuard;
 
 	const std::vector<std::string>& previewSource =
@@ -264,7 +264,7 @@ static void runFilterLoop(
 /**
  * @brief Core implementation shared by all filter entry points.
  *
- * Configures Line editor, constructs the filter context, and runs the interactive
+ * Configures line editor, constructs the filter context, and runs the interactive
  * filter workflow for the requested operation.
  *
  * Only the literal @c "/" input is treated as a filter request; any other

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Handles interactive Line editor hotkeys and turns them into commands for the active screen.
+// Handles interactive line editor hotkeys and turns them into commands for the active screen.
 
 #include <stdio.h>
 

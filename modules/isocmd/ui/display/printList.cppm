@@ -10,8 +10,6 @@ export extern "C++" {
 struct RefreshState;
 class StringListView;
 
-
-
 /// Holds the state and options required for printList.
 struct PrintListContext {
 	std::vector<std::string>& pendingIndices;

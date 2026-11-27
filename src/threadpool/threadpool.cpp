@@ -112,6 +112,18 @@ namespace {
 		}
 
 		/**
+		 * @brief Deletes a retired node using its original type.
+		 * @tparam T Node type.
+		 * @param q Type-erased pointer to the node.
+		 */
+		template <typename T>
+		static void deleteAs(void* q) {
+
+			delete static_cast<T*>(q);
+
+		}
+
+		/**
 		 * @brief Defers reclamation of @p p until no hazard pointer protects it.
 		 *
 		 * Adds @p p to the calling thread's private retire list; once that list
@@ -122,13 +134,6 @@ namespace {
 		 * @param  p   Node to retire. Ownership transfers to the domain; the
 		 *             caller must not touch @p p again after this call.
 		 */
-		template <typename T>
-		static void deleteAs(void* q) {
-
-			delete static_cast<T*>(q);
-
-		}
-
 		template <typename T>
 		void retire(T* p) {
 

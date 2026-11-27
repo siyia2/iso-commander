@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Checks native line editor guards, keybindings, hooks and terminal restoration.
+ */
+
 #include <stdio.h>
 #include <signal.h>
 #include <termios.h>
@@ -30,6 +36,7 @@ int toggleList_handler(int, int);
 int reset_handler(int, int);
 
 namespace isocmd_tests {
+
 	namespace {
 		using namespace RetainAndRestoreLineEditorBuffer;
 		using Binding = EditorCommand*;
@@ -76,7 +83,7 @@ namespace isocmd_tests {
 		}
 
 		// The actual guards are exercised on normal fallthrough, early return,
-		// and C++ exception unwinding (never throw through Line editor C callbacks).
+		// and C++ exception unwinding (never throw through line editor C callbacks).
 		void leave(int path) {
 
 			if (path == 2) throw Unwind{};
@@ -453,6 +460,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Exercises editor guards and terminal restoration in an isolated PTY child.
+	 */
 	int lineEditorGuardsChild() {
 
 		try {

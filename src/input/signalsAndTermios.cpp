@@ -6,7 +6,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;
 import isocmd.core.uiState;

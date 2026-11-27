@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Drives real application and fixture PTY sessions and checks interactive workflows.
+ */
+
 #include <errno.h>
 #include <poll.h>
 #include <pty.h>
@@ -14,6 +19,7 @@
 import isocmd.write2usb.ui.textWidth;
 
 namespace isocmd_tests {
+
 	namespace {
 		using Clock = std::chrono::steady_clock;
 		using namespace std::chrono_literals;
@@ -146,7 +152,7 @@ namespace isocmd_tests {
 				bool eof = false;
 				int status = 0;
 				// Keep consuming output while waiting for the child. A full PTY can
-				// otherwise block Line editor cleanup or sanitizer diagnostics indefinitely.
+				// otherwise block line editor cleanup or sanitizer diagnostics indefinitely.
 				// Drain after waitpid as well so failure diagnostics include the tail.
 				while (!reaped || !eof) {
 					if (!reaped) {
@@ -202,7 +208,7 @@ namespace isocmd_tests {
 
 		}
 
-		// Strip CSI, test OSC markers and Line editor delimiters; keep UTF-8 glyphs.
+		// Strip CSI, test OSC markers and line editor delimiters; keep UTF-8 glyphs.
 		std::string plain(std::string_view raw) {
 
 			std::string result;
@@ -216,18 +222,18 @@ namespace isocmd_tests {
 
 		}
 
-		bool has(std::string_view s,std::string_view word) {
+		bool has(std::string_view s, std::string_view word) {
 
-			return s.find(word)!=std::string_view::npos;
+			return s.find(word) != std::string_view::npos;
 
 		}
 
 		// Isolate the latest full list redraw rather than matching stale scrollback.
-		std::string listFrame(const TerminalSession& term,std::size_t start,std::size_t end) {
+		std::string listFrame(const TerminalSession& term, std::size_t start, std::size_t end) {
 
-			const auto clear=term.output.rfind("\033[2J\033[3J\033[H",end);
-			if (clear!=std::string::npos && clear>=start) start=clear;
-			return plain(std::string_view(term.output).substr(start,end-start));
+			const auto clear = term.output.rfind("\033[2J\033[3J\033[H", end);
+			if (clear != std::string::npos && clear >= start) start = clear;
+			return plain(std::string_view(term.output).substr(start, end-start));
 
 		}
 
@@ -317,15 +323,15 @@ namespace isocmd_tests {
 
 		}
 
-		std::string screenFrame(TerminalSession& term,std::size_t& start,std::string_view expected) {
+		std::string screenFrame(TerminalSession& term, std::size_t& start, std::string_view expected) {
 
 			try {
 				for (;;) {
-					const auto begin=term.waitFor("\033[?2026h",start);
-					const auto end=term.waitFor("\033[?2026l",begin);
-					auto frame=plain(std::string_view(term.output).substr(begin,end-begin));
-					start=end;
-					if (has(frame,expected)) return frame;
+					const auto begin = term.waitFor("\033[?2026h", start);
+					const auto end = term.waitFor("\033[?2026l", begin);
+					auto frame = plain(std::string_view(term.output).substr(begin, end-begin));
+					start = end;
+					if (has(frame, expected)) return frame;
 				}
 			} catch (const std::exception& e) {
 				throw std::runtime_error("waiting for screen frame containing '" +
@@ -534,37 +540,37 @@ namespace isocmd_tests {
 
 		std::string workflowStep(TerminalSession& term, std::string_view input, Prompt prompt) {
 
-			const auto start=term.output.size(); term.send(input);
+			const auto start = term.output.size(); term.send(input);
 			const auto end = waitForStepPrompt(term, prompt, start);
-			return listFrame(term,start,end);
+			return listFrame(term, start, end);
 
 		}
 
 		void checkWorkflowPage(TerminalSession& term, std::string_view input, std::string_view title,
 		                       std::string_view first, std::string_view absent) {
 
-			const auto frame=workflowStep(term, input,selectPrompt);
-			CHECK(has(frame,title) && has(frame,first) && !has(frame,absent));
+			const auto frame = workflowStep(term, input, selectPrompt);
+			CHECK(has(frame, title) && has(frame, first) && !has(frame, absent));
 
 		}
 
 		std::string workflowPreview(TerminalSession& term, std::string_view key, std::string_view query) {
 
-			const auto start=term.output.size(); term.send(key);
-			return queryFrame(term,start,query);
+			const auto start = term.output.size(); term.send(key);
+			return queryFrame(term, start, query);
 
 		}
 
 		void checkWorkflowPagination(TerminalSession& term) {
 
 			CHECK(has(listFrame(term, 0, waitForNewInput(term)), "Main Menu"));
-			workflowStep(term, "1\n",inputPrompt);
-			checkWorkflowPage(term, "5\n","Page 1/4","groupalpha1.iso","groupalpha3.iso");
-			checkWorkflowPage(term, "\x1b[5~","Page 1/4","groupalpha1.iso","groupalpha3.iso");
-			checkWorkflowPage(term, "\x1b[6~","Page 2/4","groupalpha3.iso","groupalpha1.iso");
-			checkWorkflowPage(term, "g4\n","Page 4/4","groupbeta1.iso","groupalpha1.iso");
-			checkWorkflowPage(term, "\x1b[6~","Page 4/4","groupbeta1.iso","groupalpha1.iso");
-			checkWorkflowPage(term, "g1\n","Page 1/4","groupalpha1.iso","groupbeta1.iso");
+			workflowStep(term, "1\n", inputPrompt);
+			checkWorkflowPage(term, "5\n", "Page 1/4", "groupalpha1.iso", "groupalpha3.iso");
+			checkWorkflowPage(term, "\x1b[5~", "Page 1/4", "groupalpha1.iso", "groupalpha3.iso");
+			checkWorkflowPage(term, "\x1b[6~", "Page 2/4", "groupalpha3.iso", "groupalpha1.iso");
+			checkWorkflowPage(term, "g4\n", "Page 4/4", "groupbeta1.iso", "groupalpha1.iso");
+			checkWorkflowPage(term, "\x1b[6~", "Page 4/4", "groupbeta1.iso", "groupalpha1.iso");
+			checkWorkflowPage(term, "g1\n", "Page 1/4", "groupalpha1.iso", "groupbeta1.iso");
 
 		}
 
@@ -572,110 +578,110 @@ namespace isocmd_tests {
 
 			// A long no-match query must scroll only the input, not the Filter label.
 			const std::string query = "FILTER-START!" + std::string(2400, 'z') + "FILTER-TAIL!";
-			auto begin=term.output.size();
+			auto begin = term.output.size();
 			term.send("\x15\033[200~" + query + "\033[201~");
-			auto frame=queryFrame(term,begin,"FILTER-TAIL!",true);
+			auto frame = queryFrame(term, begin, "FILTER-TAIL!", true);
 			std::size_t end;
-			CHECK(has(frame,"No filter results"));
+			CHECK(has(frame, "No filter results"));
 			CHECK(has(frame, term.filterLabel) && has(frame, "FILTER-TAIL!"));
-			begin=term.output.size(); term.send("\x01");
-			end=term.waitFor("FILTER-START!",begin);
-			end=waitForInputRow(term,end);
+			begin = term.output.size(); term.send("\x01");
+			end = term.waitFor("FILTER-START!", begin);
+			end = waitForInputRow(term, end);
 			const auto row = inputRow(term, end);
 			CHECK(row.starts_with(term.filterLabel + "FILTER-START!"));
 			CHECK(!has(row, "FILTER-TAIL!") && !row.ends_with("z"));
-			begin=term.output.size(); term.send("\x05");
-			end=term.waitFor("FILTER-TAIL!",begin);
-			term.waitFor("\033[K\r",end);
-			begin=term.output.size(); term.resize(18,55);
-			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),term.filterLabel));
-			begin=term.output.size(); term.resize(18,95);
-			CHECK(has(queryFrame(term,begin,"FILTER-TAIL!",true),term.filterLabel));
-			frame=workflowPreview(term,"\x15zzzz-no-fixture","zzzz-no-fixture");
-			CHECK(has(frame,"No filter results"));
+			begin = term.output.size(); term.send("\x05");
+			end = term.waitFor("FILTER-TAIL!", begin);
+			term.waitFor("\033[K\r", end);
+			begin = term.output.size(); term.resize(18, 55);
+			CHECK(has(queryFrame(term, begin, "FILTER-TAIL!", true), term.filterLabel));
+			begin = term.output.size(); term.resize(18, 95);
+			CHECK(has(queryFrame(term, begin, "FILTER-TAIL!", true), term.filterLabel));
+			frame = workflowPreview(term, "\x15zzzz-no-fixture", "zzzz-no-fixture");
+			CHECK(has(frame, "No filter results"));
 
 		}
 
 		void checkWorkflowFilterPreview(TerminalSession& term) {
 
 			// Stage a selection before preview; cancellation must retain it.
-			CHECK(has(workflowStep(term, "1;\n",selectPrompt),"Pending Indices"));
-			workflowStep(term, "/",filterPrompt);
-			auto begin=term.output.size(); term.send("groupalpha");
-			auto frame=queryFrame(term,begin,"groupalpha");
-			CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
-			frame=workflowPreview(term, "\x1b[6~","groupalpha");
-			CHECK(has(frame,"groupalpha3.iso") && !has(frame,"groupalpha1.iso"));
-			frame=workflowPreview(term, "\x1b[6~","groupalpha"); CHECK(has(frame,"groupalpha5.iso"));
-			frame=workflowPreview(term, "\x1b[6~","groupalpha"); CHECK(has(frame,"groupalpha5.iso"));
-			frame=workflowPreview(term, "\x1b[5~","groupalpha"); CHECK(has(frame,"groupalpha3.iso"));
-			begin=term.output.size(); term.resize(18,95);
-			frame=queryFrame(term,begin,"groupalpha"); CHECK(has(frame,"groupalpha3.iso"));
+			CHECK(has(workflowStep(term, "1;\n", selectPrompt), "Pending Indices"));
+			workflowStep(term, "/", filterPrompt);
+			auto begin = term.output.size(); term.send("groupalpha");
+			auto frame = queryFrame(term, begin, "groupalpha");
+			CHECK(has(frame, "groupalpha1.iso") && !has(frame, "groupbeta1.iso"));
+			frame = workflowPreview(term, "\x1b[6~", "groupalpha");
+			CHECK(has(frame, "groupalpha3.iso") && !has(frame, "groupalpha1.iso"));
+			frame = workflowPreview(term, "\x1b[6~", "groupalpha"); CHECK(has(frame, "groupalpha5.iso"));
+			frame = workflowPreview(term, "\x1b[6~", "groupalpha"); CHECK(has(frame, "groupalpha5.iso"));
+			frame = workflowPreview(term, "\x1b[5~", "groupalpha"); CHECK(has(frame, "groupalpha3.iso"));
+			begin = term.output.size(); term.resize(18, 95);
+			frame = queryFrame(term, begin, "groupalpha"); CHECK(has(frame, "groupalpha3.iso"));
 			// Changing query resets scroll; widening must use original source.
-			frame=workflowPreview(term, "\x15groupbeta","groupbeta");
-			CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
-			frame=workflowPreview(term, "\x15zzzz-no-fixture","zzzz-no-fixture");
-			CHECK(has(frame,"No filter results"));
+			frame = workflowPreview(term, "\x15groupbeta", "groupbeta");
+			CHECK(has(frame, "groupbeta1.iso") && !has(frame, "groupalpha1.iso"));
+			frame = workflowPreview(term, "\x15zzzz-no-fixture", "zzzz-no-fixture");
+			CHECK(has(frame, "No filter results"));
 			checkLongFilterInput(term);
 			// No-match Enter must leave us in the filter prompt.
 			const auto label = term.filterLabel;
-			workflowStep(term, "\n",filterPrompt);
+			workflowStep(term, "\n", filterPrompt);
 			CHECK(term.filterLabel == label);
-			CHECK(has(workflowStep(term, "\x1b",selectPrompt),"Pending Indices"));
+			CHECK(has(workflowStep(term, "\x1b", selectPrompt), "Pending Indices"));
 
 		}
 
 		void checkWorkflowCommittedFilters(TerminalSession& term) {
 
 			// Commit a non-overlapping filter, then replace it from the source.
-			workflowStep(term, "/",filterPrompt); auto frame=workflowPreview(term, "groupbeta","groupbeta");
-			CHECK(has(frame,"groupbeta1.iso"));
-			frame=workflowStep(term, "\n",selectPrompt); CHECK(has(frame,"groupbeta1.iso") && !has(frame,"groupalpha1.iso"));
-			workflowStep(term, "/",filterPrompt); frame=workflowPreview(term, "groupalpha","groupalpha");
-			CHECK(has(frame,"groupalpha1.iso"));
-			frame=workflowStep(term, "\n",selectPrompt); CHECK(has(frame,"groupalpha1.iso") && !has(frame,"groupbeta1.iso"));
-			CHECK(has(frame,"Pending Indices"));
-			checkWorkflowPage(term, "\x1b[6~","Page 2/3","groupalpha3.iso","groupalpha1.iso");
-			workflowStep(term, "\x1b",selectPrompt); // clear committed filter
+			workflowStep(term, "/", filterPrompt); auto frame = workflowPreview(term, "groupbeta", "groupbeta");
+			CHECK(has(frame, "groupbeta1.iso"));
+			frame = workflowStep(term, "\n", selectPrompt); CHECK(has(frame, "groupbeta1.iso") && !has(frame, "groupalpha1.iso"));
+			workflowStep(term, "/", filterPrompt); frame = workflowPreview(term, "groupalpha", "groupalpha");
+			CHECK(has(frame, "groupalpha1.iso"));
+			frame = workflowStep(term, "\n", selectPrompt); CHECK(has(frame, "groupalpha1.iso") && !has(frame, "groupbeta1.iso"));
+			CHECK(has(frame, "Pending Indices"));
+			checkWorkflowPage(term, "\x1b[6~", "Page 2/3", "groupalpha3.iso", "groupalpha1.iso");
+			workflowStep(term, "\x1b", selectPrompt); // clear committed filter
 
 		}
 
 		void checkWorkflowCopy(TerminalSession& term, const fs::path& source, const fs::path& dest) {
 
 			// Execute the original staged path, regardless of filter history.
-			workflowStep(term, "P",inputPrompt);
-			auto begin=term.output.size(); term.send(dest.string()+"\n");
-			auto end=waitForNewInput(term, begin);
-			CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
-			begin=term.output.size(); term.resize(20,110);
-			end=waitForRepaintedInput(term, begin);
-			CHECK(has(plain(std::string_view(term.output).substr(begin,end-begin)),"COMPLETED"));
-			auto frame=workflowStep(term, "y\n",pausePrompt);
-			CHECK(has(frame,"Copied:") && has(frame,"groupalpha1.iso"));
-			CHECK(!has(frame,"groupalpha2.iso"));
-			begin=term.output.size(); term.resize(24,120);
-			end=term.waitFor(terminal_sync::pause,begin);
-			frame=listFrame(term,begin,end);
-			CHECK(has(frame,"Copied:") && has(frame,"groupalpha1.iso"));
-			CHECK(readFile(dest/"groupalpha1.iso")==readFile(source/"groupalpha1.iso"));
-			frame=workflowStep(term, "\n",selectPrompt);
-			CHECK(!has(frame,"Copied:"));
+			workflowStep(term, "P", inputPrompt);
+			auto begin = term.output.size(); term.send(dest.string()+"\n");
+			auto end = waitForNewInput(term, begin);
+			CHECK(has(plain(std::string_view(term.output).substr(begin, end-begin)), "COMPLETED"));
+			begin = term.output.size(); term.resize(20, 110);
+			end = waitForRepaintedInput(term, begin);
+			CHECK(has(plain(std::string_view(term.output).substr(begin, end-begin)), "COMPLETED"));
+			auto frame = workflowStep(term, "y\n", pausePrompt);
+			CHECK(has(frame, "Copied:") && has(frame, "groupalpha1.iso"));
+			CHECK(!has(frame, "groupalpha2.iso"));
+			begin = term.output.size(); term.resize(24, 120);
+			end = term.waitFor(terminal_sync::pause, begin);
+			frame = listFrame(term, begin, end);
+			CHECK(has(frame, "Copied:") && has(frame, "groupalpha1.iso"));
+			CHECK(readFile(dest/"groupalpha1.iso") == readFile(source/"groupalpha1.iso"));
+			frame = workflowStep(term, "\n", selectPrompt);
+			CHECK(!has(frame, "Copied:"));
 
 		}
 
 		void checkWorkflowDelete(TerminalSession& term, const fs::path& source) {
 
 			// Return to menu; exercise delete rejection followed by confirmation.
-			workflowStep(term, "\x1b",inputPrompt);
-			workflowStep(term, "3\n",selectPrompt);
-			workflowStep(term, "1\n",inputPrompt);
-			workflowStep(term, "n\n",selectPrompt); CHECK(fs::exists(source/"groupalpha1.iso"));
-			workflowStep(term, "1\n",inputPrompt);
-			const auto begin=term.output.size(); term.send("y\n"); waitForNewInput(term, begin);
-			auto frame=workflowStep(term, "Y\n",pausePrompt);
-			CHECK(has(frame,"Deleted:") && has(frame,"groupalpha1.iso") && !has(frame,"Copied:"));
-			frame=workflowStep(term, "\x1b",selectPrompt);
-			CHECK(!has(frame,"Deleted:") && !fs::exists(source/"groupalpha1.iso"));
+			workflowStep(term, "\x1b", inputPrompt);
+			workflowStep(term, "3\n", selectPrompt);
+			workflowStep(term, "1\n", inputPrompt);
+			workflowStep(term, "n\n", selectPrompt); CHECK(fs::exists(source/"groupalpha1.iso"));
+			workflowStep(term, "1\n", inputPrompt);
+			const auto begin = term.output.size(); term.send("y\n"); waitForNewInput(term, begin);
+			auto frame = workflowStep(term, "Y\n", pausePrompt);
+			CHECK(has(frame, "Deleted:") && has(frame, "groupalpha1.iso") && !has(frame, "Copied:"));
+			frame = workflowStep(term, "\x1b", selectPrompt);
+			CHECK(!has(frame, "Deleted:") && !fs::exists(source/"groupalpha1.iso"));
 			CHECK(fs::exists(source/"groupalpha2.iso"));
 
 		}
@@ -684,27 +690,27 @@ namespace isocmd_tests {
 
 			// The source directory sorts before the destination; the deleted
 			// first row is now replaced by alpha2. Move it to the fixture dir.
-			workflowStep(term, "\x1b",inputPrompt);
-			auto frame=workflowStep(term, "4\n",selectPrompt); CHECK(has(frame,"groupalpha2.iso"));
-			workflowStep(term, "1\n",inputPrompt);
-			const auto begin=term.output.size(); term.send(dest.string()+"\n");
+			workflowStep(term, "\x1b", inputPrompt);
+			auto frame = workflowStep(term, "4\n", selectPrompt); CHECK(has(frame, "groupalpha2.iso"));
+			workflowStep(term, "1\n", inputPrompt);
+			const auto begin = term.output.size(); term.send(dest.string()+"\n");
 			waitForNewInput(term, begin);
-			frame=workflowStep(term, "y\n",pausePrompt);
-			CHECK(has(frame,"Moved:") && has(frame,"groupalpha2.iso") && !has(frame,"Deleted:") && !has(frame,"Copied:"));
-			frame=workflowStep(term, "\x04",selectPrompt);
-			CHECK(!has(frame,"Moved:") && !fs::exists(source/"groupalpha2.iso"));
-			CHECK(readFile(dest/"groupalpha2.iso")=="fixture payload: groupalpha2.iso");
+			frame = workflowStep(term, "y\n", pausePrompt);
+			CHECK(has(frame, "Moved:") && has(frame, "groupalpha2.iso") && !has(frame, "Deleted:") && !has(frame, "Copied:"));
+			frame = workflowStep(term, "\x04", selectPrompt);
+			CHECK(!has(frame, "Moved:") && !fs::exists(source/"groupalpha2.iso"));
+			CHECK(readFile(dest/"groupalpha2.iso") == "fixture payload: groupalpha2.iso");
 			CHECK(fs::exists(source/"groupalpha3.iso"));
 
 		}
 
 		void finishWorkflow(TerminalSession& term) {
 
-			workflowStep(term, "\x1b",inputPrompt); workflowStep(term, "\x1b",inputPrompt);
+			workflowStep(term, "\x1b", inputPrompt); workflowStep(term, "\x1b", inputPrompt);
 			// Observe the exit action's clear-screen sequence before waiting
 			// for shutdown, distinguishing lost input from a cleanup hang.
-			const auto begin=term.output.size(); term.send("5\n");
-			term.waitFor("\033[2J\033[3J\033[H",begin);
+			const auto begin = term.output.size(); term.send("5\n");
+			term.waitFor("\033[2J\033[3J\033[H", begin);
 			term.waitForExit();
 
 		}
@@ -714,23 +720,23 @@ namespace isocmd_tests {
 	int workflowTest(const char* binary) {
 
 		try {
-			const char* sandbox=std::getenv("ISOCMD_TEST_SANDBOX");
-			const char* home=std::getenv("HOME");
-			CHECK(sandbox && home && fs::path(home)==fs::path(sandbox)/"home");
+			const char* sandbox = std::getenv("ISOCMD_TEST_SANDBOX");
+			const char* home = std::getenv("HOME");
+			CHECK(sandbox && home && fs::path(home) == fs::path(sandbox)/"home");
 			TempDir fixture;
-			const auto source=fixture.path/"aa-source", dest=fixture.path/"zz-destination";
+			const auto source = fixture.path/"aa-source", dest = fixture.path/"zz-destination";
 			fs::create_directories(source); fs::create_directories(dest);
 			std::string database;
-			for (const std::string name : {"groupalpha1.iso","groupalpha2.iso","groupalpha3.iso","groupalpha4.iso",
-				                           "groupalpha5.iso","groupalpha6.iso","groupbeta1.iso","groupbeta2.iso"}) {
-				writeFile(source/name,"fixture payload: "+name);
-				database+=(source/name).string()+"\n";
+			for (const std::string name : {"groupalpha1.iso", "groupalpha2.iso", "groupalpha3.iso", "groupalpha4.iso",
+				                           "groupalpha5.iso", "groupalpha6.iso", "groupbeta1.iso", "groupbeta2.iso"}) {
+				writeFile(source/name, "fixture payload: "+name);
+				database += (source/name).string()+"\n";
 			}
-			const auto db=fs::path(home)/".local/share/isocmd/database/iso_commander_database.txt";
-			const auto config=fs::path(home)/".config/isocmd/config";
+			const auto db = fs::path(home)/".local/share/isocmd/database/iso_commander_database.txt";
+			const auto config = fs::path(home)/".config/isocmd/config";
 			fs::create_directories(db.parent_path()); fs::create_directories(config.parent_path());
-			writeFile(db,database); writeFile(config,"pagination = 2\nauto_update = off\nfilenames_only = off\n");
-			TerminalSession term(binary,nullptr,120);
+			writeFile(db, database); writeFile(config, "pagination = 2\nauto_update = off\nfilenames_only = off\n");
+			TerminalSession term(binary, nullptr, 120);
 			try {
 				checkWorkflowPagination(term);
 				checkWorkflowFilterPreview(term);
@@ -742,7 +748,7 @@ namespace isocmd_tests {
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: real menu pagination, filter preview, staged copy, move and delete workflows\n";
 			return 0;
-		} catch(const std::exception& e) { std::cerr<<"FAIL: interactive workflows: "<<e.what()<<'\n'; return 1; }
+		} catch (const std::exception& e) { std::cerr<<"FAIL: interactive workflows: "<<e.what()<<'\n'; return 1; }
 
 	}
 
@@ -1244,80 +1250,80 @@ namespace isocmd_tests {
 		// The slowest device takes 200 ms to write and another 400 ms
 		// to verify, even when verification fails. The summary must
 		// not stop at write completion or another device finishing.
-		const std::string elapsedLabel="Time Elapsed: ";
-		const auto elapsedPos=frame.find(elapsedLabel);
-		CHECK(elapsedPos!=std::string::npos);
-		const double elapsed=std::stod(frame.substr(elapsedPos+elapsedLabel.size()));
+		const std::string elapsedLabel = "Time Elapsed: ";
+		const auto elapsedPos = frame.find(elapsedLabel);
+		CHECK(elapsedPos != std::string::npos);
+		const double elapsed = std::stod(frame.substr(elapsedPos+elapsedLabel.size()));
 		CHECK(elapsed >= (i<2 ? 0.6 : 0.2));
 
 	}
 
 	static void checkWriteSpeed(const std::string& frame, int i) {
 
-		if (i==0) CHECK(has(frame,"PASS") && has(frame,"20.0 MB/s (avg)") && !has(frame,"100.0 MB/s (avg)"));
-		if (i==3) CHECK(has(frame,"DONE") && !has(frame,"PASS") && has(frame,"20.0 MB/s (avg)"));
+		if (i == 0) CHECK(has(frame, "PASS") && has(frame, "20.0 MB/s (avg)") && !has(frame, "100.0 MB/s (avg)"));
+		if (i == 3) CHECK(has(frame, "DONE") && !has(frame, "PASS") && has(frame, "20.0 MB/s (avg)"));
 
 	}
 
 	static void checkWriteResult(const std::string& frame, int i) {
 
-		const bool successful=i==0 || i==3;
-		CHECK(has(frame,successful?"COMPLETED":i==1?"PARTIAL":"FAILED"));
-		CHECK(has(frame,i==2?"Written: 0/3":"Written: 3/3"));
-		if (i==3) CHECK(!has(frame,"Verified:"));
-		else CHECK(has(frame,i==0?"Verified: 3/3":i==1?"Verified: 2/3":"Verified: 0/3"));
+		const bool successful = i == 0 || i == 3;
+		CHECK(has(frame, successful?"COMPLETED":i == 1?"PARTIAL":"FAILED"));
+		CHECK(has(frame, i == 2?"Written: 0/3":"Written: 3/3"));
+		if (i == 3) CHECK(!has(frame, "Verified:"));
+		else CHECK(has(frame, i == 0?"Verified: 3/3":i == 1?"Verified: 2/3":"Verified: 0/3"));
 		checkWriteElapsed(frame, i);
-		CHECK(has(frame,"iso2.iso") && has(frame,"iso10.iso"));
+		CHECK(has(frame, "iso2.iso") && has(frame, "iso10.iso"));
 		checkWriteSpeed(frame, i);
-		CHECK(has(frame,"/dev/full") && has(frame,"/dev/zero") && has(frame,"/dev/null"));
+		CHECK(has(frame, "/dev/full") && has(frame, "/dev/zero") && has(frame, "/dev/null"));
 
 	}
 
 	int writeUiTest(const char* binary) {
 
 		try {
-			TerminalSession term(binary,"--write-ui-child",120);
+			TerminalSession term(binary, "--write-ui-child", 120);
 			try {
-				auto end=waitForNewInput(term);
+				auto end = waitForNewInput(term);
 				CHECK(has(listFrame(term, 0, end), "iso2.iso"));
 				// One Tab completes a unique index and the common device prefix.
 				term.send("1\t");
-				end=waitForInputRow(term, term.waitFor("1>/dev/",end));
-				CHECK(inputRow(term,end).ends_with("1>/dev/"));
+				end = waitForInputRow(term, term.waitFor("1>/dev/", end));
+				CHECK(inputRow(term, end).ends_with("1>/dev/"));
 				term.send("z\t");
-				end=waitForInputRow(term, term.waitFor("1>/dev/zero",end));
-				CHECK(inputRow(term,end).ends_with("1>/dev/zero"));
+				end = waitForInputRow(term, term.waitFor("1>/dev/zero", end));
+				CHECK(inputRow(term, end).ends_with("1>/dev/zero"));
 				// Exactly one ISO and device remain: one Tab completes the entire pair.
 				term.send(";\t");
-				end=waitForInputRow(term, term.waitFor("1>/dev/zero;2>/dev/null",end));
-				CHECK(inputRow(term,end).ends_with("1>/dev/zero;2>/dev/null"));
+				end = waitForInputRow(term, term.waitFor("1>/dev/zero;2>/dev/null", end));
+				CHECK(inputRow(term, end).ends_with("1>/dev/zero;2>/dev/null"));
 				term.send("\x1b");
-				end=term.waitFor("TEST-MAPPING-CANCELLED",end);
-				end=waitForNewInput(term, end);
+				end = term.waitFor("TEST-MAPPING-CANCELLED", end);
+				end = waitForNewInput(term, end);
 				term.send("1>/dev/null;1>/dev/null\n");
-				end=term.waitFor("used multiple times",end); end=term.waitFor(terminal_sync::pause,end);
-				term.send("\n"); end=waitForNewInput(term, end);
-				const std::string mapping="1>/dev/zero;2>/dev/null;1>/dev/full";
-				term.send(mapping+"\n"); end=waitForNewInput(term, end);
-				const auto start=term.output.size(); term.resize(24,100);
-				end=waitForRepaintedInput(term, start);
-				term.send("n\n"); end=waitForNewInput(term, end);
+				end = term.waitFor("used multiple times", end); end = term.waitFor(terminal_sync::pause, end);
+				term.send("\n"); end = waitForNewInput(term, end);
+				const std::string mapping = "1>/dev/zero;2>/dev/null;1>/dev/full";
+				term.send(mapping+"\n"); end = waitForNewInput(term, end);
+				const auto start = term.output.size(); term.resize(24, 100);
+				end = waitForRepaintedInput(term, start);
+				term.send("n\n"); end = waitForNewInput(term, end);
 				// Declining retains the input for editing; resubmit it unchanged.
-				CHECK(inputRow(term, end).ends_with(mapping)); term.send("\n"); end=waitForNewInput(term, end);
-				const auto afterConfirm=term.output.size(); term.send("y\n");
-				for (int i=0;i<4;++i) {
-					const auto startResult=i==0?afterConfirm:end;
-					end=term.waitFor("TEST-WRITE-RESULT-"+std::to_string(i),startResult);
-					const auto frame=plain(std::string_view(term.output).substr(startResult,end-startResult));
+				CHECK(inputRow(term, end).ends_with(mapping)); term.send("\n"); end = waitForNewInput(term, end);
+				const auto afterConfirm = term.output.size(); term.send("y\n");
+				for (int i = 0;i<4;++i) {
+					const auto startResult = i == 0?afterConfirm:end;
+					end = term.waitFor("TEST-WRITE-RESULT-"+std::to_string(i), startResult);
+					const auto frame = plain(std::string_view(term.output).substr(startResult, end-startResult));
 					checkWriteResult(frame, i);
 					term.send("\n");
 				}
-				end=term.waitFor("TEST-ASYNC-CANCELLATION-PASS",end);
-				end=term.waitFor("TEST-VERIFY-OFF",end);
-				end=waitForNewInput(term, end);
-				term.send("1>/dev/zero;2>/dev/null\n"); end=waitForNewInput(term, end);
+				end = term.waitFor("TEST-ASYNC-CANCELLATION-PASS", end);
+				end = term.waitFor("TEST-VERIFY-OFF", end);
+				end = waitForNewInput(term, end);
+				term.send("1>/dev/zero;2>/dev/null\n"); end = waitForNewInput(term, end);
 				term.send("y\n");
-				term.waitFor("TEST-WRITE-UI-PASS",end); term.waitForExit();
+				term.waitFor("TEST-WRITE-UI-PASS", end); term.waitForExit();
 				// Exactly eight line-editor sessions: two mapping attempts, retry,
 				// confirmation, decline/retry, confirmation, and the final pair.
 				std::size_t sessions = 0;
@@ -1327,7 +1333,7 @@ namespace isocmd_tests {
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: device mapping retry, resize, confirmation, multi-device task association and results\n";
 			return 0;
-		} catch(const std::exception& e) { std::cerr<<"FAIL: USB write UI: "<<e.what()<<'\n'; return 1; }
+		} catch (const std::exception& e) { std::cerr<<"FAIL: USB write UI: "<<e.what()<<'\n'; return 1; }
 
 	}
 
@@ -1339,7 +1345,7 @@ namespace isocmd_tests {
 		std::size_t count = 0;
 		std::size_t speedEndColumn = 0;
 		while (std::getline(rows, row)) {
-			if (!has(row,"/dev/")) continue;
+			if (!has(row, "/dev/")) continue;
 			auto unit = row.find(" MB/s");
 			if (unit == std::string::npos) unit = row.find(" KB/s");
 			CHECK(unit != std::string::npos);
@@ -1364,9 +1370,9 @@ namespace isocmd_tests {
 
 	static void checkInitialProgress(const std::string& frame) {
 
-		CHECK(has(frame,"▄░░░░") && has(frame,"[⠶⠶⠆  ]") && has(frame,"▇▇▇▇▄"));
-		CHECK(has(frame,"10%") && has(frame,"] 50%") && !has(frame,"CHK") && has(frame,"99%") && has(frame,"12.3 MB/s"));
-		CHECK(has(frame,"very-long-fixture-image-for-resize-testing.iso"));
+		CHECK(has(frame, "▄░░░░") && has(frame, "[⠶⠶⠆  ]") && has(frame, "▇▇▇▇▄"));
+		CHECK(has(frame, "10%") && has(frame, "] 50%") && !has(frame, "CHK") && has(frame, "99%") && has(frame, "12.3 MB/s"));
+		CHECK(has(frame, "very-long-fixture-image-for-resize-testing.iso"));
 		checkSpeedSpacing(frame);
 
 	}
@@ -1374,36 +1380,36 @@ namespace isocmd_tests {
 	int progressScreenTest(const char* binary) {
 
 		try {
-			TerminalSession term(binary,"--progress-child",120);
+			TerminalSession term(binary, "--progress-child", 120);
 			try {
-				std::size_t start=0;
-				auto frame=screenFrame(term,start,"51.2 KB/s");
+				std::size_t start = 0;
+				auto frame = screenFrame(term, start, "51.2 KB/s");
 				checkInitialProgress(frame);
-				start=term.output.size(); term.resize(20,55);
-				frame=screenFrame(term,start,"Processing");
-				CHECK(!has(frame,"very-long-fixture-image-for-resize-testing.iso") && has(frame,"…"));
+				start = term.output.size(); term.resize(20, 55);
+				frame = screenFrame(term, start, "Processing");
+				CHECK(!has(frame, "very-long-fixture-image-for-resize-testing.iso") && has(frame, "…"));
 				std::istringstream lines(frame); std::string line;
-				while (std::getline(lines,line)) if (has(line,"/dev/")) CHECK(visibleWidth(line)<=54);
-				start=term.output.size(); term.resize(24,120);
-				frame=screenFrame(term,start,"very-long-fixture-image-for-resize-testing.iso");
-				CHECK(has(frame,"99%"));
+				while (std::getline(lines, line)) if (has(line, "/dev/")) CHECK(visibleWidth(line) <= 54);
+				start = term.output.size(); term.resize(24, 120);
+				frame = screenFrame(term, start, "very-long-fixture-image-for-resize-testing.iso");
+				CHECK(has(frame, "99%"));
 				checkSpeedSpacing(frame);
-				term.send("\n"); frame=screenFrame(term,start,"100% 179.8 MB/s");
+				term.send("\n"); frame = screenFrame(term, start, "100% 179.8 MB/s");
 				// The longest speed follows a full-width percentage by one space.
-				CHECK(has(frame,"100% 179.8 MB/s") && has(frame,"] 5%"));
+				CHECK(has(frame, "100% 179.8 MB/s") && has(frame, "] 5%"));
 				checkSpeedSpacing(frame);
-				term.send("\n"); frame=screenFrame(term,start,"INTERRUPTED");
+				term.send("\n"); frame = screenFrame(term, start, "INTERRUPTED");
 				checkSpeedSpacing(frame);
-				CHECK(has(frame,"Written: 3/3 | Verified: 1/3") && has(frame,"PASS") && has(frame,"FAIL") && has(frame,"] CXL  ") && has(frame,"(avg)"));
-				CHECK(has(frame,"▇▇▇▇▇"));
-				CHECK(has(frame,"51.2 KB/s (avg)") && !has(frame,"100.0 MB/s (avg)"));
-				start=term.output.size(); term.resize(20,100);
-				frame=screenFrame(term,start,"INTERRUPTED"); CHECK(has(frame,"Written: 3/3 | Verified: 1/3"));
-				term.send("\n"); term.waitFor("TEST-PROGRESS-PASS",start); term.waitForExit();
+				CHECK(has(frame, "Written: 3/3 | Verified: 1/3") && has(frame, "PASS") && has(frame, "FAIL") && has(frame, "] CXL  ") && has(frame, "(avg)"));
+				CHECK(has(frame, "▇▇▇▇▇"));
+				CHECK(has(frame, "51.2 KB/s (avg)") && !has(frame, "100.0 MB/s (avg)"));
+				start = term.output.size(); term.resize(20, 100);
+				frame = screenFrame(term, start, "INTERRUPTED"); CHECK(has(frame, "Written: 3/3 | Verified: 1/3"));
+				term.send("\n"); term.waitFor("TEST-PROGRESS-PASS", start); term.waitForExit();
 			} catch (...) { printOutput(term.output); throw; }
 			std::cout<<"PASS: live and final USB progress rows, glyphs, speeds, cancellation and terminal resizing\n";
 			return 0;
-		} catch(const std::exception& e) { std::cerr<<"FAIL: USB progress screen: "<<e.what()<<'\n'; return 1; }
+		} catch (const std::exception& e) { std::cerr<<"FAIL: USB progress screen: "<<e.what()<<'\n'; return 1; }
 
 	}
 } // namespace isocmd_tests

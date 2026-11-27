@@ -61,7 +61,7 @@ void print_ascii() {
 
 }
 
-// Forward declaration; definition and documentation live in select.cpp.
+// Forward declaration; definition and documentation live in selectIso.cpp.
 void selectForIsoFiles(const std::string& operation,
     std::atomic<bool>& isAtISOList,
     std::vector<std::thread>& backgroundThreads,
@@ -80,7 +80,7 @@ void selectForIsoFiles(const std::string& operation,
  * - @c isAtISOList is set to @c false on every iteration before drawing
  *   (default memory ordering).
  * - A null line editor return (Ctrl+D) or Esc breaks the loop.
- * - @c \\f and @c \\t are bound to no-ops each iteration so default Line editor
+ * - @c \\f and @c \\t are bound to no-ops each iteration so default line editor
  *   bindings cannot corrupt the menu.
  * - The menu is drawn by a lambda (@c drawMenu) that wraps output in
  *   @c SyncOutput and calls @c clearScrollBuffer() before each draw, so every
@@ -323,7 +323,7 @@ void printMenu() {
  * resize repaint (@c editLineWithResize) and @c checkPendingRefresh().
  *
  * Must not call @c editLine() and must not block: it is invoked from the
- * resize-watcher and Line editor event-hook contexts.
+ * resize-watcher and line editor event-hook contexts.
  */
 void drawMainMenu() {
 
@@ -338,7 +338,7 @@ void drawMainMenu() {
  * @brief Line editor event hook that performs deferred UI refreshes on the main
  * thread.
  *
- * the line editor is not thread-safe, so no background thread may call Line editor
+ * the line editor is not thread-safe, so no background thread may call line editor
  * functions (@c editorRedisplay, ...) or write to the terminal
  * while a @c editLine() call may be active. Background threads instead publish
  * a @c PendingRefreshKind via @c GlobalState::g_pendingRefreshKind (see
@@ -364,7 +364,7 @@ void drawMainMenu() {
  * - **IsoList:** Copies @c GlobalState::g_pendingRefreshState under
  *   @c GlobalMutexes::editorMutex (the pointer handoff is not otherwise
  *   thread-safe), then re-renders the ISO list via @c loadAndDisplayIso using
- *   that state. If the copied state is null, no repaint or Line editor restore
+ *   that state. If the copied state is null, no repaint or line editor restore
  *   is performed.
  * - **None:** No-op.
  * - In the MainMenu branch, and in the IsoList branch only when the copied

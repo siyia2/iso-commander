@@ -219,10 +219,10 @@ void deactivateLivePreview();
 bool livePreviewWasRepainted();
 
 /**
- * @brief Manages Line editor hooks and keybindings for a live-preview session.
+ * @brief Manages line editor hooks and keybindings for a live-preview session.
  *
  * Installs the preview redisplay hook and Page Up/Page Down bindings on
- * construction, then restores the original Line editor configuration and
+ * construction, then restores the original line editor configuration and
  * resets preview state on destruction.
  */
 class LivePreviewLineEditorGuard {

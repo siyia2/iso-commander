@@ -67,7 +67,8 @@ namespace fs = std::filesystem;
  * @brief Checks if a directory is empty.
  * @details Used primarily to determine if a mount point can be safely removed
  * if a umount2 call fails but the directory contains no data.
- * * @param path The absolute path to the directory.
+ *
+ * @param path The absolute path to the directory.
  * @return True if the directory exists and contains no entries, false otherwise.
  */
 static bool isDirectoryEmpty(const std::string& path) {
@@ -88,8 +89,6 @@ static bool isDirectoryEmpty(const std::string& path) {
  * on ANSI palette settings and user display configuration.
  *
  * @param isoDir The directory path to format.
- * @param fmt Reference to the VerboseMessageFormatter.
- * @param messageKey The key for the specific message template.
  * @return A fully constructed, styled string ready for display.
  */
 static std::string formatDirText(const std::string& isoDir) {
@@ -111,6 +110,13 @@ static std::string formatDirText(const std::string& isoDir) {
 
 }
 
+/**
+ * @brief Formats a mount-point path with the selected verbose message template.
+ * @param isoDir Directory path to display.
+ * @param fmt Verbose message formatter.
+ * @param messageKey Key of the message template.
+ * @return Styled verbose message.
+ */
 static std::string formatDirForDisplay(const std::string& isoDir, VerboseMessageFormatter& fmt, const char* messageKey) {
 
 	return fmt.format(messageKey, formatDirText(isoDir));

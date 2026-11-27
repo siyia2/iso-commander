@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Checks CCD and NRG conversion output, counters and failure paths.
+ */
+
 #include "../common/testHarness.h"
 
 import isocmd.ops.convert;

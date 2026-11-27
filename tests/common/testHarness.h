@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Provides release-active assertions, temporary fixtures and test-group execution.
+ */
+
 #pragma once
 
 #include <fcntl.h>
@@ -9,6 +14,7 @@
 import std;
 
 namespace isocmd_tests {
+
 	namespace fs = std::filesystem;
 	using Indices = std::vector<std::size_t>;
 
@@ -16,6 +22,9 @@ namespace isocmd_tests {
 #define CHECK(...) do { if (!(__VA_ARGS__)) throw std::runtime_error( \
     std::string(__FILE__) + ":" + std::to_string(__LINE__) + ": " #__VA_ARGS__); } while (false)
 
+	/**
+	 * @brief Owns a temporary directory and removes its contents on scope exit.
+	 */
 	struct TempDir {
 		fs::path path;
 
@@ -37,6 +46,10 @@ namespace isocmd_tests {
 		TempDir(const TempDir&) = delete;
 		TempDir& operator=(const TempDir&) = delete;
 	};
+
+	/**
+	 * @brief Owns a read-only fixture descriptor.
+	 */
 	struct ReadFd {
 		int fd;
 
@@ -58,6 +71,9 @@ namespace isocmd_tests {
 
 	using Test = std::pair<const char*, void(*)()>;
 
+	/**
+	 * @brief Runs every registered test group, reports failures and returns a nonzero status on failure.
+	 */
 	inline int runTests(std::string_view suite, std::initializer_list<Test> tests) {
 
 		int failures = 0;
@@ -71,6 +87,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Writes fixture bytes to a binary file and checks the final stream state.
+	 */
 	inline void writeFile(const fs::path& path, std::string_view data) {
 
 		std::ofstream out(path, std::ios::binary | std::ios::trunc);
@@ -79,6 +98,9 @@ namespace isocmd_tests {
 
 	}
 
+	/**
+	 * @brief Reads a binary fixture into a string.
+	 */
 	inline std::string readFile(const fs::path& path) {
 
 		std::ifstream in(path, std::ios::binary);

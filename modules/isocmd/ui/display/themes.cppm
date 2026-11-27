@@ -10,7 +10,7 @@ import std;
 export extern "C++" {
 
 /**
- * @file themes.h
+ * @file themes.cppm
  * @brief Terminal UI theme management system for ISO Commander.
  */
 

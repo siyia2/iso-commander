@@ -6,7 +6,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.globalMutexes;
@@ -194,7 +193,7 @@ static std::string validateLinuxPath(const std::string& path)
  * @brief Configures line-editor keybindings, signal handlers, and history for a prompt iteration.
  *
  * @param ctx Prompt context containing operation flags and history settings.
- * @param isPageTurn Indicates whether the current Line editor invocation is a page turn.
+ * @param isPageTurn Indicates whether the current line editor invocation is a page turn.
  */
 static void configureCpMvLineEditorEnv(CpMvPromptContext& ctx, const bool& isPageTurn)
 {
@@ -218,10 +217,10 @@ static void configureCpMvLineEditorEnv(CpMvPromptContext& ctx, const bool& isPag
 }
 
 /**
- * @brief Builds the formatted Line editor prompt suffix for Copy/Move destination selection.
+ * @brief Builds the formatted line editor prompt suffix for Copy/Move destination selection.
  *
  * @param ctx Prompt context providing operation color and description.
- * @return Formatted prompt string with Line editor color escape sequences.
+ * @return Formatted prompt string with line editor color escape sequences.
  */
 static std::string buildCpMvPromptSuffix(const CpMvPromptContext& ctx)
 {
@@ -316,7 +315,7 @@ static bool parseAndValidateDestPaths(
  * @brief Handles non-control Copy/Move input, path validation, and history persistence.
  *
  * @param ctx Prompt context updated with validated paths and overwrite flag.
- * @param userInput Raw line returned by paginated Line editor display.
+ * @param userInput Raw line returned by paginated line editor display.
  * @param shouldContinue Loop control flag cleared when a valid destination is accepted.
  */
 static void processCpMvInput(
@@ -456,7 +455,7 @@ std::string userDestDirCpMv(CpMvPromptContext& ctx)
 
 	reset_custom_keybindingsForCpMvWrite2Usb();
 
-	// Restore the previous Line editor completion mode on every exit path.
+	// Restore the previous line editor completion mode on every exit path.
 	EditorCompletionModeGuard completeModeGuard;
 
 	bool shouldContinue = true;

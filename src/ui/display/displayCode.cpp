@@ -24,7 +24,7 @@ import isocmd.util.sort;
 // External declarations
 // =============================================================================
 
-// Defined in select.cpp. While an ISO select screen is active it owns the staged
+// Defined in selectIso.cpp. While an ISO select screen is active it owns the staged
 // selection as PATHS and projects it onto the display state (source indices,
 // merged into ranges) against the list as it is right now. Returns false when
 // no select screen is active; the caller then manages its own pending state.

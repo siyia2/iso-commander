@@ -36,7 +36,6 @@ private:
 	std::multiset<std::string> drainingDevices;
 };
 
-
 extern DrainingThreadManager g_drainingManager;
 inline std::atomic<bool> g_drainingCancelled{false};
 

@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file
+ * @brief Checks USB discovery and mount classification with synthetic system roots.
+ */
+
 #include "../common/testHarness.h"
+
 import isocmd.write2usb.ui.write2usbUI;
 
 namespace isocmd_tests {
+
 	void deviceDiscovery() {
 
 		TempDir tmp;

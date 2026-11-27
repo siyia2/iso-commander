@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <signal.h>
 
-
 import std;
 import isocmd.input.lineEditor;
 import isocmd.core.cancellation;

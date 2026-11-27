@@ -90,14 +90,14 @@ namespace {
 		 * then publishes a pending refresh request instead of touching the terminal or
 		 * Line editor. The actual redraw happens later, on the main thread, inside
 		 * the line editor's event hook @c checkPendingRefresh — the only thread permitted to
-		 * call Line editor functions or write to the terminal.
+		 * call line editor functions or write to the terminal.
 		 *
 		 * - **Thread safety:** holds the shared @c RefreshState alive via
 		 *   @c std::shared_ptr; the handoff to @c GlobalState::g_pendingRefreshState is
 		 *   itself guarded by a mutex, since a bare @c shared_ptr is not safe to read
 		 *   and write concurrently.
 		 * - **Event-driven:** blocks on @c RefreshState::importCV rather than polling.
-		 * - **No direct Line editor access:** only stores the target state and publishes
+		 * - **No direct line editor access:** only stores the target state and publishes
 		 *   @c PendingRefreshKind::IsoList; the redraw (including @c redisplayPrompt()
 		 *   and @c editorRedisplay()) happens later in @c checkPendingRefresh.
 		 * - **Pending selection:** the watcher never touches the staged selection.
@@ -301,7 +301,7 @@ namespace {
 			/**
 			 * @brief Repaints the list on terminal resize while the prompt waits.
 			 *
-			 * Runs on the Line editor thread (@c editorEventHook) and uses the same
+			 * Runs on the line editor thread (@c editorEventHook) and uses the same
 			 * display step as the main loop. Saves and restores
 			 * @c umountMvRmBreak so the resize repaint cannot clobber loop state.
 			 */

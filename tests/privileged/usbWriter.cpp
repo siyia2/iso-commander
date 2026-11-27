@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+/**
+ * @file
+ * @brief Tests raw USB writes and injected I/O faults on verified disposable loop devices.
+ */
+
 #include <linux/loop.h>
 #include <linux/fs.h>
 #include <sys/ioctl.h>
@@ -13,6 +18,7 @@ import isocmd.core.cancellation;
 
 using namespace isocmd_tests;
 namespace isocmd_tests {
+
 	int mountTest();
 	int windowsWriterTest(const std::string& loop, const std::string& layout, const std::string& mode);
 }
@@ -299,74 +305,80 @@ namespace {
 	}
 } // namespace
 
+/**
+ * @brief Validates the disposable target and its backing-file metadata before any raw write.
+ */
 static void checkDisposableDevice(const fs::path& sandbox, const fs::path& backing, const std::string& backingName, const std::string& device, bool verifyOnly, struct stat& bs) {
 
-	CHECK(fs::current_path()==sandbox);
+	CHECK(fs::current_path() == sandbox);
 	struct stat ds{}, ss{};
-	CHECK(lstat(sandbox.c_str(),&ss)==0 && S_ISDIR(ss.st_mode) && ss.st_uid==0 && (ss.st_mode&077)==0);
-	CHECK(lstat(backing.c_str(),&bs)==0 && S_ISREG(bs.st_mode) && bs.st_uid==0 && bs.st_nlink==1);
+	CHECK(lstat(sandbox.c_str(), &ss) == 0 && S_ISDIR(ss.st_mode) && ss.st_uid == 0 && (ss.st_mode&077) == 0);
+	CHECK(lstat(backing.c_str(), &bs) == 0 && S_ISREG(bs.st_mode) && bs.st_uid == 0 && bs.st_nlink == 1);
 	if (verifyOnly) {
-		CHECK(device==(backingName=="backing.img" ? "/dev/testa" : "/dev/testb"));
+		CHECK(device == (backingName == "backing.img" ? "/dev/testa" : "/dev/testb"));
 	} else {
 		CHECK(device.starts_with("/dev/loop") && device.size()>9 &&
-		      std::all_of(device.begin()+9,device.end(),[](char c){return c>='0'&&c<='9';}));
+		      std::all_of(device.begin()+9, device.end(), [](char c) {return c >= '0'&&c <= '9';}));
 	}
-	CHECK(lstat(device.c_str(),&ds)==0 && S_ISBLK(ds.st_mode) && major(ds.st_rdev)==7);
+	CHECK(lstat(device.c_str(), &ds) == 0 && S_ISBLK(ds.st_mode) && major(ds.st_rdev) == 7);
 
 }
 
 static void checkRawWrite(const fs::path& sandbox, const std::string& device, int pinnedFd, int sector) {
 
 	// Synthetic valid signature, deliberately not sector-aligned, crosses a 4 MiB chunk boundary.
-	std::string image(5*1024*1024+37,'\0');
-	for (std::size_t i=0;i<image.size();++i) image[i]=static_cast<char>(i%251);
-	image.replace(32768,6,"\001CD001",6);
-	const auto src=sandbox/"source.iso"; CHECK(!fs::exists(src)); writeFile(src,image);
-	std::vector<ProgressInfo> progress; progress.emplace_back("source.iso",device,"test",src.string());
-	CHECK(writeIsoToDevice(src.string(),device,0,progress));
-	CHECK(progress[0].completed && !progress[0].failed && progress[0].progress==100);
-	const std::size_t padded=(image.size()+sector-1)/sector*sector;
-	image.resize(padded,'\0');
-	std::string actual(padded,'\0');
-	std::size_t done=0;
-	while (done<actual.size()) { auto n=pread(pinnedFd,actual.data()+done,actual.size()-done,done); CHECK(n>0); done+=static_cast<std::size_t>(n); }
-	CHECK(actual==image);
+	std::string image(5*1024*1024+37, '\0');
+	for (std::size_t i = 0;i<image.size();++i) image[i] = static_cast<char>(i%251);
+	image.replace(32768, 6, "\001CD001", 6);
+	const auto src = sandbox/"source.iso"; CHECK(!fs::exists(src)); writeFile(src, image);
+	std::vector<ProgressInfo> progress; progress.emplace_back("source.iso", device, "test", src.string());
+	CHECK(writeIsoToDevice(src.string(), device, 0, progress));
+	CHECK(progress[0].completed && !progress[0].failed && progress[0].progress == 100);
+	const std::size_t padded = (image.size()+sector-1)/sector*sector;
+	image.resize(padded, '\0');
+	std::string actual(padded, '\0');
+	std::size_t done = 0;
+	while (done<actual.size()) { auto n = pread(pinnedFd, actual.data()+done, actual.size()-done, done); CHECK(n>0); done += static_cast<std::size_t>(n); }
+	CHECK(actual == image);
 	// A byte beyond the padded image must remain untouched.
-	char tail=1; CHECK(pread(pinnedFd,&tail,1,padded)==1 && tail==0);
+	char tail = 1; CHECK(pread(pinnedFd, &tail, 1, padded) == 1 && tail == 0);
 	std::cout << "PASS: Linux writer on disposable loop device (data and padding)\n";
 	rawIoFaults(src, device, pinnedFd, static_cast<std::size_t>(sector), image);
 
 }
 
+/**
+ * @brief Checks the pinned loop descriptor against the expected backing file.
+ */
 static int checkRawLoop(int fd, const struct stat& bs) {
 
 	struct loop_info64 info{};
-	CHECK(ioctl(fd,LOOP_GET_STATUS64,&info)==0 && info.lo_inode==bs.st_ino &&
-	      info.lo_device==static_cast<std::uint64_t>(bs.st_dev) && info.lo_offset==0 && info.lo_sizelimit==0);
-	int sector=0, physical=0; CHECK(ioctl(fd,BLKSSZGET,&sector)==0 && sector>0);
-	if (ioctl(fd,BLKPBSZGET,&physical)==0) sector=std::max(sector,physical);
-	std::uint64_t capacity=0; CHECK(ioctl(fd,BLKGETSIZE64,&capacity)==0 && capacity==static_cast<std::uint64_t>(bs.st_size));
-	CHECK(capacity==16*1024*1024);
+	CHECK(ioctl(fd, LOOP_GET_STATUS64, &info) == 0 && info.lo_inode == bs.st_ino &&
+	      info.lo_device == static_cast<std::uint64_t>(bs.st_dev) && info.lo_offset == 0 && info.lo_sizelimit == 0);
+	int sector = 0, physical = 0; CHECK(ioctl(fd, BLKSSZGET, &sector) == 0 && sector>0);
+	if (ioctl(fd, BLKPBSZGET, &physical) == 0) sector = std::max(sector, physical);
+	std::uint64_t capacity = 0; CHECK(ioctl(fd, BLKGETSIZE64, &capacity) == 0 && capacity == static_cast<std::uint64_t>(bs.st_size));
+	CHECK(capacity == 16*1024*1024);
 	return sector;
 
 }
 
-int main(int argc,char** argv) {
+int main(int argc, char** argv) {
 
 	// The namespace runner can verify aliases without performing any writes.
-	if (geteuid()!=0) return 2;
-	if (argc==2 && std::string_view(argv[1])=="--mount-test") return mountTest();
-	if (argc==5 && std::string_view(argv[1])=="--windows-test") return windowsWriterTest(argv[2], argv[3], argv[4]);
-	const bool verifyOnly=argc==4 && std::string_view(argv[1])=="--verify-loop";
-	if (argc!=2 && !verifyOnly) return 2;
+	if (geteuid() != 0) return 2;
+	if (argc == 2 && std::string_view(argv[1]) == "--mount-test") return mountTest();
+	if (argc == 5 && std::string_view(argv[1]) == "--windows-test") return windowsWriterTest(argv[2], argv[3], argv[4]);
+	const bool verifyOnly = argc == 4 && std::string_view(argv[1]) == "--verify-loop";
+	if (argc != 2 && !verifyOnly) return 2;
 	try {
-		const char* env=std::getenv("ISOCMD_TEST_SANDBOX"); CHECK(env);
-		const auto sandbox=fs::canonical(env);
-		const std::string backingName=verifyOnly ? argv[3] : "backing.img";
-		CHECK(backingName=="backing.img" || backingName=="backing2.img");
-		const auto backing=sandbox/backingName;
+		const char* env = std::getenv("ISOCMD_TEST_SANDBOX"); CHECK(env);
+		const auto sandbox = fs::canonical(env);
+		const std::string backingName = verifyOnly ? argv[3] : "backing.img";
+		CHECK(backingName == "backing.img" || backingName == "backing2.img");
+		const auto backing = sandbox/backingName;
 		struct stat bs{};
-		const std::string device=verifyOnly ? argv[2] : argv[1];
+		const std::string device = verifyOnly ? argv[2] : argv[1];
 		checkDisposableDevice(sandbox, backing, backingName, device, verifyOnly, bs);
 		// Keep an open descriptor to prevent automatic loop teardown/reuse.
 		ReadFd pinned(device);
@@ -374,6 +386,6 @@ int main(int argc,char** argv) {
 		if (verifyOnly) return 0;
 		checkRawWrite(sandbox, device, pinned.fd, sector);
 		return 0;
-	} catch(const std::exception& e) { std::cerr << "FAIL: privileged: " << e.what() << '\n'; return 1; }
+	} catch (const std::exception& e) { std::cerr << "FAIL: privileged: " << e.what() << '\n'; return 1; }
 
 }
