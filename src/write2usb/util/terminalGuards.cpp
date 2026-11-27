@@ -25,7 +25,7 @@ namespace {
 		editorCompletionDisplayHook = [](const std::vector<std::string>&, int, int) {};
 
 		editorCompletionHook = completion_cb;
-		editorBindKey('\t', editorComplete);
+		editorBindKey('\t', completeMappingPrompt);
 		editorBindKey('\f', clear_screen_and_buffer);
 		editorBindKeySequence("\033[A", editorPreviousHistory);
 		editorBindKeySequence("\033[B", editorNextHistory);

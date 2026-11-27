@@ -14,6 +14,9 @@ std::vector<std::string> my_special_completion_entry(std::string_view text, int 
 // Callback invoked by the line editor for context-aware completions
 std::vector<std::string> completion_cb(std::string_view text, int start, int end);
 
+/// Tab handler for mapping prompts, where consecutive presses continue completion.
+int completeMappingPrompt(int count, int key);
+
 // Keybinding utility functions
 int ignoreEditorKeybinding(int count, int key);
 int clear_screen_and_buffer(int count, int key);

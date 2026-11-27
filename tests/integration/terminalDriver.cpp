@@ -1303,8 +1303,9 @@ namespace isocmd_tests {
 				term.send("z\t");
 				end = waitForInputRow(term, term.waitFor("1>/dev/zero", end));
 				CHECK(inputRow(term, end).ends_with("1>/dev/zero"));
-				// Exactly one ISO and device remain: one Tab completes the entire pair.
-				term.send(";\t");
+				// The previous Tab completed the device. A consecutive Tab adds the
+				// separator and the only remaining ISO/device pair.
+				term.send("\t");
 				end = waitForInputRow(term, term.waitFor("1>/dev/zero;2>/dev/null", end));
 				CHECK(inputRow(term, end).ends_with("1>/dev/zero;2>/dev/null"));
 				term.send("\x1b");

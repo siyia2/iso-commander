@@ -63,7 +63,7 @@ namespace isocmd_tests {
 
 	void usbMappingCompletion() {
 
-		const std::vector<IsoInfo> isos(2);
+		std::vector<IsoInfo> isos(2);
 		std::vector<std::string> devices{"/dev/sde", "/dev/sdc"};
 		struct Restore {
 			CompleterData data = g_completerData;
@@ -89,6 +89,14 @@ namespace isocmd_tests {
 			return complete(line, static_cast<int>(start), static_cast<int>(line.size()));
 		};
 		CHECK(tail("1") == std::vector<std::string>({"1>/dev/sd", "1>/dev/sdc", "1>/dev/sde"}));
+		CHECK(tail("1>/dev/sde") == std::vector<std::string>{"1>/dev/sde;2>/dev/sdc"});
+		CHECK(editorCompletionAppendCharacter == '\0');
+		CHECK(tail("2>/dev/sdc") == std::vector<std::string>{"2>/dev/sdc;1>/dev/sde"});
+		CHECK(tail(" 1 > /dev/sde ") == std::vector<std::string>{" 1 > /dev/sde ;2>/dev/sdc"});
+		CHECK(tail("1>/dev/sde;2>/dev/sdc").empty());
+		CHECK(tail("1>/dev/sde;1>/dev/sde").empty());
+		CHECK(tail("invalid;1>/dev/sde").empty());
+		CHECK(complete("1>/dev/sde;", 0, 10).empty());
 		CHECK(tail("1>/dev/sde;") == std::vector<std::string>{"2>/dev/sdc"});
 		CHECK(tail("2>/dev/sdc;") == std::vector<std::string>{"1>/dev/sde"});
 		CHECK(tail("1>/dev/sde;2>/dev/sd") == std::vector<std::string>{"2>/dev/sdc"});
@@ -97,9 +105,18 @@ namespace isocmd_tests {
 		CHECK(tail(" 1 > /dev/sde ;") == std::vector<std::string>{"2>/dev/sdc"});
 		CHECK(complete(";1>/dev/sde", 0, 0) == std::vector<std::string>{"2>/dev/sdc"});
 		devices.push_back("/dev/sdf");
+		CHECK(tail("1>/dev/sde").empty());
+		CHECK(tail("1>/dev/sde;2>/dev/sdc").empty());
+		CHECK(tail("1>/dev/sde;1>/dev/sdc") == std::vector<std::string>{"1>/dev/sdc;2>/dev/sdf"});
+		isos.resize(3);
+		CHECK(tail("1>/dev/sde").empty());
+		CHECK(tail("1>/dev/sde;1>/dev/sdc").empty());
+		CHECK(tail("1>/dev/sde;2>/dev/sdc") == std::vector<std::string>{"2>/dev/sdc;3>/dev/sdf"});
+		isos.resize(2);
 		CHECK(tail("1>/dev/sde;") == std::vector<std::string>({"2>/dev/sd", "2>/dev/sdc", "2>/dev/sdf"}));
 		CHECK(tail("1>/dev/sde;2>/dev/sdc;1") == std::vector<std::string>{"1>/dev/sdf"});
 		devices = {"/dev/null", "/dev/zero"};
+		CHECK(tail("1>/dev/../dev/null") == std::vector<std::string>{"1>/dev/../dev/null;2>/dev/zero"});
 		CHECK(tail("1>/dev/../dev/null;") == std::vector<std::string>{"2>/dev/zero"});
 
 	}

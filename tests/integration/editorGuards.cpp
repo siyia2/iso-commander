@@ -284,7 +284,7 @@ namespace isocmd_tests {
 
 		void mappingKeys() {
 
-			key("\t", editorComplete); key("\f", clear_screen_and_buffer);
+			key("\t", completeMappingPrompt); key("\f", clear_screen_and_buffer);
 			key(up, editorPreviousHistory); key(down, editorNextHistory); historyKeys();
 			CHECK(editorCompletionHook == completion_cb);
 

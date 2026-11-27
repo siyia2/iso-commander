@@ -348,6 +348,7 @@ void helpMappings() {
 		printSection(tc, "\n3. Tips:",
 		    "   • Press Enter to refresh USB Flash Devices\n"
 		    "   • Tab-complete INDEX>DEVICE pairs for faster assignment\n"
+		    "   • Tab adds the final pair when one ISO and device remain\n"
 		    "   • Only unmounted parent devices are eligible for write2usb");
 
 	};

@@ -838,6 +838,7 @@ std::vector<std::string> setting_value_completion_entry(std::string_view text, i
 struct MappingAssignments {
 	std::vector<bool> mapped;
 	std::vector<std::string> used;
+	bool valid = true; ///< All nonempty tokens outside the current token are valid.
 };
 
 /// Removes the same surrounding whitespace accepted by the mapping parser.
@@ -854,28 +855,30 @@ static std::string_view trimMappingPart(std::string_view part) {
  * @brief Records a complete mapping to a discovered device, ignoring invalid or duplicate pairs.
  * @param token Semicolon-delimited mapping token.
  * @param assignments Assigned ISO indices and device paths.
+ * @return True if the mapping was recorded.
  */
-static void recordMapping(std::string_view token, MappingAssignments& assignments) {
+static bool recordMapping(std::string_view token, MappingAssignments& assignments) {
 
 	const auto sep = token.find('>');
-	if (sep == std::string_view::npos) return;
+	if (sep == std::string_view::npos) return false;
 	const auto indexText = trimMappingPart(token.substr(0, sep));
-	if (indexText.empty()) return;
+	if (indexText.empty()) return false;
 	std::size_t index = 0;
 	const auto [end, ec] = std::from_chars(indexText.data(), indexText.data() + indexText.size(), index);
-	if (ec != std::errc{} || end != indexText.data() + indexText.size() || index == 0 || index > assignments.mapped.size()) return;
+	if (ec != std::errc{} || end != indexText.data() + indexText.size() || index == 0 || index > assignments.mapped.size()) return false;
 
 	std::string device(trimMappingPart(token.substr(sep + 1)));
-	if (!device.starts_with("/dev/")) return;
+	if (!device.starts_with("/dev/")) return false;
 	const auto& devices = *g_completerData.usbDevices;
 	if (std::find(devices.begin(), devices.end(), device) == devices.end()) {
 		std::error_code error;
 		device = std::filesystem::canonical(device, error).string();
-		if (error || std::find(devices.begin(), devices.end(), device) == devices.end()) return;
+		if (error || std::find(devices.begin(), devices.end(), device) == devices.end()) return false;
 	}
-	if (std::find(assignments.used.begin(), assignments.used.end(), device) != assignments.used.end()) return;
+	if (std::find(assignments.used.begin(), assignments.used.end(), device) != assignments.used.end()) return false;
 	assignments.mapped[index - 1] = true;
 	assignments.used.push_back(std::move(device));
+	return true;
 
 }
 
@@ -893,11 +896,38 @@ static MappingAssignments collectMappingAssignments(std::string_view line, std::
 	for (std::size_t pos = 0; pos < line.size();) {
 		const auto sep = line.find(';', pos);
 		const auto finish = sep == std::string_view::npos ? line.size() : sep;
-		if (start < pos || start > finish) recordMapping(line.substr(pos, finish - pos), assignments);
+		if (start < pos || start > finish) {
+			const auto token = trimMappingPart(line.substr(pos, finish - pos));
+			if (!token.empty() && !recordMapping(token, assignments)) assignments.valid = false;
+		}
 		if (sep == std::string_view::npos) break;
 		pos = sep + 1;
 	}
 	return assignments;
+
+}
+
+/**
+ * @brief Appends the only remaining ISO/device pair after a complete final token.
+ * @param text Current mapping token, preserved verbatim in the replacement.
+ * @param assignments Completed mappings outside the current token.
+ * @return A unique replacement including the separator, or no match if ambiguous.
+ */
+static std::vector<std::string> appendRemainingMapping(std::string_view text, MappingAssignments assignments) {
+
+	if (!assignments.valid || !g_completerData.usbDevices || !recordMapping(text, assignments)) return {};
+	const auto& devices = *g_completerData.usbDevices;
+	if (std::count(assignments.mapped.begin(), assignments.mapped.end(), false) != 1 ||
+	    assignments.used.size() + 1 != devices.size()) return {};
+
+	const auto iso = std::find(assignments.mapped.begin(), assignments.mapped.end(), false);
+	const auto device = std::find_if(devices.begin(), devices.end(), [&](const auto& path) {
+		return std::find(assignments.used.begin(), assignments.used.end(), path) == assignments.used.end();
+	});
+	if (device == devices.end()) return {};
+
+	editorCompletionAppendCharacter = '\0';
+	return {std::string(text) + ";" + std::to_string(iso - assignments.mapped.begin() + 1) + ">" + *device};
 
 }
 
@@ -1007,7 +1037,9 @@ static std::vector<std::string> handle_device_completion(std::string_view text, 
  * depending on whether the current word contains a '>' separator. A unique
  * ISO-index match continues directly into device completion in the same Tab.
  * Empty tokens prefer unmapped ISOs, and devices already assigned elsewhere
- * are excluded. Explicit indices may still be mapped to multiple devices.
+ * are excluded. At the end of a complete mapping, Tab appends a separator
+ * and the final pair when exactly one ISO and device remain unassigned.
+ * Explicit indices may still be mapped to multiple devices.
  *
  * @param text The partial text currently being completed.
  * @param start Start index of the current word in the line buffer.
@@ -1032,6 +1064,10 @@ std::vector<std::string> completion_cb(std::string_view text, int start, int end
 	bool is_device_completion = (current_word.find('>') != std::string::npos);
 
 	if (is_device_completion) {
+		if (static_cast<std::size_t>(end) == full_line.size()) {
+			auto remaining = appendRemainingMapping(text, assignments);
+			if (!remaining.empty()) return remaining;
+		}
 		return handle_device_completion(text, start, full_line, assignments);
 	}
 
@@ -1043,6 +1079,17 @@ std::vector<std::string> completion_cb(std::string_view text, int start, int end
 		if (!devices.empty()) return devices;
 	}
 	return matches;
+
+}
+
+/**
+ * @brief Completes USB mappings on every Tab, including consecutive presses.
+ * Mapping prompts do not display completion listings.
+ */
+int completeMappingPrompt(int, int) {
+
+	editorCompletionAppendCharacter = '\0';
+	return editorCompleteInternal('\t');
 
 }
 
