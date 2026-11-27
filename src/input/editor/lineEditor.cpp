@@ -838,11 +838,12 @@ namespace native_editor {
 	 * @brief Checks whether a directory entry is eligible for completion.
 	 * @param name Directory entry name.
 	 * @param partial Typed filename prefix.
-	 * @return True for matching names, including hidden files only when requested.
+	 * @return True for matching names, including hidden files and the parent directory only when requested.
 	 */
 	bool matchesFilename(std::string_view name, std::string_view partial) {
 
-		return name != "." && name != ".." && name.starts_with(partial) &&
+		if (name == "..") return partial == "..";
+		return name != "." && name.starts_with(partial) &&
 		    (!name.starts_with('.') || partial.starts_with('.'));
 
 	}

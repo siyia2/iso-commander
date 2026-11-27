@@ -203,6 +203,9 @@ namespace {
 			readExpected("FILE> ", "folder name/", before);
 			readExpected("REGULAR> ", "regular.txt ", before);
 			readExpected("HIDDEN> ", ".hidden ", before);
+			readExpected("PARENT> ", "../", before);
+			readExpected("NESTED-PARENT> ", "folder name/../", before);
+			readExpected("HOME-PARENT> ", "~/../", before);
 			readExpected("SYMLINK> ", "linked folder/", before);
 			readExpected("AMBIGUOUS> ", "shared-", before);
 			readExpected("MISSING> ", "missing/path", before);
@@ -311,6 +314,9 @@ int main() {
 		p.step("FILE> ", "fold\t\n");
 		p.step("REGULAR> ", "reg\t\n");
 		p.step("HIDDEN> ", ".hid\t\n");
+		p.step("PARENT> ", "..\t\n");
+		p.step("NESTED-PARENT> ", "folder name/..\t\n");
+		p.step("HOME-PARENT> ", "~/..\t\n");
 		p.step("SYMLINK> ", "link\t\n");
 		p.step("AMBIGUOUS> ", "sha\t\n");
 		p.step("MISSING> ", "missing/path\t\n");
