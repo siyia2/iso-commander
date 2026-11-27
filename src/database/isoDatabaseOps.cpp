@@ -775,7 +775,7 @@ void displayDatabaseStatistics(
 			    << fileSizeInKB << "KB/" << cachesizeInKb
 			    << "KB (" << std::setprecision(1)
 			    << usagePercentage << "%)"
-			    << "\n" << label << "Entries: "
+			    << "\n" << label << "Entries:  "
 			    << data << countNonEmptyLines(GlobalState::databaseFilePath)
 			    << "\n" << label << "Location: "
 			    << data << "'" << databaseFilePath << "'"

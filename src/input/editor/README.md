@@ -7,8 +7,8 @@ headers with `ISOCMD_EDITOR_STANDALONE` to test the same module and source on GC
 
 The line entry point is `std::optional<std::string> editLine(std::string_view)`.
 An empty submitted line has a value; EOF returns `std::nullopt`. Application prompt controllers retain their current
-bindings and guards; the editor owns the editable string, cursor, selection
-and history position for each prompt session. Global
+bindings and guards; the editor owns the editable string, cursor and
+history position for each prompt session. Global
 hooks and keybindings remain UI-thread-only so existing restoration
 contracts and pointer-identity tests remain applicable.
 
@@ -17,11 +17,14 @@ contracts and pointer-identity tests remain applicable.
 - POSIX terminal setup/restoration via RAII; the application retains its signal
   dispositions and cancellation policy. The editor does not install its own
   signal handlers.
-- ASCII and UTF-8 code-point insertion, deletion and movement; Emacs-style
-  movement, word movement, selection, line deletion and history navigation.
-- Fixed 256-entry single-byte dispatch and a small escape-sequence lookup table;
-  ordinary UTF-8 characters are inserted directly. CSI/SS3 key decoding, context-specific hotkeys, bracketed paste (including
-  literal line breaks), and configurable Escape disambiguation.
+- ASCII and UTF-8 code-point insertion, Backspace/Delete, Left/Right, Home/End,
+  history navigation and Ctrl+U (delete from the start to the cursor).
+  Ctrl+D returns EOF on empty input and deletes forward otherwise.
+- Fixed 256-entry single-byte dispatch and a fixed nine-entry escape-sequence
+  table; ordinary UTF-8 characters are inserted directly. CSI/SS3 aliases,
+  context-specific hotkeys, bracketed paste (including literal line breaks),
+  and a fixed 10 ms inter-byte timeout. Unsupported terminal sequences cannot
+  be registered.
 - Existing history persistence, prompt renderer (ANSI styling, horizontal
   scrolling and overflow markers), live filter, completion listing pagination,
   prefill and resize callbacks are reused. Standalone editor fallback rendering
@@ -37,10 +40,11 @@ contracts and pointer-identity tests remain applicable.
 ## Scope and limitations
 
 This targets ISO Commander's prompt behavior rather than general-purpose shell editing.
-Undo, yank, Ctrl+W word deletion, character transposition, Vi editing mode,
-keyboard macros, custom user keymaps and complete
-terminal-emulator compatibility are not provided. UTF-8 movement is
-code-point-based rather than a full Unicode grapheme-cluster editor. The
+Emacs-style movement/history aliases, word movement/deletion, text selection,
+Ctrl+K, undo, yank, character transposition, Vi editing mode, keyboard macros,
+custom user keymaps and complete terminal-emulator compatibility are not provided.
+Completion uses the application’s fixed semicolon separator; output goes to
+stdout. UTF-8 movement is code-point-based rather than a full Unicode grapheme-cluster editor. The
 existing process signal policy is unchanged; forced termination that bypasses
 C++ unwinding is not covered by the terminal RAII guarantee. Application-specific
 completion, filtering and resize behavior must be validated with the full

@@ -155,9 +155,9 @@ void helpSelections(bool& isAtISOListForHelp, const bool& isUnmount, const bool&
 		clearScrollBuffer();
 
 		printSection(tc, "\n1. Hotkeys:", std::string(UI::Palette::BoldReset) +
-		    "   • Exit         : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Quick Return : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Clear Line   : " + std::string(tc.keysYellow) + "Ctrl+u");
+		    "   • Exit            : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Quick Return    : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Erase Left      : " + std::string(tc.keysYellow) + "Ctrl+u");
 
 		printSection(tc, isUnmount ? "\n2. Selecting Mount-Points (↵):" : "\n2. Selecting Files (↵):",
 		    std::string(UI::Palette::BoldReset) +
@@ -213,9 +213,9 @@ void helpSettingsEditor() {
 		clearScrollBuffer();
 
 		printSection(tc, "\n1. Hotkeys:", std::string(UI::Palette::BoldReset) +
-		    "   • Exit         : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Quick Return : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Clear Line   : " + std::string(tc.keysYellow) + "Ctrl+u");
+		    "   • Exit            : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Quick Return    : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Erase Left      : " + std::string(tc.keysYellow) + "Ctrl+u");
 		printSection(tc, "\n2. Selecting Edits (↵):", std::string(UI::Palette::BoldReset) +
 		    "   • Single/Multiple : " + std::string(tc.keysPurple) + "'1' or '1 5 6'\n" + std::string(UI::Palette::BoldReset) +
 		    "   • Range/Combine   : " + std::string(tc.keysPurple) + "'1-3' or '1-3 5 7-9'" + std::string(UI::Palette::BoldReset));
@@ -267,11 +267,11 @@ void helpSearches(bool isCpMv, bool import2ISO, bool isCopy) {
 		clearScrollBuffer();
 
 		std::string keys =
-		"   • Exit          : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
-		"   • Quick Return  : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
-		if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search : " + std::string(tc.keysYellow) + "Ctrl+c\n";
-		keys += std::string(UI::Palette::BoldReset) + "   • Clear Line    : " + std::string(tc.keysYellow) + "Ctrl+u\n";
-		keys += std::string(UI::Palette::BoldReset) + "   • Clear Screen  : " + std::string(tc.keysYellow) + "Ctrl+l";
+		"   • Exit            : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+		"   • Quick Return    : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset);
+		if (!isCpMv) keys += std::string(UI::Palette::BoldReset) + "   • Cancel Search   : " + std::string(tc.keysYellow) + "Ctrl+c\n";
+		keys += std::string(UI::Palette::BoldReset) + "   • Erase Left      : " + std::string(tc.keysYellow) + "Ctrl+u\n";
+		keys += std::string(UI::Palette::BoldReset) + "   • Clear Screen    : " + std::string(tc.keysYellow) + "Ctrl+l";
 		printSection(tc, "\n1. Hotkeys:", keys);
 
 		std::string paths =
@@ -336,10 +336,10 @@ void helpMappings() {
 		clearScrollBuffer();
 
 		printSection(tc, "\n1. Hotkeys:",
-		    "   • Exit         : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Quick Return : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Clear Line   : " + std::string(tc.keysYellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
-		    "   • Clear Screen : " + std::string(tc.keysYellow) + "Ctrl+l");
+		    "   • Exit            : " + std::string(tc.keysYellow) + "Esc\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Quick Return    : " + std::string(tc.keysYellow) + "Ctrl+d\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Erase Left      : " + std::string(tc.keysYellow) + "Ctrl+u\n" + std::string(UI::Palette::BoldReset) +
+		    "   • Clear Screen    : " + std::string(tc.keysYellow) + "Ctrl+l");
 
 		printSection(tc, "\n2. Selecting Pairs (↵):",
 		    "   • Syntax   : Index>Device (e.g., '1>/dev/sdc')\n"

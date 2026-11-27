@@ -20,7 +20,7 @@ namespace {
 	// Render terminal cells rather than bytes. Escape controls in the editable
 	// buffer so bracketed pastes cannot create extra rows or inject ANSI codes.
 	struct InputCell {
-		std::size_t offset, length, width, column;
+		std::size_t length, width, column;
 		std::string text;
 	};
 
@@ -30,17 +30,17 @@ namespace {
 		const auto c = static_cast<unsigned char>(input[pos]);
 		if (c < 32 || c == 127) {
 			state = {};
-			return {pos, 1, 2, column, {'^', static_cast<char>(c ^ 64)}};
+			return {1, 2, column, {'^', static_cast<char>(c ^ 64)}};
 		}
 		wchar_t wc{};
 		const auto len = std::mbrtowc(&wc, input.data() + pos, input.size() - pos, &state);
 		if (len == static_cast<std::size_t>(-1) || len == static_cast<std::size_t>(-2) || !len) {
 			state = {};
-			return {pos, 1, 1, column, "?"};
+			return {1, 1, column, "?"};
 		}
 		const int width = ::wcwidth(wc);
-		if (width < 0) return {pos, len, 1, column, "?"};
-		return {pos, len, static_cast<std::size_t>(width), column,
+		if (width < 0) return {len, 1, column, "?"};
+		return {len, static_cast<std::size_t>(width), column,
 		        std::string(input.substr(pos, len))};
 
 	}
@@ -137,18 +137,7 @@ namespace {
 
 	void appendWindow(std::string& out, const InputLayout& layout, const InputWindow& window) {
 
-		const bool active = editorSelectionActive() != 0;
-		const auto lo = static_cast<std::size_t>(std::min(editorSelectionMark, editorCursor));
-		const auto hi = static_cast<std::size_t>(std::max(editorSelectionMark, editorCursor));
-		bool marked = false;
-		for (std::size_t i = window.first; i < window.last; ++i) {
-			const auto& cell = layout.cells[i];
-			const bool highlight = active && cell.offset >= lo && cell.offset < hi;
-			if (highlight != marked) out += highlight ? "\033[7m" : "\033[27m";
-			marked = highlight;
-			out += cell.text;
-		}
-		if (marked) out += "\033[27m";
+		for (std::size_t i = window.first; i < window.last; ++i) out += layout.cells[i].text;
 		if (window.right) out += "»";
 
 	}
@@ -192,7 +181,7 @@ namespace {
 		// The native backend leaves the successful-submit newline to this
 		// renderer. EOF already emits its newline.
 		if (enabled && line) {
-			FILE* stream = editorOutputStream ? editorOutputStream : stdout;
+			FILE* stream = stdout;
 			std::fputc('\n', stream);
 			std::fflush(stream);
 		}
@@ -203,7 +192,7 @@ namespace {
 	// Emit any multiline header only on the initial redisplay.
 	std::string_view displayPromptTail(FILE* stream, bool& initial) {
 
-		const std::string_view prompt(editorDisplayPrompt ? editorDisplayPrompt : "");
+		const std::string_view prompt(editorPrompt ? editorPrompt : "");
 		const auto split = prompt.rfind('\n');
 		const auto tail = split == std::string_view::npos ? 0 : split + 1;
 		if (initial && tail) {
@@ -233,7 +222,7 @@ namespace {
 
 		const auto size = terminalSize();
 		const auto cols = size.cols ? size.cols : 80;
-		FILE* stream = editorOutputStream ? editorOutputStream : stdout;
+		FILE* stream = stdout;
 		if (cols < 4) {
 			std::fputs("\r\033[K", stream);
 			std::fflush(stream);

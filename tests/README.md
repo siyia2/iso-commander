@@ -36,7 +36,8 @@ CXXFLAGS="-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer" sh tests/
 ```
 
 This test is also run by `make test-integration`. It covers UTF-8 editing,
-selection, multiline bracketed paste, history navigation, unbound Ctrl+R,
+Ctrl+U at the beginning, middle and end of the line, forward deletion,
+multiline bracketed paste, history navigation, unbound editing shortcuts,
 startup/idle/custom-input hooks, byte-key rebinding, CSI/SS3 aliases, hotkeys,
 filesystem and callback completion, sorted/deduplicated candidates, empty
 submission versus EOF, interleaved cursor-position reports and typeahead,
@@ -285,7 +286,7 @@ tests/
 | Integration: USB writer | Invalid ISO, rejection of regular-file target, Windows copy engine (file bytes, directories, empty files, early EOF, missing file, cancellation) |
 | Integration: I/O recovery | Windows copy engine: EINTR, short reads and positional writes, premature EOF, EIO, ENOSPC, zero writes, aligned/unaligned direct-write recovery, unsupported preallocation, active cancellation, exact partial-byte counters, truncation and clean retry (regular files); transient and permanent cleanup truncation faults, close EINTR/EIO after failed copies, FAT32 and NTFS O_DIRECT flags, configured FAT and NTFS chunk sizes, padding, exact CRC/progress, restart exhaustion and tail truncation failure; deterministic double-buffered read/write overlap in both write modes on both filesystem paths, worker cleanup and retry; buffered mode flags, unaligned short writes, exact CRC/progress, ENOSPC, cancellation and empty files |
 | Integration: background import | History parsing, nested discovery, duplicate suppression, completion and worker accounting, stopped import, restart and missing history |
-| Native editor: PTY | UTF-8 editing, selection, paste, history, completion, keybindings, hooks, cursor reports, EOF and terminal restoration in C and C.UTF-8 locales |
+| Native editor: PTY | UTF-8 editing, Ctrl+U, ignored shortcuts, paste, history, completion, keybindings, hooks, cursor reports, EOF and terminal restoration in C and C.UTF-8 locales |
 | Integration: editor guards | Exact handler and hook restoration, scope unwinding, signal and terminal state, settings and USB mapping guard policies |
 | Integration: PTY | Terminal resizes and a rapid resize burst during typed input, independent resize/background hooks, repaint, input preservation and line-editor/signal state restoration |
 | Integration: menus | Real application main menu, invalid choice, resize with typed input, ManageISO, Convert2ISO and image search, ImportISO, Settings, Esc/EOF return and normal exit |

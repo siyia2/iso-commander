@@ -31,8 +31,6 @@
 #include <clocale>
 #include <cstdlib>
 #include <cstring>
-#include <cwchar>
-#include <cwctype>
 #include <deque>
 #include <optional>
 #include <string>
@@ -46,12 +44,9 @@ import isocmd.input.lineEditor;
 
 const char* editorLineBuffer = nullptr;
 const char* editorPrompt = nullptr;
-const char* editorDisplayPrompt = nullptr;
-int editorCursor = 0, editorBufferEnd = 0, editorSelectionMark = 0, editorDone = 0;
+int editorCursor = 0, editorBufferEnd = 0, editorDone = 0;
 int editorCatchSigwinch = 1;
 int editorCompletionAppendCharacter = ' ', editorCompletionHandled = 0;
-const char* editorWordBreakCharacters = ";";
-FILE* editorOutputStream = stdout;
 EditorHook *editorEventHook = nullptr, *editorStartupHook = nullptr;
 EditorRedisplay* editorResizeHook = nullptr;
 int editorResizeWakeFd = -1;
@@ -69,17 +64,16 @@ namespace native_editor {
 	std::vector<std::string> history;
 	std::array<EditorCommand*, 256> byteKeys{};
 	// Only multibyte terminal sequences need a lookup table.
-	std::vector<std::pair<std::string, EditorCommand*>> sequenceKeys;
+	std::array<std::pair<std::string_view, EditorCommand*>, 9> sequenceKeys{};
 	std::string promptStorage;
-	int escapeTimeout = 10;
-	bool pasteEnabled = true;
+	constexpr int escapeTimeout = 10;
 
 	/// State owned by one active input session.
 	struct Session {
 		std::string text, draft;
 		winsize size{};
 		std::size_t historyPos = history.size();
-		bool markActive = false, eof = false, firstDraw = true;
+		bool eof = false, firstDraw = true;
 		int draftPoint = 0;
 		steady_clock::time_point nextHook = steady_clock::now();
 		steady_clock::time_point nextResize = nextHook;
@@ -89,20 +83,9 @@ namespace native_editor {
 	std::deque<unsigned char> queued;
 
 	/**
-	 * @brief Returns the configured editor output stream.
-	 *
-	 * @return Configured stream, or @c stdout when none is set.
-	 */
-	FILE* output() {
-
-		return editorOutputStream ? editorOutputStream : stdout;
-
-	}
-
-	/**
 	 * @brief Synchronizes the exposed buffer pointer and byte offsets with the active session.
 	 *
-	 * Clamps the cursor and selection mark to the current buffer length. Does nothing without an
+	 * Clamps the cursor to the current buffer length. Does nothing without an
 	 * active session.
 	 */
 	void syncBuffer() {
@@ -111,7 +94,6 @@ namespace native_editor {
 		editorLineBuffer = current->text.c_str();
 		editorBufferEnd = static_cast<int>(current->text.size());
 		editorCursor = std::clamp(editorCursor, 0, editorBufferEnd);
-		editorSelectionMark = std::clamp(editorSelectionMark, 0, editorBufferEnd);
 
 	}
 
@@ -119,7 +101,7 @@ namespace native_editor {
 	 * @brief Replaces a byte range in the active buffer.
 	 *
 	 * Clamps the range, rejects results exceeding @c INT_MAX bytes, moves the cursor after the
-	 * replacement and clears the active selection.
+	 * replacement.
 	 *
 	 * @param start Inclusive starting byte offset.
 	 * @param end Exclusive ending byte offset.
@@ -135,7 +117,6 @@ namespace native_editor {
 		std::string copy(value);
 		current->text.replace(start, end - start, copy);
 		editorCursor = start + static_cast<int>(copy.size());
-		current->markActive = false;
 		syncBuffer();
 
 	}
@@ -171,81 +152,19 @@ namespace native_editor {
 	}
 
 	/**
-	 * @brief Checks whether a character is alphanumeric in the current locale.
-	 *
-	 * @param p Byte offset of a character in the active buffer.
-	 * @return True for an alphanumeric character; false at the buffer end or on a decoding error.
-	 */
-	bool word(int p) {
-
-		if (p >= editorBufferEnd) return false;
-		std::mbstate_t state{};
-		wchar_t wc{};
-		const auto n = std::mbrtowc(&wc, current->text.data() + p, editorBufferEnd - p, &state);
-		return n != static_cast<std::size_t>(-1) && n != static_cast<std::size_t>(-2) && std::iswalnum(wc);
-
-	}
-
-	/**
-	 * @brief Finds the beginning of the preceding or current word.
-	 *
-	 * @param p Starting byte offset.
-	 * @return Byte offset after moving left across separators and alphanumeric characters.
-	 */
-	int wordLeft(int p) {
-
-		while (p && !word(previous(p))) p = previous(p);
-		while (p && word(previous(p))) p = previous(p);
-		return p;
-
-	}
-
-	/**
-	 * @brief Finds the end of the next or current word.
-	 *
-	 * @param p Starting byte offset.
-	 * @return Byte offset after moving right across separators and alphanumeric characters.
-	 */
-	int wordRight(int p) {
-
-		while (p < editorBufferEnd && !word(p)) p = next(p);
-		while (p < editorBufferEnd && word(p)) p = next(p);
-		return p;
-
-	}
-
-	/**
-	 * @brief Moves the cursor and updates selection state.
-	 *
-	 * @param p Destination byte offset.
-	 * @param select Whether to extend or begin a selection.
-	 */
-	void move(int p, bool select = false) {
-
-		if (!current) return;
-		if (select && !current->markActive) editorSelectionMark = editorCursor;
-		current->markActive = select;
-		editorCursor = p;
-
-	}
-
-	/**
-	 * @brief Inserts text at the cursor or replaces the active selection.
+	 * @brief Inserts text at the cursor.
 	 *
 	 * @param value Text to insert.
 	 */
 	void insert(std::string_view value) {
 
 		if (!current || value.empty()) return;
-		const auto [lo, hi] = current->markActive ? std::minmax(editorCursor, editorSelectionMark) : std::minmax(editorCursor, editorCursor);
-		replace(lo, hi, value);
+		replace(editorCursor, editorCursor, value);
 
 	}
 
 	/**
-	 * @brief Erases a byte range or the active selection.
-	 *
-	 * An active selection overrides the supplied range.
+	 * @brief Erases a byte range.
 	 *
 	 * @param lo Inclusive starting byte offset.
 	 * @param hi Exclusive ending byte offset.
@@ -253,10 +172,6 @@ namespace native_editor {
 	void erase(int lo, int hi) {
 
 		if (!current) return;
-		if (current->markActive) {
-			lo = std::min(editorCursor, editorSelectionMark);
-			hi = std::max(editorCursor, editorSelectionMark);
-		}
 		if (hi <= lo) return;
 		replace(lo, hi, {});
 
@@ -265,7 +180,7 @@ namespace native_editor {
 	/// Moves the cursor one UTF-8 code point left.
 	int left(int, int) {
 
-		move(previous(editorCursor));
+		editorCursor = previous(editorCursor);
 		return 0;
 
 	}
@@ -273,7 +188,7 @@ namespace native_editor {
 	/// Moves the cursor one UTF-8 code point right.
 	int right(int, int) {
 
-		move(next(editorCursor));
+		editorCursor = next(editorCursor);
 		return 0;
 
 	}
@@ -281,7 +196,7 @@ namespace native_editor {
 	/// Moves the cursor to the beginning of the buffer.
 	int home(int, int) {
 
-		move(0);
+		editorCursor = 0;
 		return 0;
 
 	}
@@ -289,12 +204,12 @@ namespace native_editor {
 	/// Moves the cursor to the end of the buffer.
 	int end(int, int) {
 
-		move(editorBufferEnd);
+		editorCursor = editorBufferEnd;
 		return 0;
 
 	}
 
-	/// Deletes the preceding code point or active selection.
+	/// Deletes the preceding code point.
 	int backspace(int, int) {
 
 		erase(previous(editorCursor), editorCursor);
@@ -302,7 +217,7 @@ namespace native_editor {
 
 	}
 
-	/// Deletes the following code point or active selection.
+	/// Deletes the following code point.
 	int del(int, int) {
 
 		erase(editorCursor, next(editorCursor));
@@ -329,22 +244,6 @@ namespace native_editor {
 
 	}
 
-	/// Deletes text from the cursor to the buffer end.
-	int killEnd(int, int) {
-
-		erase(editorCursor, editorBufferEnd);
-		return 0;
-
-	}
-
-	/// Deletes the preceding alphanumeric word.
-	int killWord(int, int) {
-
-		erase(wordLeft(editorCursor), editorCursor);
-		return 0;
-
-	}
-
 	/// Consumes a key without modifying editor state.
 	int noAction(int, int) {
 
@@ -355,7 +254,7 @@ namespace native_editor {
 	/// Clears the terminal screen and homes the cursor.
 	int clear(int, int) {
 
-		std::fputs("\033[H\033[2J", output());
+		std::fputs("\033[H\033[2J", stdout);
 		return 0;
 
 	}
@@ -387,73 +286,20 @@ namespace native_editor {
 
 		static const bool initialized = [] {
 			auto& k = byteKeys;
-			auto seq = [](std::string_view key) -> EditorCommand*& {
-				for (auto& [name, handler] : sequenceKeys) if (name == key) return handler;
-				return sequenceKeys.emplace_back(std::string(key), nullptr).second;
-			};
-			sequenceKeys.reserve(24);
+			sequenceKeys = {{
+				{"\033[H", home}, {"\033[F", end},
+				{"\033[D", left}, {"\033[C", right}, {"\033[3~", del},
+				{"\033[A", editorPreviousHistory}, {"\033[B", editorNextHistory},
+				{"\033[5~", editorPreviousHistory}, {"\033[6~", editorNextHistory}
+			}};
 			for (int i = 32; i <= 255; ++i) if (i != 127) k[i] = editorInsertKey;
 			k[static_cast<unsigned char>('\r')] = k[static_cast<unsigned char>('\n')] = editorSubmit;
 			k[static_cast<unsigned char>('\t')] = editorComplete;
 			k[static_cast<unsigned char>('\f')] = clear;
-			k[static_cast<unsigned char>('\001')] = seq("\033[H") = home;
-			k[static_cast<unsigned char>('\005')] = seq("\033[F") = end;
-			k[static_cast<unsigned char>('\002')] = seq("\033[D") = left;
-			k[static_cast<unsigned char>('\006')] = seq("\033[C") = right;
 			k[static_cast<unsigned char>('\010')] = k[static_cast<unsigned char>('\177')] = backspace;
-			seq("\033[3~") = del;
 			k[static_cast<unsigned char>('\004')] = eofOrDelete;
 			k[static_cast<unsigned char>('\025')] = killStart;
-			k[static_cast<unsigned char>('\013')] = killEnd;
-			k[0] = [](int, int) {
-				editorSelectionMark = editorCursor;
-				current->markActive = true;
-				return 0;
-			};
-			k[static_cast<unsigned char>('\007')] = [](int, int) {
-				current->markActive = false;
-				return 0;
-			};
-			k[static_cast<unsigned char>('\020')] = seq("\033[A") = seq("\033[5~") = editorPreviousHistory;
-			k[static_cast<unsigned char>('\016')] = seq("\033[B") = seq("\033[6~") = editorNextHistory;
 			k[static_cast<unsigned char>('\033')] = noAction;
-			seq("\033b") = seq("\033[1;5D") = [](int, int) {
-				move(wordLeft(editorCursor));
-				return 0;
-			};
-			seq("\033f") = seq("\033[1;5C") = [](int, int) {
-				move(wordRight(editorCursor));
-				return 0;
-			};
-			seq("\033d") = [](int, int) {
-				erase(editorCursor, wordRight(editorCursor));
-				return 0;
-			};
-			seq("\033\177") = killWord;
-			seq("\033[1;2D") = [](int, int) {
-				move(previous(editorCursor), true);
-				return 0;
-			};
-			seq("\033[1;2C") = [](int, int) {
-				move(next(editorCursor), true);
-				return 0;
-			};
-			seq("\033[1;2H") = [](int, int) {
-				move(0, true);
-				return 0;
-			};
-			seq("\033[1;2F") = [](int, int) {
-				move(editorBufferEnd, true);
-				return 0;
-			};
-			seq("\033[1;6D") = [](int, int) {
-				move(wordLeft(editorCursor), true);
-				return 0;
-			};
-			seq("\033[1;6C") = [](int, int) {
-				move(wordRight(editorCursor), true);
-				return 0;
-			};
 			return true;
 		}();
 		(void)initialized;
@@ -468,8 +314,7 @@ namespace native_editor {
 		/**
 		 * @brief Saves terminal attributes and enters noncanonical, no-echo input mode.
 		 *
-		 * Preserves signal generation and enables bracketed paste when requested and the output is
-		 * a terminal.
+		 * Preserves signal generation and enables bracketed paste when stdout is a terminal.
 		 */
 		TerminalGuard() {
 
@@ -484,10 +329,10 @@ namespace native_editor {
 				result = tcsetattr(STDIN_FILENO, TCSANOW, &mode);
 			} while (result < 0 && errno == EINTR);
 			raw = result == 0;
-			bracketed = raw && pasteEnabled && isatty(fileno(output()));
+			bracketed = raw && isatty(fileno(stdout));
 			if (bracketed) {
-				std::fputs("\033[?2004h", output());
-				std::fflush(output());
+				std::fputs("\033[?2004h", stdout);
+				std::fflush(stdout);
 			}
 
 		}
@@ -500,8 +345,8 @@ namespace native_editor {
 		~TerminalGuard() {
 
 			if (bracketed) {
-				std::fputs("\033[?2004l", output());
-				std::fflush(output());
+				std::fputs("\033[?2004l", stdout);
+				std::fflush(stdout);
 			}
 			if (raw) {
 				while (tcsetattr(STDIN_FILENO, TCSANOW, &saved) < 0 && errno == EINTR) {}
@@ -778,7 +623,7 @@ namespace native_editor {
 	 */
 	void dispatch(const std::string& key) {
 
-		if (key == "\033[200~" && pasteEnabled) {
+		if (key == "\033[200~") {
 			bracketedPaste();
 			return;
 		}
@@ -1085,10 +930,11 @@ int editorBindKey(int key, EditorCommand* fn) {
  * @brief Sets or clears a key-sequence binding.
  *
  * Single-byte keys use the fixed array; recognized aliases share a canonical binding.
+ * Only supported terminal sequences can be rebound.
  *
  * @param key Nonempty byte or escape sequence.
  * @param fn Command handler, or nullptr to disable the binding.
- * @return Zero on success, or -1 for an empty sequence.
+ * @return Zero on success, or -1 for an empty or unsupported sequence.
  */
 int editorBindKeySequence(std::string_view key, EditorCommand* fn) {
 
@@ -1102,8 +948,7 @@ int editorBindKeySequence(std::string_view key, EditorCommand* fn) {
 			return 0;
 		}
 	}
-	sequenceKeys.emplace_back(std::string(name), fn);
-	return 0;
+	return -1;
 
 }
 
@@ -1121,28 +966,6 @@ EditorCommand* editorKeySequenceHandler(std::string_view key) {
 	const auto name = canonical(key);
 	for (const auto& [sequence, handler] : sequenceKeys) if (sequence == name) return handler;
 	return nullptr;
-
-}
-
-/**
- * @brief Sets the timeout used when collecting multibyte input.
- *
- * @param milliseconds Inter-byte timeout, clamped to 1–10000 ms.
- */
-void editorSetEscapeTimeout(int milliseconds) {
-
-	escapeTimeout = std::clamp(milliseconds, 1, 10000);
-
-}
-
-/**
- * @brief Configures bracketed paste for subsequent input sessions.
- *
- * @param enabled Whether to enable bracketed paste.
- */
-void editorSetBracketedPaste(bool enabled) {
-
-	pasteEnabled = enabled;
 
 }
 
@@ -1178,7 +1001,7 @@ int editorInsertKey(int count, int key) {
 }
 
 /**
- * @brief Inserts text at the cursor or replaces the selection.
+ * @brief Inserts text at the cursor.
  *
  * @param text Text to insert.
  */
@@ -1217,17 +1040,6 @@ std::string editorCopyText(int a, int b) {
 	a = std::clamp(a, 0, editorBufferEnd);
 	b = std::clamp(b, a, editorBufferEnd);
 	return current->text.substr(a, b - a);
-
-}
-
-/**
- * @brief Checks whether the active session has selection mode enabled.
- *
- * @return One when selection mode is active, otherwise zero.
- */
-int editorSelectionActive() {
-
-	return current && current->markActive;
 
 }
 
@@ -1282,14 +1094,14 @@ int editorNextHistory(int count, int) {
 }
 
 /**
- * @brief Stores the prompt and updates both exposed prompt pointers.
+ * @brief Stores the prompt and updates the exposed prompt pointer.
  *
  * @param prompt Prompt text to copy into editor-owned storage.
  */
 void editorSetPrompt(std::string_view prompt) {
 
 	promptStorage = prompt;
-	editorPrompt = editorDisplayPrompt = promptStorage.c_str();
+	editorPrompt = promptStorage.c_str();
 
 }
 // Resize watchers synchronize the fallback poller; the renderer queries the actual dimensions.
@@ -1318,8 +1130,8 @@ void editorSetScreenSize(int rows, int cols) {
 void editorRedisplay() {
 
 	if (!current) return;
-	FILE* out = output();
-	const std::string_view p = editorDisplayPrompt ? editorDisplayPrompt : "";
+	FILE* out = stdout;
+	const std::string_view p = editorPrompt ? editorPrompt : "";
 	const auto split = p.rfind('\n');
 	if (current->firstDraw) {
 		printPrompt(out, p);
@@ -1375,8 +1187,7 @@ int editorCompleteInternal(int mode) {
 	if (!current) return 0;
 	const int finish = editorCursor;
 	int start = finish;
-	const std::string_view breaks = editorWordBreakCharacters ? editorWordBreakCharacters : ";";
-	while (start > 0 && breaks.find(current->text[start - 1]) == std::string_view::npos) --start;
+	while (start > 0 && current->text[start - 1] != ';') --start;
 	const auto text = current->text.substr(start, finish - start);
 	editorCompletionHandled = 0;
 	auto m = editorCompletionHook ? editorCompletionHook(text, start, finish) : std::vector<std::string>{};
@@ -1427,15 +1238,15 @@ std::optional<std::string> editLine(std::string_view prompt) {
 
 			current = nullptr;
 			editorLineBuffer = nullptr;
-			editorCursor = editorBufferEnd = editorSelectionMark = editorDone = 0;
+			editorCursor = editorBufferEnd = editorDone = 0;
 			editorLastCommand = nullptr;
-			editorPrompt = editorDisplayPrompt = nullptr;
+			editorPrompt = nullptr;
 
 		}
 	} reset;
 	current = &session;
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &session.size);
-	editorCursor = editorSelectionMark = editorDone = 0;
+	editorCursor = editorDone = 0;
 	editorLastCommand = nullptr;
 	syncBuffer();
 	editorSetPrompt(prompt);
@@ -1456,9 +1267,9 @@ std::optional<std::string> editLine(std::string_view prompt) {
 	}
 	// FixedPrompt owns the successful-submit newline. EOF and the fallback
 	// renderer have no such wrapper responsibility.
-	if (session.eof || editorRedisplayHook == static_cast<EditorRedisplay*>(editorRedisplay) || !isatty(fileno(output()))) {
-		std::fputc('\n', output());
-		std::fflush(output());
+	if (session.eof || editorRedisplayHook == static_cast<EditorRedisplay*>(editorRedisplay) || !isatty(fileno(stdout))) {
+		std::fputc('\n', stdout);
+		std::fflush(stdout);
 	}
 	if (session.eof) return std::nullopt;
 	return std::move(session.text);
@@ -1475,9 +1286,9 @@ std::optional<std::string> editLine(std::string_view prompt) {
  */
 int editorQueryCursorRow() {
 
-	if (!current || !isatty(STDIN_FILENO) || !isatty(fileno(output()))) return 0;
-	std::fputs("\033[6n", output());
-	std::fflush(output());
+	if (!current || !isatty(STDIN_FILENO) || !isatty(fileno(stdout))) return 0;
+	std::fputs("\033[6n", stdout);
+	std::fflush(stdout);
 	const auto deadline = steady_clock::now() + milliseconds(100);
 	std::string bytes;
 	int row = 0;

@@ -28,7 +28,6 @@ namespace isocmd_tests {
 		void longInputPrompt() {
 
 			// Exercise the fixed-row renderer with bracketed paste.
-			editorSetBracketedPaste(true);
 			const std::string prompt = "HEADER\n\001\033[32m\002LONG> \001\033[0m\002";
 			auto line = editLineWithResize(prompt, [] {
 				std::cout << "\033[H\033[2JLONG-REPAINT\nHEADER" << std::flush;

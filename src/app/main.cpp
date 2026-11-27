@@ -78,7 +78,6 @@ namespace {
 		setupLineEditorToIgnoreCtrlC();
 
 		// Line editor completion behavior.
-		editorWordBreakCharacters = ";";
 		editorCompletionDisplayHook = customListingsFunction;
 
 		// Esc as universal exit handler; PgUp/PgDn as history navigation.

@@ -383,14 +383,14 @@ namespace isocmd_tests {
 			term.resize(32, 120);
 			const auto wider = term.waitFor("LONG-REPAINT", restored);
 			const auto widened = waitForInputRow(term, term.waitFor("#", wider));
-			term.send("\x01");
+			term.send("\033[H");
 			const auto beginning = term.waitFor("START-OF-INPUT", widened);
 			const auto right = waitForInputRow(term, beginning);
 			const auto row = inputRow(term, right);
 			CHECK(row.starts_with(label + "START-OF-INPUT"));
 			CHECK(!row.ends_with("PASTE-FINAL#") && !row.ends_with("a") && !row.ends_with("b"));
 			CHECK(visibleWidth(row) <= 119);
-			term.send("X\x05\n");
+			term.send("X\033[F\n");
 			term.waitFor("TEST-LONG-INPUT-PASS", right);
 
 		}
@@ -403,7 +403,7 @@ namespace isocmd_tests {
 			term.send("\033[200~" + std::string(160, 'a') + " " + std::string(84, 'b') + "\033[201~");
 			const auto tail = waitForInputRow(term, term.waitFor(std::string(84, 'b'), prompt));
 			checkOverflowGap(inputRow(term, tail), label, std::string(84, 'b'));
-			term.send("\x01X\x05\n");
+			term.send("\033[HX\033[F\n");
 			term.waitFor("TEST-OVERFLOW-SPACE-PASS", tail);
 
 		}
@@ -433,7 +433,7 @@ namespace isocmd_tests {
 				const auto finalResize = terminal.waitFor("TEST-REPAINT 27 95", burstStart);
 				waitForInputRow(terminal, terminal.waitFor("abc", finalResize));
 				// Move the editing cursor before another character is inserted.
-				terminal.send("\x02X\x06" "def\n");
+				terminal.send("\033[DX\033[C" "def\n");
 				const auto passed = terminal.waitFor("TEST-TERMINAL-PASS");
 				checkLongInput(terminal, passed);
 				checkOverflowSpace(terminal, terminal.waitFor("TEST-LONG-INPUT-PASS", passed));
@@ -592,13 +592,13 @@ namespace isocmd_tests {
 			std::size_t end;
 			CHECK(has(frame, "No filter results"));
 			CHECK(has(frame, term.filterLabel) && has(frame, "FILTER-TAIL!"));
-			begin = term.output.size(); term.send("\x01");
+			begin = term.output.size(); term.send("\033[H");
 			end = term.waitFor("FILTER-START!", begin);
 			end = waitForInputRow(term, end);
 			const auto row = inputRow(term, end);
 			CHECK(row.starts_with(term.filterLabel + "FILTER-START!"));
 			CHECK(!has(row, "FILTER-TAIL!") && !row.ends_with("z"));
-			begin = term.output.size(); term.send("\x05");
+			begin = term.output.size(); term.send("\033[F");
 			end = term.waitFor("FILTER-TAIL!", begin);
 			term.waitFor("\033[K\r", end);
 			begin = term.output.size(); term.resize(18, 55);

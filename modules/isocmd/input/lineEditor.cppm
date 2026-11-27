@@ -35,18 +35,15 @@ export extern "C++" {
 	// Borrowed views, valid until the next buffer/prompt mutation or session exit.
 	extern const char* editorLineBuffer;
 	extern const char* editorPrompt;
-	extern const char* editorDisplayPrompt;
 
 	// Editing state
-	extern int editorCursor, editorBufferEnd, editorSelectionMark, editorDone;
+	extern int editorCursor, editorBufferEnd, editorDone;
 	extern int editorCatchSigwinch;
 
 	// Completion configuration
 	extern int editorCompletionAppendCharacter, editorCompletionHandled;
-	extern const char* editorWordBreakCharacters;
 
-	// Input and output configuration
-	extern FILE* editorOutputStream;
+	// Input configuration
 	extern EditorInputReader* editorInputReader;
 
 	// Editor hooks and command tracking
@@ -73,12 +70,9 @@ export extern "C++" {
 	 */
 	void editorInitializeLocale();
 
-	// Editor configuration
-	void editorSetEscapeTimeout(int milliseconds);
-	void editorSetBracketedPaste(bool enabled);
-
 	// Keybinding management
 	int editorBindKey(int, EditorCommand*);
+	/// Rebind a byte or supported terminal sequence; returns -1 for unsupported sequences.
 	int editorBindKeySequence(std::string_view, EditorCommand*);
 	EditorCommand* editorKeySequenceHandler(std::string_view);
 
@@ -88,7 +82,6 @@ export extern "C++" {
 	void editorInsertText(std::string_view);
 	void editorReplaceLine(std::string_view);
 	std::string editorCopyText(int, int);
-	int editorSelectionActive();
 	int editorSubmit(int, int);
 
 	// History navigation

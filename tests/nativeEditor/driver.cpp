@@ -133,7 +133,6 @@ namespace {
 			check(editorCompletionMatches({"beta", "beta"}) == std::vector<std::string>{"beta"}, "deduplicate match");
 			check(editorCompletionMatches({"alpine", "alpha", "alpha"}) == std::vector<std::string>{"alp", "alpha", "alpine"}, "sorted common prefix");
 			check(editorCompletionMatches({"é", "ê"}).front().empty(), "UTF-8 prefix boundary");
-			editorSetEscapeTimeout(10);
 			readExpected("EDIT> ", "abXcdef", before);
 			editorEventHook = nullptr;
 			// With no background hook or fallback polling, the resize hook must
@@ -170,7 +169,6 @@ namespace {
 			check(editorKeySequenceHandler("X") == hotkey, "session entry preserves custom binding");
 			editorBindKey('X', editorInsertKey);
 			readExpected("BYTE-RESTORE> ", "X", before);
-			readExpected("SELECT> ", "aXf", before);
 			readExpected("PASTE> ", "a\nP?R/\n"+std::string(5000, 'b'), before);
 			editorAddHistory("one");
 			editorAddHistory("two");
@@ -179,12 +177,20 @@ namespace {
 			readExpected("OLDER> ", "one", before);
 			readExpected("NEWER> ", "two", before);
 			check(!editorKeySequenceHandler("\022"), "Ctrl+R unbound");
-			for (std::string_view key : {"\031", "\027", "\037", "\024", "\032"})
+			for (std::string_view key : {"\001", "\002", "\005", "\006", "\007", "\013", "\016", "\020", "\031", "\027", "\037", "\024", "\032",
+			                            "\033b", "\033f", "\033d", "\033\177", "\033[1;5D", "\033[1;5C",
+			                            "\033[1;2D", "\033[1;2C", "\033[1;2H", "\033[1;2F", "\033[1;6D", "\033[1;6C"})
 				check(!editorKeySequenceHandler(key), "removed editing command unbound");
 			readExpected("UNBOUND> ", "abXcd", before);
-			readExpected("LINE-DELETE> ", "X", before);
-			readExpected("WORD-DELETE> ", "one ", before);
-			readExpected("FORWARD-WORD-DELETE> ", " two", before);
+			check(!editorKeySequenceHandler(std::string_view("\0", 1)), "Ctrl+Space unbound");
+			check(editorBindKeySequence("\033[1;5D", hotkey) == -1 &&
+			      !editorKeySequenceHandler("\033[1;5D"), "unsupported sequence cannot be added");
+			readExpected("CTRL-U-MIDDLE> ", "Xcd", before);
+			readExpected("CTRL-U-END> ", "", before);
+			readExpected("CTRL-U-UTF8> ", "Ωz", before);
+			readExpected("CTRL-U-HOME> ", "abcd", before);
+			readExpected("DELETE> ", "acd", before);
+			readExpected("CTRL-D-DELETE> ", "acd", before);
 			editorStartupHook = prefill;
 			readExpected("PREFILL> ", "prefill!", before);
 			editorBindKeySequence("\033[5~", hotkey);
@@ -202,6 +208,7 @@ namespace {
 			editorBindKey('\t', editorComplete);
 			readExpected("FILE> ", "folder name/", before);
 			readExpected("REGULAR> ", "regular.txt ", before);
+			readExpected("SEMICOLON> ", "first;regular.txt ", before);
 			readExpected("HIDDEN> ", ".hidden ", before);
 			readExpected("PARENT> ", "../", before);
 			readExpected("NESTED-PARENT> ", "folder name/../", before);
@@ -280,11 +287,11 @@ int main() {
 		if (p.pid == 0) return child();
 		p.wait("EDIT> ");
 		p.wait("IDLE-HOOK");
-		p.send("abc\002X\006def\n");
+		p.send("abc\033[DX\033[Cdef\n");
 		p.wait("RESIZE> ");
 		p.wait("RESIZE-HOOK");
 		p.send("kept\n");
-		p.step("EVENT-RESIZE> ", "abc\002");
+		p.step("EVENT-RESIZE> ", "abc\033[D");
 		p.wait("abc");
 		// Leave the prompt idle long enough to expose accidental periodic hooks.
 		poll(nullptr, 0, 150);
@@ -292,19 +299,21 @@ int main() {
 		p.wait("EVENT-RESIZE-HOOK");
 		poll(nullptr, 0, 150);
 		p.send("X\n");
-		p.step("UTF8> ", "aéΩz\002\002\177\n");
+		p.step("UTF8> ", "aéΩz\033[D\033[D\177\n");
 		p.step("EMPTY> ", "\n");
 		p.step("BYTE-HOTKEY> ", "X");
 		p.step("BYTE-RESTORE> ", "X\n");
-		p.step("SELECT> ", "abcdef\001\006\033[1;2C\033[1;2C\033[1;2C\033[1;2CX\n");
 		p.step("PASTE> ", "\033[200~a\nP?R/\r\n"+std::string(5000, 'b') + "\033[201~\n");
 		p.step("HISTORY> ", "draft\033[A\033[A\033[B\033[B\n");
 		p.step("OLDER> ", "\033[A\033[A\n");
 		p.step("NEWER> ", "\033[A\033[A\033[B\n");
-		p.step("UNBOUND> ", "abcd\002\002\022\031\027\037\024X\n");
-		p.step("LINE-DELETE> ", "abcd\002\002\025\013X\n");
-		p.step("WORD-DELETE> ", "one two\033\177\n");
-		p.step("FORWARD-WORD-DELETE> ", "one two\001\033d\n");
+		p.step("UNBOUND> ", "abcd\033[D\033[D\001\002\005\006\007\013\016\020\022\031\027\037\024\033b\033f\033d\033\177\033[1;5D\033[1;2C\033[1;6DX\n");
+		p.step("CTRL-U-MIDDLE> ", "abcd\033[D\033[D\025X\n");
+		p.step("CTRL-U-END> ", "abcd\025\n");
+		p.step("CTRL-U-UTF8> ", "é界Ωz\033[D\033[D\025\n");
+		p.step("CTRL-U-HOME> ", "abcd\033[H\025\n");
+		p.step("DELETE> ", "abcd\033[H\033[C\033[3~\n");
+		p.step("CTRL-D-DELETE> ", "abcd\033[H\033[C\004\n");
 		p.step("PREFILL> ", "!\n");
 		p.step("HOTKEY> ", "\033[5~");
 		p.step("ESC> ", "\033");
@@ -313,6 +322,7 @@ int main() {
 		p.send("h\033[7;3R\t\n");
 		p.step("FILE> ", "fold\t\n");
 		p.step("REGULAR> ", "reg\t\n");
+		p.step("SEMICOLON> ", "first;reg\t\n");
 		p.step("HIDDEN> ", ".hid\t\n");
 		p.step("PARENT> ", "..\t\n");
 		p.step("NESTED-PARENT> ", "folder name/..\t\n");
@@ -328,7 +338,7 @@ int main() {
 		check(waitpid(p.pid, &status, 0) == p.pid, "waitpid");
 		p.pid = -1;
 		check(WIFEXITED(status) && WEXITSTATUS(status) == 0, "child result");
-		std::cout << "PASS: native editor PTY editing, UTF-8, selection, paste, history, completion, CPR typeahead, event-driven resize, callbacks, EOF and terminal restoration\n";
+		std::cout << "PASS: native editor PTY editing, UTF-8, Ctrl+U, unbound shortcuts, paste, history, completion, CPR typeahead, event-driven resize, callbacks, EOF and terminal restoration\n";
 		return 0;
 	} catch (const std::exception& e) { std::cerr << e.what() << "\n" << p.output.substr(p.output.size() > 2000 ? p.output.size() - 2000:0) << '\n';
 	return 1;
