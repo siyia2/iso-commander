@@ -20,6 +20,21 @@ namespace isocmd_tests {
 		CHECK(naturalCompare("disk2.iso", "disk2.iso") == 0);
 		CHECK(naturalCompare("disk99999999999999999999", "disk100000000000000000000") < 0);
 		CHECK(naturalCompare("", "a") < 0);
+		// Case and zero tie-breaks apply immediately, before later characters.
+		CHECK(naturalCompare("A9", "a1") < 0);
+		CHECK(naturalCompare("disk2z", "disk02a") < 0);
+		CHECK(naturalCompare("0", "00") < 0);
+		CHECK(naturalCompare("000", "1") < 0);
+		CHECK(naturalCompare("disk09", "disk10") < 0);
+		CHECK(naturalCompare("disk99", "disk100") < 0);
+		CHECK(naturalCompare("disk10", "disk11") < 0);
+		CHECK(naturalCompare("disk2part9", "disk2part10") < 0);
+		CHECK(naturalCompare("disk0002", "disk0002") == 0);
+		CHECK(naturalCompare("disk2", "disk2.iso") < 0);
+		CHECK(naturalCompare("é2.iso", "é10.iso") < 0);
+		CHECK(naturalCompare("disk2a", "disk2A") > 0);
+		CHECK(naturalCompare("disk9", "disk1a") > 0);
+		CHECK(naturalCompare("disk99999999999999999998", "disk99999999999999999999") < 0);
 		std::vector<std::string> files{"/a/disk10.iso", "/z/disk2.iso", "/b/disk1.iso"};
 		displayConfig::toggleNamesOnly = false;
 		sortFilesCaseInsensitive(files);
