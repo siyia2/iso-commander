@@ -15,7 +15,7 @@ optdepends=(
     'parted: GPT partition layout for Windows live USB creation'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
-md5sums=('b44cec5762d52e74440d100f4b182fff')
+md5sums=('52d7105c2837fb99ed23dbe28f4aa9c1')
 build() {
     cd "${srcdir}/${pkgname}-${pkgver}"
     make CXX=g++
