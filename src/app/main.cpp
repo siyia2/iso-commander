@@ -48,7 +48,7 @@ namespace {
 		const std::string arg1 = (argc >= 2) ? argv[1] : "";
 
 		if (argc == 2 && (arg1 == "--version" || arg1 == "-v")) {
-			printVersionNumber("8.0.4");
+			printVersionNumber("8.0.41");
 			return 0;
 		}
 		if (argc >= 2) {
