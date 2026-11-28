@@ -31,7 +31,7 @@ std::tuple<std::string_view, std::string_view, std::string_view> parseMountPoint
 std::string trimWhitespace(const std::string& str);
 
 /**
- * Converts all characters in a string to lowercase directly.
+ * Converts bytes to lowercase using the fixed startup LC_CTYPE mapping.
  */
 void toLowerInPlace(std::string& str);
 

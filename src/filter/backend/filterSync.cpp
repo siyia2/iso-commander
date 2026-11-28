@@ -10,29 +10,6 @@ import isocmd.filter.filter;
 // ─── Filter stack sync ───────────────────────────────────────────────────
 
 /**
- * @brief Extracts the searchable text representation of a path for a given mode.
- *
- * When @p namesOnly is @c false, the full path is returned. When @c true,
- * only the substring after the final '/' is returned (or the full string if
- * no '/' is present).
- *
- * @param path      Full file path to extract text from.
- * @param namesOnly @c true to match against the basename only; @c false for the full path.
- * @return The path or basename string used for filter matching.
- */
-static std::string extractFilterTargetText(const std::string& path, bool namesOnly)
-{
-
-	if (!namesOnly) {
-		return path;
-	}
-
-	const std::size_t slashPos = path.find_last_of('/');
-	return (slashPos != std::string::npos) ? path.substr(slashPos + 1) : path;
-
-}
-
-/**
  * @brief Builds a lookup table mapping each path in @p globalList to its index.
  *
  * @param globalList Sorted list of global paths.
@@ -83,13 +60,13 @@ static std::vector<std::size_t> evaluateNewCandidates(
 			break;
 		}
 
-		std::vector<std::string> texts;
+		std::vector<std::string_view> texts;
 		texts.reserve(candidates.size());
 		for (std::size_t gi : candidates) {
-			texts.push_back(extractFilterTargetText(newGlobal[gi], lvl.namesOnly));
+			texts.push_back(filterTargetView(newGlobal[gi], lvl.namesOnly));
 		}
 
-		const std::vector<std::size_t> hit = filterFilesIndices(texts, lvl.query);
+		const std::vector<std::size_t> hit = filterViewIndices(texts, lvl.query);
 
 		std::vector<std::size_t> next;
 		next.reserve(hit.size());

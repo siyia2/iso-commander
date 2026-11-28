@@ -321,7 +321,7 @@ bool groupsHaveNegation(const std::vector<QueryGroup>& groups) {
  *                  @c groupsNeedLower(groups) is false.
  */
 static bool matchesAnyGroup(const std::vector<QueryGroup>& groups,
-                                   const std::string& file,
+                                   std::string_view file,
                                    const std::string* fileLower)
 {
 
@@ -393,7 +393,8 @@ static std::vector<std::size_t> makeAscendingIndices(std::size_t count)
  * @param useCachedLower True when @p precomputedLower is non-null and matches `files.size()`.
  * @return Ascending indices within `[start, end)` of entries matching any query group.
  */
-static std::vector<std::size_t> filterChunkIndices(const std::vector<std::string>& files,
+template<typename Entry>
+static std::vector<std::size_t> filterChunkIndices(const std::vector<Entry>& files,
                                               std::size_t start,
                                               std::size_t end,
                                               bool needLower,
@@ -410,7 +411,7 @@ static std::vector<std::size_t> filterChunkIndices(const std::vector<std::string
 	    fileLowerScratch.reserve(256);
 
 	for (std::size_t j = start; j < end; ++j) {
-		const std::string& file = files[j];
+		const std::string_view file = files[j];
 
 		const std::string* fileLower = nullptr;
 		if (needLower) {
@@ -497,7 +498,8 @@ static std::vector<std::size_t> collectChunkResults(std::vector<std::future<std:
  *         @p files or @p query is empty. If the query has no non-empty term
  *         (e.g. ";", "&" or "!"), every index is returned.
  */
-std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
+template<typename Entry>
+static std::vector<std::size_t> filterFilesIndicesImpl(const std::vector<Entry>& files, const std::string& query,
                                        const std::vector<std::string>* precomputedLower)
 {
 
@@ -545,6 +547,24 @@ std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& file
 
 }
 
+/// Filters owned strings without copying the input corpus.
+std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
+                                          const std::vector<std::string>* precomputedLower)
+{
+
+	return filterFilesIndicesImpl(files, query, precomputedLower);
+
+}
+
+/// Filters borrowed strings using the same matching engine.
+std::vector<std::size_t> filterViewIndices(const std::vector<std::string_view>& files, const std::string& query,
+                                         const std::vector<std::string>* precomputedLower)
+{
+
+	return filterFilesIndicesImpl(files, query, precomputedLower);
+
+}
+
 /**
  * @brief Evaluates a contiguous slice of candidate file indices against the
  *        parsed query groups.
@@ -560,8 +580,9 @@ std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& file
  * @return Matching indices into @p files from the `[start, end)` slice in
  *         candidate order.
  */
+template<typename Entry>
 static std::vector<std::size_t> filterSubsetChunk(
-    const std::vector<std::string>& files,
+    const std::vector<Entry>& files,
     const std::vector<std::size_t>& candidateIndices,
     const std::size_t start,
     const std::size_t end,
@@ -580,7 +601,7 @@ static std::vector<std::size_t> filterSubsetChunk(
 
 	for (std::size_t candidatePos = start; candidatePos < end; ++candidatePos) {
 		const std::size_t fileIndex = candidateIndices[candidatePos];
-		const std::string& file = files[fileIndex];
+		const std::string_view file = files[fileIndex];
 
 		const std::string* fileLower = nullptr;
 		if (needLower) {
@@ -675,8 +696,9 @@ static std::vector<std::size_t> collectSubsetResults(
  *         Empty if @p files, @p candidateIndices or @p query is empty; the
  *         candidates unchanged if the query has no non-empty term.
  */
-std::vector<std::size_t> filterFilesIndicesSubset(
-    const std::vector<std::string>& files,
+template<typename Entry>
+static std::vector<std::size_t> filterFilesIndicesSubsetImpl(
+    const std::vector<Entry>& files,
     const std::vector<std::size_t>& candidateIndices,
     const std::string& query,
     const std::vector<std::string>* precomputedLower)
@@ -730,5 +752,29 @@ std::vector<std::size_t> filterFilesIndicesSubset(
 	}
 
 	return collectSubsetResults(futures, candidateIndices.size());
+
+}
+
+/// Filters a subset of owned strings.
+std::vector<std::size_t> filterFilesIndicesSubset(
+    const std::vector<std::string>& files,
+    const std::vector<std::size_t>& candidateIndices,
+    const std::string& query,
+    const std::vector<std::string>* precomputedLower)
+{
+
+	return filterFilesIndicesSubsetImpl(files, candidateIndices, query, precomputedLower);
+
+}
+
+/// Filters a subset of borrowed strings.
+std::vector<std::size_t> filterViewIndicesSubset(
+    const std::vector<std::string_view>& files,
+    const std::vector<std::size_t>& candidateIndices,
+    const std::string& query,
+    const std::vector<std::string>* precomputedLower)
+{
+
+	return filterFilesIndicesSubsetImpl(files, candidateIndices, query, precomputedLower);
 
 }

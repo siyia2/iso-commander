@@ -20,14 +20,18 @@ namespace isocmd_tests {
 		const std::vector<std::string> files{
 			"Ubuntu-22.iso", "ubuntu-24.iso", "Fedora boot.iso", "Fedora.iso",
 			"a&b.iso", "a;b.iso", "!bang.iso", "path\\name.iso", "Ubuntu boot.iso"};
+		std::vector<std::string_view> views(files.begin(), files.end());
 		const auto match = [&](const std::string& q, Indices expected) {
 
 			CHECK(filterFilesIndices(files, q) == expected);
+			CHECK(filterViewIndices(views, q) == expected);
 			auto lower = files;
 			for (auto& f : lower) toLowerInPlace(f);
 			CHECK(filterFilesIndices(files, q, &lower) == expected);
+			CHECK(filterViewIndices(views, q, &lower) == expected);
 			const std::vector<std::string> wrongSize{"not the cache"};
 			CHECK(filterFilesIndices(files, q, &wrongSize) == expected);
+			CHECK(filterViewIndices(views, q, &wrongSize) == expected);
 
 		};
 		match("ubuntu", {0, 1, 8});
@@ -45,6 +49,47 @@ namespace isocmd_tests {
 		match("nonexistent", {});
 		CHECK(filterFilesIndices({}, "ubuntu").empty());
 		CHECK(filterFilesIndicesSubset(files, {8, 1, 3, 0}, "ubuntu", nullptr) == Indices({8, 1, 0}));
+		CHECK(filterViewIndicesSubset(views, {8, 1, 3, 0}, "ubuntu", nullptr) == Indices({8, 1, 0}));
+		auto lower = files;
+		for (auto& f : lower) toLowerInPlace(f);
+		CHECK(filterViewIndicesSubset(views, {8, 1, 3, 0}, "ubuntu", &lower) == Indices({8, 1, 0}));
+
+		// Every possible byte must retain the active locale's original mapping.
+		std::string bytes;
+		for (int i = 0; i < 256; ++i) bytes.push_back(static_cast<char>(i));
+		auto expectedLower = bytes;
+		for (auto& c : expectedLower)
+		    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		toLowerInPlace(bytes);
+		CHECK(bytes == expectedLower);
+
+		// Borrowed projections must preserve the exact previous label rules.
+		CHECK(filterTargetView("/a~b/Game~old~hash", false, true) == "Game~old");
+		CHECK(filterTargetView("/a~b/Game~old~hash", true) == "Game~old~hash");
+		CHECK(filterTargetView("/a~b/Game~old~hash", false) == "/a~b/Game~old~hash");
+		CHECK(filterTargetView("plain.iso", true) == "plain.iso");
+		CHECK(filterTargetView("/a/", true).empty());
+		CHECK(filterTargetView("~hash", false, true).empty());
+
+		// No-match and all-match commits must leave an existing view untouched.
+		const std::vector<std::string> source{"/iso/Alpha.iso", "/iso/beta.iso", "/iso/gamma.iso"};
+		std::vector<std::string> displayed{source[1]};
+		bool filtered = true, clear = false, history = false;
+		std::size_t page = 2;
+		FilterContext ctx{displayed, filtered, clear, history, page, &source};
+		filteringStack = {FilteringState{{1}, "beta", true, false}};
+		CHECK(!applyFilterCore("unmatched", ctx));
+		CHECK(applyFilterCore("iso", ctx));
+		CHECK(displayed == std::vector<std::string>{source[1]});
+		CHECK(filtered && !clear && page == 2 && filteringStack.size() == 1);
+		CHECK(filteringStack.back().originalIndices == Indices{1});
+		CHECK(filteringStack.back().query == "beta");
+		CHECK(applyFilterCore("gamma", ctx));
+		CHECK(displayed == std::vector<std::string>{source[2]});
+		CHECK(filtered && clear && page == 0);
+		CHECK(filteringStack.back().originalIndices == Indices{2});
+		filteringStack.clear();
+
 		bool trailing = false;
 		buildQueryGroups("ubuntu;", &trailing);
 		CHECK(trailing);

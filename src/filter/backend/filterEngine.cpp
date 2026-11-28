@@ -26,108 +26,54 @@ std::size_t resolveGlobalIndex(std::size_t localIdx) {
 }
 
 /**
- * @brief Derives the short "unmount key" label used to match/display an
- * already-mounted ISO (basename with any trailing "~hash" suffix stripped).
- * Shared by @c applyFilterCore and the live filter preview so both stay in
- * sync on exactly what text is being matched against.
- *
- * @param path Full or partial path to an ISO's mount entry.
- * @return The entry's basename with any trailing "~hash" suffix removed.
+ * @brief Borrows the full path, basename, or basename without its final ~hash.
+ * @note The returned view must not outlive the source path.
  */
+std::string_view filterTargetView(std::string_view path, bool namesOnly, bool unmountKey) {
+
+	if (!namesOnly && !unmountKey)
+	    return path;
+
+	const auto slash = path.find_last_of('/');
+	if (slash != std::string_view::npos)
+	    path.remove_prefix(slash + 1);
+
+	if (unmountKey) {
+		const auto tilde = path.find_last_of('~');
+		if (tilde != std::string_view::npos)
+		    path = path.substr(0, tilde);
+	}
+
+	return path;
+
+}
+
+/// Returns the basename-based unmount key as an owned string.
 std::string extractUnmountKey(const std::string& path) {
 
-	std::size_t lastSlash = path.find_last_of('/');
-	std::string name = (lastSlash != std::string::npos)
-	    ? path.substr(lastSlash + 1)
-	    : path;
-
-	std::size_t lastTilde = name.find_last_of('~');
-	return (lastTilde != std::string::npos)
-	    ? name.substr(0, lastTilde)
-	    : name;
+	return std::string(filterTargetView(path, false, true));
 
 }
 
 /**
- * @brief Converts a single source path into its searchable representation.
- *
- * When neither unmount-key nor filename-only mode is active, returns the
- * original path unchanged.
- *
- * @param path          Source path or identifier from the active list.
- * @param useNameOnly   True to match only the basename after the last '/'.
- * @param useUnmountKey True to match the derived unmount key.
- * @return Searchable string used during query evaluation.
+ * @brief Collects matching source indices without copying candidate strings.
  */
-static std::string formatSearchCandidate(
-    const std::string& path,
+static std::vector<std::size_t> collectFilterMatches(
+    const std::vector<std::string>& sourceList,
+    const std::string& searchString,
     bool useNameOnly,
     bool useUnmountKey)
 {
 
-	if (useUnmountKey)
-	    return extractUnmountKey(path);
+	if (!useNameOnly && !useUnmountKey)
+	    return filterFilesIndices(sourceList, searchString);
 
-	if (!useNameOnly)
-	    return path;
+	std::vector<std::string_view> derived;
+	derived.reserve(sourceList.size());
+	for (const auto& path : sourceList)
+	    derived.push_back(filterTargetView(path, useNameOnly, useUnmountKey));
 
-	const std::size_t lastSlash = path.find_last_of('/');
-	return (lastSlash != std::string::npos)
-	    ? path.substr(lastSlash + 1)
-	    : path;
-
-}
-
-/**
- * @brief Evaluates @p searchString against @p sourceList and collects matches.
- *
- * Projects entries into searchable strings when required, runs
- * @c filterFilesIndices, and populates @p outFiltered and @p outIndices with
- * the corresponding source entries and their local indices.
- *
- * @param sourceList       Source entries to filter against.
- * @param searchString     Filter query passed to @c filterFilesIndices.
- * @param useNameOnly      True to filter by filename component only.
- * @param useUnmountKey    True to filter by unmount key.
- * @param[out] outFiltered Matched source strings in result order.
- * @param[out] outIndices  Local indices into @p sourceList for each match.
- * @return True if at least one match was found; false otherwise.
- */
-static bool collectFilterMatches(
-    const std::vector<std::string>& sourceList,
-    const std::string& searchString,
-    bool useNameOnly,
-    bool useUnmountKey,
-    std::vector<std::string>& outFiltered,
-    std::vector<std::size_t>& outIndices)
-{
-
-	std::vector<std::size_t> matchedIndices;
-
-	if (useNameOnly || useUnmountKey) {
-		std::vector<std::string> derived;
-		derived.reserve(sourceList.size());
-
-		for (const auto& path : sourceList)
-		    derived.push_back(formatSearchCandidate(path, useNameOnly, useUnmountKey));
-
-		matchedIndices = filterFilesIndices(derived, searchString);
-	} else {
-		matchedIndices = filterFilesIndices(sourceList, searchString);
-	}
-
-	if (matchedIndices.empty())
-	    return false;
-
-	outFiltered.reserve(matchedIndices.size());
-	outIndices.reserve(matchedIndices.size());
-
-	for (std::size_t idx : matchedIndices) {
-		outFiltered.push_back(sourceList[idx]);
-		outIndices.push_back(idx);
-	}
-
-	return true;
+	return filterViewIndices(derived, searchString);
 
 }
 
@@ -210,24 +156,19 @@ bool applyFilterCore(const std::string& searchString, FilterContext& ctx) {
 	const bool useNameOnly   = displayConfig::toggleNamesOnly && !ctx.isUnmount;
 	const bool useUnmountKey = ctx.isUnmount && !ctx.toggleFullListUmount;
 
-	std::vector<std::string> tempFiltered;
-	std::vector<std::size_t> tempIndices;
+	const auto tempIndices = collectFilterMatches(
+	    sourceList, searchString, useNameOnly, useUnmountKey);
 
-	if (!collectFilterMatches(
-	        sourceList,
-	        searchString,
-	        useNameOnly,
-	        useUnmountKey,
-	        tempFiltered,
-	        tempIndices)) {
-		return false;
-	}
-
-	if (tempFiltered.empty())
+	if (tempIndices.empty())
 	    return false;
 
-	if (tempFiltered.size() == sourceList.size())
+	if (tempIndices.size() == sourceList.size())
 	    return true; // Matches everything: nothing to filter.
+
+	std::vector<std::string> tempFiltered;
+	tempFiltered.reserve(tempIndices.size());
+	for (std::size_t idx : tempIndices)
+	    tempFiltered.push_back(sourceList[idx]);
 
 	commitFilteredResults(
 	    searchString,

@@ -25,7 +25,7 @@ namespace isocmd_tests {
 		const auto a = tmp.path/"a.iso", b = tmp.path/"nested/b.ISO", c = tmp.path/"nested/c.iso";
 		writeFile(a, "a"); writeFile(b, "b"); writeFile(tmp.path/"ignore.txt", "x");
 		fs::create_directory_symlink(tmp.path/"nested", tmp.path/"alias");
-		writeFile(GlobalState::historyFilePath, tmp.path.string()+";relative;"+tmp.path.string()+"\n"+tmp.path.string()+"\n");
+		writeFile(GlobalState::historyFilePath, ";;"+tmp.path.string()+";relative;"+tmp.path.string()+"/;\n"+tmp.path.string()+"\n");
 		auto run = [](bool stop) {
 
 			auto state = std::make_shared<RefreshState>(); state->isImportRunning = true; state->stopImport = stop;

@@ -25,9 +25,18 @@ namespace GlobalCaches {
  */
 void toLowerInPlace(std::string& str) {
 
-	for (char& c : str) {
-		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-	}
+	// LC_CTYPE is selected at startup before worker threads are created and
+	// stays fixed for the lifetime of the application. Lazy initialization
+	// also supports the standalone unit runner's default C locale.
+	static const auto lower = [] {
+		std::array<unsigned char, 256> table{};
+		for (std::size_t i = 0; i < table.size(); ++i)
+		    table[i] = static_cast<unsigned char>(std::tolower(static_cast<int>(i)));
+		return table;
+	}();
+
+	for (char& c : str)
+	    c = static_cast<char>(lower[static_cast<unsigned char>(c)]);
 
 }
 

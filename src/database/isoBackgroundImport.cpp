@@ -12,6 +12,31 @@ import isocmd.threadpool.threadpool;
 namespace {
 
 	/**
+	 * @brief Visits each nonempty absolute segment, normalized with a trailing '/'.
+	 * @note The callback receives an owned string; the input is never modified.
+	 */
+	template<typename Consumer>
+	void forEachNormalizedPath(std::string_view remaining, Consumer&& consume) {
+
+		while (!remaining.empty()) {
+			const auto sep = remaining.find(';');
+			const auto path = remaining.substr(0, sep);
+
+			if (!path.empty() && path.front() == '/') {
+				std::string normalized(path);
+				if (normalized.back() != '/')
+				    normalized += '/';
+				consume(std::move(normalized));
+			}
+
+			if (sep == std::string_view::npos)
+			    break;
+			remaining.remove_prefix(sep + 1);
+		}
+
+	}
+
+	/**
 	 * @brief Extracts and normalizes absolute paths from semicolon-delimited entries.
 	 *
 	 * Splits each input string on ';' and retains only non-empty entries starting
@@ -27,20 +52,9 @@ namespace {
 		std::vector<std::string> normalized;
 
 		for (const auto& pathEntry : paths) {
-			std::istringstream iss(pathEntry);
-			std::string path;
-
-			while (std::getline(iss, path, ';')) {
-				if (path.empty() || path.front() != '/') {
-					continue;
-				}
-
-				if (path.back() != '/') {
-					path += '/';
-				}
-
+			forEachNormalizedPath(pathEntry, [&](std::string path) {
 				normalized.push_back(std::move(path));
-			}
+			});
 		}
 
 		return normalized;
@@ -55,9 +69,9 @@ namespace {
 	 * full path.
 	 *
 	 * @param path Normalized path starting with '/'.
-	 * @return Prefix key through the third '/' or the full path.
+	 * @return Borrowed prefix key through the third '/' or the full path.
 	 */
-	std::string thirdSlashPrefix(const std::string& path) {
+	std::string_view thirdSlashPrefix(std::string_view path) {
 
 		std::size_t slashCount = 0;
 		std::size_t pos = 0;
@@ -86,20 +100,21 @@ namespace {
 	    const std::vector<std::string>& paths
 	) {
 
-		std::map<std::string, std::vector<std::string>> pathGroups;
+		// Both keys and representatives borrow from paths until this call returns.
+		std::map<std::string_view, std::string_view> pathGroups;
 
 		for (const auto& path : paths) {
-			pathGroups[thirdSlashPrefix(path)].push_back(path);
+			const auto prefix = thirdSlashPrefix(path);
+			auto [it, inserted] = pathGroups.try_emplace(prefix, path);
+			if (!inserted)
+			    it->second = prefix;
 		}
 
 		std::vector<std::string> grouped;
 		grouped.reserve(pathGroups.size());
 
-		for (const auto& [prefix, groupPaths] : pathGroups) {
-			grouped.push_back(
-			    (groupPaths.size() > 1) ? prefix : groupPaths.front()
-			);
-		}
+		for (const auto& group : pathGroups)
+		    grouped.emplace_back(group.second);
 
 		return grouped;
 
@@ -232,21 +247,10 @@ namespace {
 				return false;
 			}
 
-			std::istringstream iss(line);
-			std::string path;
-
-			while (std::getline(iss, path, ';')) {
-				if (!path.empty() && path[0] == '/') {
-					if (path.back() != '/') {
-						path += '/';
-					}
-
-					if (std::find(paths.begin(), paths.end(), path) ==
-					    paths.end()) {
-						paths.push_back(path);
-					}
-				}
-			}
+			forEachNormalizedPath(line, [&](std::string path) {
+				if (std::find(paths.begin(), paths.end(), path) == paths.end())
+				    paths.push_back(std::move(path));
+			});
 		}
 
 		return true;

@@ -35,17 +35,12 @@ namespace {
 	/**
 	 * @brief Result of one live-preview filter pass: indices only, no strings copied.
 	 *
-	 * @c local      Indices into the searchable corpus (source list or derived
-	 *               labels) that match the current query.
-	 * @c global     Original source-list indices corresponding 1:1 to @c local,
-	 *               produced via resolveGlobalIndex().
-	 * @c identity   True when the query is empty / yields no groups, meaning "all
-	 *               entries match" and @c local/@c global are left empty (callers
-	 *               must treat the whole source as the match set).
+	 * @c local borrows the session's lastMatches until the current frame ends.
+	 * @c identity means all entries match, without an explicit index vector.
+	 * Global indices are resolved only for the visible window.
 	 */
 	struct LivePreviewResult {
-		std::vector<std::size_t> local;
-		std::vector<std::size_t> global;
+		std::span<const std::size_t> local;
 		bool identity = false;
 	};
 
@@ -84,7 +79,7 @@ namespace {
 
 		// Derived-label and lowercased search corpora for sourceList.
 		bool hasDerivedCache = false;
-		std::vector<std::string> derivedCache;
+		std::vector<std::string_view> derivedCache;
 		std::vector<std::string> lowerCache;
 
 		// Incremental-narrowing state, reset at the start of every editLine().
@@ -254,36 +249,6 @@ namespace {
 	// ─── Search Cache ────────────────────────────────────────────────────────────
 
 	/**
-	 * @brief Derives the searchable and displayed text for one source entry.
-	 *
-	 * The transform is selected by session flags:
-	 *   - useUnmountKey -> extractUnmountKey(path)
-	 *   - useNameOnly   -> basename of @p path
-	 *   - otherwise     -> @p path unchanged
-	 *
-	 * @param path Original source path.
-	 *
-	 * @return Derived label or the original path.
-	 */
-	std::string livePreviewLabel(const std::string& path)
-	{
-
-		if (g_livePreview.useUnmountKey)
-		    return extractUnmountKey(path);
-
-		if (g_livePreview.useNameOnly) {
-			const std::size_t lastSlash = path.find_last_of('/');
-
-			return (lastSlash != std::string::npos)
-			    ? path.substr(lastSlash + 1)
-			    : path;
-		}
-
-		return path;
-
-	}
-
-	/**
 	 * @brief Builds derived-label and lowercase search caches.
 	 *
 	 * The caches are constructed once per prompt rather than once per keystroke.
@@ -311,17 +276,17 @@ namespace {
 			g_livePreview.derivedCache.reserve(source.size());
 
 			for (const auto& path : source)
-			    g_livePreview.derivedCache.push_back(livePreviewLabel(path));
+			    g_livePreview.derivedCache.push_back(
+			        filterTargetView(path, g_livePreview.useNameOnly, g_livePreview.useUnmountKey));
 		}
 
-		const std::vector<std::string>& searchable =
-		    g_livePreview.hasDerivedCache ? g_livePreview.derivedCache : source;
-
 		g_livePreview.lowerCache.clear();
-		g_livePreview.lowerCache.reserve(searchable.size());
+		g_livePreview.lowerCache.reserve(source.size());
 
-		for (const auto& s : searchable) {
-			std::string lower = s;
+		for (std::size_t i = 0; i < source.size(); ++i) {
+			const std::string_view label = g_livePreview.hasDerivedCache
+			    ? g_livePreview.derivedCache[i] : std::string_view(source[i]);
+			std::string lower(label);
 			toLowerInPlace(lower);
 			g_livePreview.lowerCache.push_back(std::move(lower));
 		}
@@ -385,12 +350,12 @@ namespace {
 	 * require a full search.
 	 *
 	 * Empty / no-group queries (and a lone trailing empty group with no negation
-	 * anywhere) yield an identity result: @c local/@c global are empty and
+	 * anywhere) yield an identity result: @c local is empty and
 	 * @c identity is true; the incremental cache is cleared.
 	 *
 	 * @param query Current filter query.
 	 *
-	 * @return Local and global matching indices, or an identity result.
+	 * @return Borrowed local matching indices, or an identity result.
 	 */
 	LivePreviewResult computeLivePreviewMatches(const std::string& query)
 	{
@@ -412,11 +377,6 @@ namespace {
 
 		const std::vector<std::string>& source = *g_livePreview.sourceList;
 
-		const std::vector<std::string>& searchable =
-		    g_livePreview.hasDerivedCache
-		        ? g_livePreview.derivedCache
-		        : source;
-
 		const bool progressiveExtension =
 		    !g_livePreview.lastQuery.empty() &&
 		    !groupsHaveNegation(groups) &&
@@ -429,26 +389,24 @@ namespace {
 		        g_livePreview.lastQuery.size(),
 		        g_livePreview.lastQuery) == 0;
 
-		if (progressiveExtension && g_livePreview.hasLastMatches) {
-			result.local = filterFilesIndicesSubset(
-			    searchable,
-			    g_livePreview.lastMatches,
-			    query,
-			    &g_livePreview.lowerCache);
+		const bool narrow = progressiveExtension && g_livePreview.hasLastMatches;
+		const auto* lower = &g_livePreview.lowerCache;
+
+		// The right-hand side completes (including all worker reads) before
+		// replacing lastMatches, which is also the narrowing input.
+		if (g_livePreview.hasDerivedCache) {
+			const auto& searchable = g_livePreview.derivedCache;
+			g_livePreview.lastMatches = narrow
+			    ? filterViewIndicesSubset(searchable, g_livePreview.lastMatches, query, lower)
+			    : filterViewIndices(searchable, query, lower);
 		} else {
-			result.local = filterFilesIndices(
-			    searchable,
-			    query,
-			    &g_livePreview.lowerCache);
+			g_livePreview.lastMatches = narrow
+			    ? filterFilesIndicesSubset(source, g_livePreview.lastMatches, query, lower)
+			    : filterFilesIndices(source, query, lower);
 		}
 
-		g_livePreview.lastMatches = result.local;
 		g_livePreview.hasLastMatches = true;
-
-		result.global.reserve(result.local.size());
-
-		for (std::size_t idx : result.local)
-		    result.global.push_back(resolveGlobalIndex(idx));
+		result.local = g_livePreview.lastMatches;
 
 		return result;
 
@@ -537,11 +495,12 @@ namespace {
 	 *
 	 * @return Adjusted visible window.
 	 */
+	template<typename Entry>
 	WindowSlice calculateWrappedPreviewWindow(
 	    const LivePreviewResult& preview,
 	    std::size_t totalMatches,
 	    std::size_t termCols,
-	    const std::vector<std::string>& displayLabels)
+	    const std::vector<Entry>& displayLabels)
 	{
 
 		std::size_t effectiveMaxRows = g_livePreview.previewWindowRows;
@@ -635,8 +594,9 @@ namespace {
 	}
 
 	/// Estimates additional rows required by wrapped preview item labels.
+	template<typename Entry>
 	std::size_t calculateItemWrapAdjustment(
-	    const std::vector<std::string>& displayLabels,
+	    const std::vector<Entry>& displayLabels,
 	    const LivePreviewResult& preview,
 	    std::size_t totalMatches,
 	    std::size_t termCols)
@@ -703,30 +663,18 @@ namespace {
 		const bool showStatus =
 		    shouldShowPreviewStatus(totalMatches, source.size());
 
-		const std::vector<std::string>& displayLabels =
-		    g_livePreview.hasDerivedCache
-		        ? g_livePreview.derivedCache
-		        : source;
-
 		const std::size_t statusWrapExtra =
 		    calculateStatusWrapExtra(totalMatches, termCols, showStatus);
 
-		const std::size_t wrapAdjustment =
-		    calculateItemWrapAdjustment(
-		        displayLabels,
-		        preview,
-		        totalMatches,
-		        termCols);
+		const auto calculate = [&](const auto& displayLabels) {
+			const std::size_t wrapAdjustment = calculateItemWrapAdjustment(
+			    displayLabels, preview, totalMatches, termCols);
+			refreshPreviewWindowHeight(statusWrapExtra + wrapAdjustment, showStatus);
+			return calculateWrappedPreviewWindow(preview, totalMatches, termCols, displayLabels);
+		};
 
-		refreshPreviewWindowHeight(
-		    statusWrapExtra + wrapAdjustment,
-		    showStatus);
-
-		return calculateWrappedPreviewWindow(
-		    preview,
-		    totalMatches,
-		    termCols,
-		    displayLabels);
+		return g_livePreview.hasDerivedCache
+		    ? calculate(g_livePreview.derivedCache) : calculate(source);
 
 	}
 
@@ -755,8 +703,7 @@ namespace {
 			for (std::size_t i = win.start; i < win.end; ++i) {
 				data.local.push_back(preview.local[i]);
 
-				if (i < preview.global.size())
-				    data.global.push_back(preview.global[i]);
+				data.global.push_back(resolveGlobalIndex(preview.local[i]));
 			}
 
 			data.useWindowedView = true;
@@ -1121,6 +1068,8 @@ bool livePreviewWasRepainted()
  * is not an unmount filter; useUnmountKey is set for unmount filters that are
  * not showing the full list. One of these (or neither) selects the search
  * corpus primed by primeLivePreviewCaches().
+ * The source list and its strings must remain stable during the active preview;
+ * the ISO selection caller holds updateListMutex while filtering.
  *
  * @param ctx Filter context supplying list-rendering configuration.
  * @param previewSource Source list displayed by the preview.
@@ -1182,6 +1131,7 @@ void resetLivePreviewIteration()
 
 	g_livePreview.lastQuery.clear();
 	g_livePreview.lastMatches.clear();
+	g_livePreview.hasLastMatches = false;
 	g_livePreview.previewCursor = 0;
 	g_livePreview.previewScrollOffset = 0;
 	g_livePreview.forceRepaint = false;

@@ -66,6 +66,9 @@ std::size_t resolveGlobalIndex(std::size_t localIdx);
 /// Extracts the basename-based unmount key from a mounted ISO path.
 std::string extractUnmountKey(const std::string& path);
 
+/// Borrows the searchable path, basename, or unmount key from the input.
+std::string_view filterTargetView(std::string_view path, bool namesOnly, bool unmountKey = false);
+
 /// Applies and commits a filter query to the supplied filter context.
 bool applyFilterCore(const std::string& searchString, FilterContext& ctx);
 
@@ -136,6 +139,10 @@ extern std::vector<FilteringState> filteringStack;
 std::vector<std::size_t> filterFilesIndices(const std::vector<std::string>& files, const std::string& query,
                                         const std::vector<std::string>* precomputedLower = nullptr);
 
+/// As filterFilesIndices, but borrows candidate strings for the duration of the call.
+std::vector<std::size_t> filterViewIndices(const std::vector<std::string_view>& files, const std::string& query,
+                                         const std::vector<std::string>* precomputedLower = nullptr);
+
 /**
  * One OR-branch of a query: every positive term in the group must match
  * (AND semantics). A query is a list of such groups; an entry matches if ANY
@@ -159,6 +166,13 @@ bool groupsHaveNegation(const std::vector<QueryGroup>& groups);
 /// @p candidateIndices (incremental narrowing for the live preview).
 std::vector<std::size_t> filterFilesIndicesSubset(
     const std::vector<std::string>& files,
+    const std::vector<std::size_t>& candidateIndices,
+    const std::string& query,
+    const std::vector<std::string>* precomputedLower);
+
+/// Incremental filtering of borrowed candidate strings; indices retain source order.
+std::vector<std::size_t> filterViewIndicesSubset(
+    const std::vector<std::string_view>& files,
     const std::vector<std::size_t>& candidateIndices,
     const std::string& query,
     const std::vector<std::string>* precomputedLower);

@@ -50,6 +50,15 @@ namespace isocmd_tests {
 		std::sort(loaded.begin(), loaded.end()); CHECK(loaded == expected);
 		std::vector<std::string> persisted;
 		loadFromDatabase(persisted); std::sort(persisted.begin(), persisted.end()); CHECK(persisted == expected);
+		// Parsing preserves order, CRLF stripping, blank-line skipping, and an
+		// unterminated last entry; cache rewrite also handles long paths.
+		const std::string longPath = "/" + std::string(4096, 'x') + ".iso";
+		writeFile(GlobalState::databaseFilePath, "\n\r\n" + a + "\r\n" + longPath + "\n" + b);
+		loadFromDatabase(loaded);
+		CHECK(loaded == std::vector<std::string>({a, longPath, b}));
+		CHECK(saveToDatabase({"/another.iso"}, nullptr));
+		loadFromDatabase(loaded);
+		CHECK(loaded == std::vector<std::string>({a, longPath, b, "/another.iso"}));
 		fs::remove(GlobalState::databaseFilePath);
 
 	}

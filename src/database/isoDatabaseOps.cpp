@@ -396,11 +396,12 @@ namespace {
 				ssize_t bytesRead = ::read(fd, buffer.data(), fileStat.st_size);
 
 				if (bytesRead > 0 && bytesRead <= fileStat.st_size) {
-					char* start = buffer.data();
-					char* end = buffer.data() + bytesRead;
+					const char* start = buffer.data();
+					const char* end = buffer.data() + bytesRead;
 
 					while (start < end) {
-						char* lineEnd = std::find(start, end, '\n');
+						const auto* newline = static_cast<const char*>(std::memchr(start, '\n', end - start));
+						const char* lineEnd = newline ? newline : end;
 						std::string line(start, lineEnd);
 
 						if (!line.empty() && line.back() == '\r') {
@@ -453,7 +454,10 @@ namespace {
 		}
 
 		std::string output;
-		output.reserve(cache.size() * 64);
+		std::size_t totalBufferSize = 0;
+		for (const auto& entry : cache)
+		    totalBufferSize += entry.size() + 1;
+		output.reserve(totalBufferSize);
 
 		for (const auto& entry : cache) {
 			output += entry;
@@ -677,11 +681,12 @@ void loadFromDatabase(std::vector<std::string>& outList) {
 	}
 
 	std::vector<std::string> loadedFiles;
-	char* start = buffer.data();
-	char* end = buffer.data() + bytesRead;
+	const char* start = buffer.data();
+	const char* end = buffer.data() + bytesRead;
 
 	while (start < end) {
-		char* lineEnd = std::find(start, end, '\n');
+		const auto* newline = static_cast<const char*>(std::memchr(start, '\n', end - start));
+		const char* lineEnd = newline ? newline : end;
 		std::string line(start, lineEnd);
 
 		if (!line.empty() && line.back() == '\r') {
